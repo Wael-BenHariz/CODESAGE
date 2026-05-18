@@ -1,0 +1,14 @@
+<div class="diff-view">
+  <div class="files-list">
+    @for (file of files(); track file.path) {
+      <div class="file-header">
+        <span class="file-status" [class]="file.status">{{ file.status }}</span>
+        <span class="file-path">{{ file.filename }}</span>
+        <span class="file-stats">
+          <span class="additions">+{{ file.additions }}</span>
+          <span class="deletions">-{{ file.deletions }}</span>
+        </span>
+      </div>
+    }
+  </div>
+</div>

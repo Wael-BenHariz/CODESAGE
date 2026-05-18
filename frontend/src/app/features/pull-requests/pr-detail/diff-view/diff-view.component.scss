@@ -1,0 +1,66 @@
+.diff-view {
+  .files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .file-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #f7fafc;
+    border-radius: 6px;
+  }
+
+  .file-status {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+
+    &.added {
+      background: #c6f6d5;
+      color: #2f855a;
+    }
+
+    &.modified {
+      background: #fefcbf;
+      color: #d69e2e;
+    }
+
+    &.removed {
+      background: #fed7d7;
+      color: #c53030;
+    }
+
+    &.renamed {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+  }
+
+  .file-path {
+    flex: 1;
+    font-family: monospace;
+    font-size: 14px;
+    color: #2d3748;
+  }
+
+  .file-stats {
+    display: flex;
+    gap: 8px;
+    font-family: monospace;
+    font-size: 12px;
+
+    .additions {
+      color: #2f855a;
+    }
+
+    .deletions {
+      color: #c53030;
+    }
+  }
+}

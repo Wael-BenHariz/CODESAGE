@@ -1,0 +1,159 @@
+.pr-detail-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.loading {
+  text-align: center;
+  padding: 48px;
+  color: #718096;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.back-link {
+  color: #718096;
+  text-decoration: none;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 8px;
+
+  &:hover {
+    color: #667eea;
+  }
+}
+
+.pr-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  h1 {
+    font-size: 24px;
+    color: #1a202c;
+    margin: 0;
+  }
+}
+
+.pr-state {
+  font-size: 24px;
+}
+
+.pr-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+  color: #718096;
+  margin-top: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.review-btn {
+  padding: 12px 24px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: #5a67d8;
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
+
+.review-status {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+
+  &.pending {
+    background: #fefcbf;
+    color: #d69e2e;
+  }
+
+  &.in_progress {
+    background: #bee3f8;
+    color: #3182ce;
+  }
+
+  &.completed {
+    background: #c6f6d5;
+    color: #2f855a;
+  }
+}
+
+.pr-stats-bar {
+  display: flex;
+  gap: 32px;
+  padding: 16px 24px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #718096;
+}
+
+.pr-description,
+.diff-section {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+
+  h3 {
+    font-size: 16px;
+    color: #1a202c;
+    margin: 0 0 16px;
+  }
+}
+
+.description-content {
+  color: #4a5568;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.diff-placeholder {
+  padding: 48px;
+  text-align: center;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 2px dashed #e2e8f0;
+
+  p {
+    color: #718096;
+    margin: 8px 0;
+  }
+}

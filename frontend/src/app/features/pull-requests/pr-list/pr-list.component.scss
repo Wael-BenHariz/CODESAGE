@@ -1,0 +1,160 @@
+.pr-list-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+
+  .back-link {
+    color: #718096;
+    text-decoration: none;
+    font-size: 14px;
+    display: block;
+    margin-bottom: 8px;
+
+    &:hover {
+      color: #667eea;
+    }
+  }
+
+  h1 {
+    font-size: 28px;
+    color: #1a202c;
+    margin: 0;
+  }
+}
+
+.filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 6px;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: #667eea;
+    color: #667eea;
+  }
+
+  &.active {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+  }
+}
+
+.loading,
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: #718096;
+}
+
+.pr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pr-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.pr-status {
+  font-size: 20px;
+}
+
+.pr-content {
+  flex: 1;
+}
+
+.pr-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+
+.pr-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #718096;
+}
+
+.pr-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.stat {
+  font-size: 12px;
+  font-family: monospace;
+  padding: 2px 6px;
+  border-radius: 4px;
+
+  &.additions {
+    background: #c6f6d5;
+    color: #2f855a;
+  }
+
+  &.deletions {
+    background: #fed7d7;
+    color: #c53030;
+  }
+
+  &.files {
+    background: #e2e8f0;
+    color: #4a5568;
+  }
+}
+
+.pr-review-status {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 600;
+
+  &.pending {
+    background: #fefcbf;
+    color: #d69e2e;
+  }
+
+  &.in_progress {
+    background: #bee3f8;
+    color: #3182ce;
+  }
+
+  &.completed {
+    background: #c6f6d5;
+    color: #2f855a;
+  }
+
+  &.failed {
+    background: #fed7d7;
+    color: #c53030;
+  }
+}

@@ -1,0 +1,156 @@
+@use 'variables' as *;
+@use 'mixins' as *;
+@use 'reset';
+
+// Import Google Font
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+// Utility classes
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 $spacing-lg;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-1 { gap: $spacing-xs; }
+.gap-2 { gap: $spacing-sm; }
+.gap-3 { gap: $spacing-md; }
+.gap-4 { gap: $spacing-lg; }
+.gap-5 { gap: $spacing-xl; }
+
+.mt-1 { margin-top: $spacing-xs; }
+.mt-2 { margin-top: $spacing-sm; }
+.mt-3 { margin-top: $spacing-md; }
+.mt-4 { margin-top: $spacing-lg; }
+.mt-5 { margin-top: $spacing-xl; }
+
+.mb-1 { margin-bottom: $spacing-xs; }
+.mb-2 { margin-bottom: $spacing-sm; }
+.mb-3 { margin-bottom: $spacing-md; }
+.mb-4 { margin-bottom: $spacing-lg; }
+.mb-5 { margin-bottom: $spacing-xl; }
+
+.p-1 { padding: $spacing-xs; }
+.p-2 { padding: $spacing-sm; }
+.p-3 { padding: $spacing-md; }
+.p-4 { padding: $spacing-lg; }
+.p-5 { padding: $spacing-xl; }
+
+// Button styles
+.btn {
+  @include button-base;
+}
+
+.btn-primary {
+  background: $primary;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background: $primary-dark;
+  }
+}
+
+.btn-secondary {
+  background: $gray-200;
+  color: $gray-700;
+
+  &:hover:not(:disabled) {
+    background: $gray-300;
+  }
+}
+
+.btn-success {
+  background: $success;
+  color: white;
+
+  &:hover:not(:disabled) {
+    background: $success-light;
+  }
+}
+
+// Form elements
+.input {
+  width: 100%;
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid $gray-300;
+  border-radius: $radius-md;
+  font-size: $font-size-base;
+  transition: border-color $transition-fast;
+
+  &:focus {
+    outline: none;
+    border-color: $primary;
+    box-shadow: 0 0 0 3px rgba($primary, 0.1);
+  }
+}
+
+// Card base
+.card {
+  @include card;
+}
+
+// Badge
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: $font-size-xs;
+  font-weight: 600;
+  border-radius: $radius-sm;
+
+  &.badge-success {
+    background: rgba($success, 0.1);
+    color: $success;
+  }
+
+  &.badge-warning {
+    background: rgba($warning, 0.1);
+    color: $warning;
+  }
+
+  &.badge-error {
+    background: rgba($error, 0.1);
+    color: $error;
+  }
+
+  &.badge-info {
+    background: rgba($primary, 0.1);
+    color: $primary;
+  }
+}

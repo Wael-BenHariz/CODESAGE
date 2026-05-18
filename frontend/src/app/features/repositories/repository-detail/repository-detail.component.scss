@@ -1,0 +1,138 @@
+.repo-detail-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.loading {
+  text-align: center;
+  padding: 48px;
+  color: #718096;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.back-link {
+  color: #718096;
+  text-decoration: none;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 8px;
+
+  &:hover {
+    color: #667eea;
+  }
+}
+
+h1 {
+  font-size: 28px;
+  color: #1a202c;
+  margin: 0;
+}
+
+.toggle-btn {
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #edf2f7;
+  border: none;
+  color: #4a5568;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #e2e8f0;
+  }
+
+  &.enabled {
+    background: #c6f6d5;
+    color: #2f855a;
+
+    &:hover {
+      background: #9ae6b4;
+    }
+  }
+}
+
+.repo-info-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.description {
+  color: #4a5568;
+  margin: 0 0 24px;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+
+  &.enabled {
+    color: #2f855a;
+  }
+}
+
+.actions-section {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+  h2 {
+    font-size: 18px;
+    color: #1a202c;
+    margin: 0 0 16px;
+  }
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.action-btn {
+  padding: 12px 24px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s;
+
+  &.primary {
+    background: #667eea;
+    color: white;
+
+    &:hover {
+      background: #5a67d8;
+    }
+  }
+}

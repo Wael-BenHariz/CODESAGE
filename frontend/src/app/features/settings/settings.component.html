@@ -1,0 +1,91 @@
+<div class="settings-page">
+  <header class="page-header">
+    <h1>Settings</h1>
+  </header>
+
+  <div class="settings-sections">
+    <section class="settings-section">
+      <h2>Profile</h2>
+      <div class="profile-card">
+        @if (user(); as u) {
+          <div class="profile-avatar">
+            <img [src]="u.avatarUrl" [alt]="u.login" />
+          </div>
+          <div class="profile-info">
+            <div class="field">
+              <label>Username</label>
+              <input type="text" [value]="u.login" disabled />
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input type="email" [value]="u.email" disabled />
+            </div>
+            <div class="field">
+              <label>Name</label>
+              <input type="text" [value]="u.name || ''" placeholder="Your name" />
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>Review Preferences</h2>
+      <div class="preferences-card">
+        <div class="preference-item">
+          <label>Auto-review on PR open</label>
+          <input type="checkbox" />
+        </div>
+        <div class="preference-item">
+          <label>Review frequency</label>
+          <select>
+            <option value="immediate">Immediate</option>
+            <option value="hourly">Hourly</option>
+            <option value="daily">Daily</option>
+          </select>
+        </div>
+        <div class="preference-item">
+          <label>Include security scans</label>
+          <input type="checkbox" checked />
+        </div>
+        <div class="preference-item">
+          <label>Include performance checks</label>
+          <input type="checkbox" checked />
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>Notifications</h2>
+      <div class="notifications-card">
+        <div class="notification-item">
+          <span>Email notifications for new reviews</span>
+          <input type="checkbox" checked />
+        </div>
+        <div class="notification-item">
+          <span>Email notifications for comments</span>
+          <input type="checkbox" />
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section danger-zone">
+      <h2>Danger Zone</h2>
+      <div class="danger-card">
+        <div class="danger-item">
+          <div>
+            <strong>Log out</strong>
+            <p>Log out from your account on this device.</p>
+          </div>
+          <button class="logout-btn" (click)="logout()">Log Out</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="save-btn" [class.saving]="isSaving()" (click)="saveSettings()">
+        {{ isSaving() ? 'Saving...' : 'Save Changes' }}
+      </button>
+    </div>
+  </div>
+</div>

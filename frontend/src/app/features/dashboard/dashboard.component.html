@@ -1,0 +1,90 @@
+<div class="dashboard">
+  <header class="header">
+    <div class="header-left">
+      <h1 class="logo">CodeSage</h1>
+      <nav class="nav">
+        <a routerLink="/dashboard" class="nav-link active">Dashboard</a>
+        <a routerLink="/repositories" class="nav-link">Repositories</a>
+        <a routerLink="/settings" class="nav-link">Settings</a>
+      </nav>
+    </div>
+    <div class="header-right">
+      @if (user()) {
+        <div class="user-menu">
+          <img [src]="user()!.avatarUrl" [alt]="user()!.login" class="user-avatar" />
+          <span class="user-name">{{ user()!.login }}</span>
+          <button class="logout-btn" (click)="logout()">Logout</button>
+        </div>
+      }
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="welcome-section">
+      <h2>Welcome back, {{ user()?.login }}!</h2>
+      <p>Here is an overview of your code review activity.</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-icon">📁</span>
+        <div class="stat-content">
+          <span class="stat-value">{{ stats().totalRepos }}</span>
+          <span class="stat-label">Total Repositories</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">✅</span>
+        <div class="stat-content">
+          <span class="stat-value">{{ stats().enabledRepos }}</span>
+          <span class="stat-label">Enabled Repos</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">🔀</span>
+        <div class="stat-content">
+          <span class="stat-value">{{ stats().openPRs }}</span>
+          <span class="stat-label">Open Pull Requests</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">⏳</span>
+        <div class="stat-content">
+          <span class="stat-value">{{ stats().pendingReviews }}</span>
+          <span class="stat-label">Pending Reviews</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="recent-activity">
+      <h3>Recent Repositories</h3>
+      @if (isLoading()) {
+        <div class="loading">Loading...</div>
+      } @else if (repositories().length === 0) {
+        <div class="empty-state">
+          <p>No repositories connected yet.</p>
+          <a routerLink="/repositories" class="connect-btn">Connect Repository</a>
+        </div>
+      } @else {
+        <div class="repo-list">
+          @for (repo of repositories().slice(0, 5); track repo.id) {
+            <a [routerLink]="['/repositories', repo.owner, repo.name]" class="repo-item">
+              <div class="repo-info">
+                <span class="repo-name">{{ repo.fullName }}</span>
+                <span class="repo-desc">{{ repo.description || 'No description' }}</span>
+              </div>
+              <div class="repo-meta">
+                @if (repo.language) {
+                  <span class="repo-language">{{ repo.language }}</span>
+                }
+                <span class="repo-status" [class.enabled]="repo.enabled">
+                  {{ repo.enabled ? 'Enabled' : 'Disabled' }}
+                </span>
+              </div>
+            </a>
+          }
+        </div>
+      }
+    </div>
+  </main>
+</div>

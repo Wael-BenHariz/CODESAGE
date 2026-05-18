@@ -1,0 +1,67 @@
+<div class="pr-list-page">
+  <header class="page-header">
+    <div class="header-left">
+      <a [routerLink]="['/repositories', owner(), repo()]" class="back-link">
+        ← {{ owner() }}/{{ repo() }}
+      </a>
+      <h1>Pull Requests</h1>
+    </div>
+  </header>
+
+  <div class="filters">
+    <button 
+      class="filter-btn" 
+      [class.active]="filter() === 'all'"
+      (click)="setFilter('all')">
+      All ({{ pullRequests().length }})
+    </button>
+    <button 
+      class="filter-btn"
+      [class.active]="filter() === 'open'"
+      (click)="setFilter('open')">
+      Open ({{ pullRequests().filter(pr => pr.state === 'open').length }})
+    </button>
+    <button 
+      class="filter-btn"
+      [class.active]="filter() === 'closed'"
+      (click)="setFilter('closed')">
+      Closed ({{ pullRequests().filter(pr => pr.state === 'closed' || pr.state === 'merged').length }})
+    </button>
+  </div>
+
+  @if (isLoading()) {
+    <div class="loading">Loading pull requests...</div>
+  } @else if (filteredPRs().length === 0) {
+    <div class="empty-state">
+      <p>No pull requests found.</p>
+    </div>
+  } @else {
+    <div class="pr-list">
+      @for (pr of filteredPRs(); track pr.id) {
+        <a [routerLink]="['/repositories', owner(), repo(), 'pulls', pr.number]" class="pr-item">
+          <div class="pr-status">
+            <span>{{ getStateIcon(pr.state) }}</span>
+          </div>
+          <div class="pr-content">
+            <div class="pr-title">{{ pr.title }}</div>
+            <div class="pr-meta">
+              <span>#{{ pr.number }}</span>
+              <span>by {{ pr.author.login }}</span>
+              <span>{{ pr.baseBranch }} ← {{ pr.headBranch }}</span>
+            </div>
+          </div>
+          <div class="pr-stats">
+            <span class="stat additions">+{{ pr.additions }}</span>
+            <span class="stat deletions">-{{ pr.deletions }}</span>
+            <span class="stat files">{{ pr.changedFiles }} files</span>
+          </div>
+          @if (pr.reviewStatus) {
+            <div class="pr-review-status" [class]="pr.reviewStatus.status">
+              {{ pr.reviewStatus.status }}
+            </div>
+          }
+        </a>
+      }
+    </div>
+  }
+</div>

@@ -1,0 +1,79 @@
+<div class="pr-detail-page">
+  @if (isLoading()) {
+    <div class="loading">Loading pull request...</div>
+  } @else if (pullRequest(); as pr) {
+    <header class="page-header">
+      <div class="header-left">
+        <a [routerLink]="['/repositories', owner(), repo(), 'pulls']" class="back-link">
+          ← Pull Requests
+        </a>
+        <div class="pr-title-row">
+          <span class="pr-state" [style.color]="getStateColor(pr.state)">
+            {{ pr.state === 'open' ? '🟢' : pr.state === 'closed' ? '🔴' : '🟣' }}
+          </span>
+          <h1>{{ pr.title }}</h1>
+        </div>
+        <div class="pr-meta">
+          <span>#{{ pr.number }}</span>
+          <span>{{ pr.baseBranch }} ← {{ pr.headBranch }}</span>
+          <span>by {{ pr.author.login }}</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        @if (!pr.reviewStatus || pr.reviewStatus.status === 'completed') {
+          <button 
+            class="review-btn" 
+            [class.loading]="isReviewing()"
+            [disabled]="isReviewing()"
+            (click)="triggerReview()">
+            {{ isReviewing() ? 'Starting Review...' : '🔍 Start AI Review' }}
+          </button>
+        } @else {
+          <span class="review-status" [class]="pr.reviewStatus.status">
+            {{ pr.reviewStatus.status }}
+          </span>
+        }
+      </div>
+    </header>
+
+    <div class="pr-stats-bar">
+      <div class="stat">
+        <span class="stat-value">+{{ pr.additions }}</span>
+        <span class="stat-label">additions</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">-{{ pr.deletions }}</span>
+        <span class="stat-label">deletions</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ pr.changedFiles }}</span>
+        <span class="stat-label">files changed</span>
+      </div>
+      @if (pr.reviewStatus) {
+        <div class="stat">
+          <span class="stat-value">{{ pr.reviewStatus.commentCount }}</span>
+          <span class="stat-label">review comments</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">{{ pr.reviewStatus.issueCount }}</span>
+          <span class="stat-label">issues found</span>
+        </div>
+      }
+    </div>
+
+    @if (pr.body) {
+      <div class="pr-description">
+        <h3>Description</h3>
+        <div class="description-content">{{ pr.body }}</div>
+      </div>
+    }
+
+    <div class="diff-section">
+      <h3>Changes</h3>
+      <div class="diff-placeholder">
+        <p>Diff view will be displayed here when Monaco Editor is integrated.</p>
+        <p>Each file with changes will be shown with syntax highlighting.</p>
+      </div>
+    </div>
+  }
+</div>
