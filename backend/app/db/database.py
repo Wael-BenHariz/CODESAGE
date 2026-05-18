@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
@@ -26,9 +26,7 @@ class Base(DeclarativeBase):
 # Create async engine with connection pooling
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
-    poolclass=QueuePool,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
+    poolclass=NullPool,
     pool_pre_ping=True,  # Enable connection health checks
     pool_recycle=3600,  # Recycle connections after 1 hour
     echo=settings.DEBUG,  # Log SQL in debug mode

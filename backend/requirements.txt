@@ -22,9 +22,8 @@ bcrypt>=4.1.0
 # HTTP client
 httpx>=0.26.0
 
-# Redis & Queue
+# Redis
 redis>=5.0.1
-bullmq>=5.1.0
 
 # Configuration
 python-dotenv>=1.0.0
@@ -37,7 +36,6 @@ aiofiles>=23.2.1
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
-httpx>=0.26.0
 
 # Type checking
 mypy>=1.8.0

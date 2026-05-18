@@ -5,8 +5,9 @@ Request/Response models for user management.
 
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 
 
 class UserBase(BaseModel):
@@ -46,6 +47,13 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v
+
 
 class UserListResponse(BaseModel):
     """Paginated list of users."""
@@ -69,3 +77,10 @@ class CurrentUser(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v

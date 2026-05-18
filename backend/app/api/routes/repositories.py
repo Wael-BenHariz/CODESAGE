@@ -6,12 +6,14 @@ Repository management and configuration endpoints.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.db import get_db
-from app.db.models import User, Repository, GitHubInstallation
+from app.db.models import User, Repository, GitHubInstallation, OAuthToken
 from app.schemas.repository import (
     RepositoryResponse,
     RepositoryUpdate,
@@ -20,8 +22,147 @@ from app.schemas.repository import (
     RepositorySettings,
 )
 from app.security.dependencies import get_current_user
+from app.services.github import github_service
 
 router = APIRouter()
+
+
+class GitHubRepoInfo(BaseModel):
+    """GitHub repository info from the GitHub API."""
+    id: int
+    name: str
+    full_name: str
+    private: bool
+    default_branch: str
+    description: Optional[str] = None
+    language: Optional[str] = None
+    stargazers_count: int = 0
+    forks_count: int = 0
+    open_issues_count: int = 0
+
+
+@router.get("/github", response_model=list[GitHubRepoInfo])
+async def list_github_repos(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List user's GitHub repositories (not yet connected to CodeSage).
+    Uses the user's OAuth token to fetch repos from GitHub.
+    """
+    # Get user's OAuth token
+    result = await db.execute(
+        select(OAuthToken).where(OAuthToken.user_id == current_user.id)
+    )
+    token_record = result.scalar_one_or_none()
+    
+    if not token_record or token_record.is_expired:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="GitHub token expired. Please log in again.",
+        )
+    
+    # Fetch repos from GitHub
+    repos = await github_service.get_user_repos(token_record.access_token)
+    
+    # Filter out already connected repos
+    connected_result = await db.execute(select(Repository.full_name))
+    connected_names = {r[0] for r in connected_result.all()}
+    
+    return [
+        GitHubRepoInfo(
+            id=r["id"],
+            name=r["name"],
+            full_name=r["full_name"],
+            private=r.get("private", False),
+            default_branch=r.get("default_branch", "main"),
+            description=r.get("description"),
+            language=r.get("language"),
+            stargazers_count=r.get("stargazers_count", 0),
+            forks_count=r.get("forks_count", 0),
+            open_issues_count=r.get("open_issues_count", 0),
+        )
+        for r in repos
+        if r["full_name"] not in connected_names
+    ]
+
+
+@router.post("/connect", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
+async def connect_repository(
+    github_repo_id: int = Query(..., description="GitHub repository ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Connect a GitHub repository to CodeSage.
+    Creates installation and repository records.
+    """
+    # Get user's OAuth token
+    result = await db.execute(
+        select(OAuthToken).where(OAuthToken.user_id == current_user.id)
+    )
+    token_record = result.scalar_one_or_none()
+    
+    if not token_record or token_record.is_expired:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="GitHub token expired. Please log in again.",
+        )
+    
+    # Fetch repo details from GitHub
+    repos = await github_service.get_user_repos(token_record.access_token)
+    repo_data = next((r for r in repos if r["id"] == github_repo_id), None)
+    
+    if not repo_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found on GitHub",
+        )
+    
+    # Check if already connected
+    existing = await db.execute(
+        select(Repository).where(Repository.github_repo_id == github_repo_id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Repository already connected",
+        )
+    
+    # Find or create installation for this user
+    inst_result = await db.execute(
+        select(GitHubInstallation).where(
+            GitHubInstallation.account_id == current_user.github_id
+        )
+    )
+    installation = inst_result.scalar_one_or_none()
+    
+    if not installation:
+        installation = GitHubInstallation(
+            app_id=int(settings.GITHUB_APP_ID) if hasattr(settings, 'GITHUB_APP_ID') and settings.GITHUB_APP_ID else 0,
+            installation_id=0,  # Placeholder - would be set by GitHub App webhook
+            account_id=current_user.github_id,
+            account_type="User",
+            permissions={"pull_requests": "read", "contents": "read"},
+        )
+        db.add(installation)
+        await db.flush()
+    
+    # Create repository record
+    repo = Repository(
+        installation_id=installation.id,
+        github_repo_id=github_repo_id,
+        name=repo_data["name"],
+        full_name=repo_data["full_name"],
+        private=repo_data.get("private", False),
+        default_branch=repo_data.get("default_branch", "main"),
+        enabled=True,
+    )
+    db.add(repo)
+    await db.commit()
+    await db.refresh(repo)
+    
+    return RepositoryResponse.model_validate(repo)
 
 
 @router.get("", response_model=RepositoryListResponse)

@@ -40,13 +40,14 @@ class GitHubService:
 
     # ==================== OAuth ====================
 
-    def get_oauth_login_url(self, state: str, redirect_url: Optional[str] = None) -> str:
+    def get_oauth_login_url(self, state: str, redirect_url: Optional[str] = None, prompt_select: bool = True) -> str:
         """
         Generate GitHub OAuth authorization URL.
         
         Args:
             state: CSRF protection state string
             redirect_url: URL to redirect after authorization
+            prompt_select: If True, forces GitHub account chooser
             
         Returns:
             GitHub authorization URL
@@ -57,6 +58,9 @@ class GitHubService:
             "scope": "read:user user:email repo",
             "state": state,
         }
+        
+        if prompt_select:
+            params["prompt"] = "select_account"
         
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return f"https://github.com/login/oauth/authorize?{query}"
@@ -254,6 +258,36 @@ class GitHubService:
         }
 
     # ==================== Repository Operations ====================
+
+    async def get_user_repos(self, access_token: str, per_page: int = 100) -> list[dict[str, Any]]:
+        """
+        Get list of repositories accessible by the authenticated user.
+        
+        Args:
+            access_token: GitHub OAuth access token
+            per_page: Results per page (max 100)
+            
+        Returns:
+            List of repository data
+        """
+        repos = []
+        page = 1
+        
+        while True:
+            data = await self._get("/user/repos", access_token, {
+                "per_page": per_page,
+                "page": page,
+                "sort": "updated",
+                "affiliation": "owner,collaborator,organization_member",
+            })
+            if not data:
+                break
+            repos.extend(data)
+            if len(data) < per_page:
+                break
+            page += 1
+        
+        return repos
 
     async def get_repository(
         self,

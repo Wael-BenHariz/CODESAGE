@@ -4,6 +4,7 @@
       <a routerLink="/dashboard" class="back-link">← Dashboard</a>
       <h1>Repositories</h1>
     </div>
+    <button class="connect-btn" (click)="openConnectModal()">+ Connect Repository</button>
   </header>
 
   <div class="filters">
@@ -17,25 +18,30 @@
       class="filter-btn"
       [class.active]="filter() === 'enabled'"
       (click)="setFilter('enabled')">
-      Enabled ({{ repositories().filter(r => r.enabled).length }})
+      Enabled ({{ openCount }})
     </button>
     <button 
       class="filter-btn"
       [class.active]="filter() === 'disabled'"
       (click)="setFilter('disabled')">
-      Disabled ({{ repositories().filter(r => !r.enabled).length }})
+      Disabled ({{ disabledCount }})
     </button>
   </div>
 
   @if (isLoading()) {
     <div class="loading">Loading repositories...</div>
-  } @else if (filteredRepos().length === 0) {
+  } @else if (filteredRepos.length === 0 && repositories().length === 0) {
     <div class="empty-state">
-      <p>No repositories found.</p>
+      <p>No repositories connected yet.</p>
+      <button class="connect-btn-primary" (click)="openConnectModal()">Connect Repository</button>
+    </div>
+  } @else if (filteredRepos.length === 0) {
+    <div class="empty-state">
+      <p>No repositories match the current filter.</p>
     </div>
   } @else {
     <div class="repo-grid">
-      @for (repo of filteredRepos(); track repo.id) {
+      @for (repo of filteredRepos; track repo.id) {
         <div class="repo-card">
           <div class="repo-header">
             <a [routerLink]="['/repositories', repo.owner, repo.name]" class="repo-name">
@@ -65,6 +71,52 @@
           </div>
         </div>
       }
+    </div>
+  }
+
+  @if (showConnectModal()) {
+    <div class="modal-overlay" (click)="closeConnectModal()">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Connect Repository</h2>
+          <button class="close-btn" (click)="closeConnectModal()">×</button>
+        </div>
+        <div class="modal-body">
+          @if (isLoadingGitHubRepos()) {
+            <div class="loading">Loading your GitHub repositories...</div>
+          } @else if (githubRepos().length === 0) {
+            <div class="empty-state">
+              <p>All your accessible repositories are already connected.</p>
+            </div>
+          } @else {
+            <div class="repo-select-list">
+              @for (repo of githubRepos(); track repo.id) {
+                <div class="repo-select-item">
+                  <div class="repo-info">
+                    <span class="repo-name">{{ repo.full_name }}</span>
+                    <span class="repo-desc">{{ repo.description || 'No description' }}</span>
+                  </div>
+                  <div class="repo-meta">
+                    @if (repo.private) {
+                      <span class="private-badge">Private</span>
+                    }
+                    @if (repo.language) {
+                      <span class="language-badge">{{ repo.language }}</span>
+                    }
+                    <span class="meta-item">⭐ {{ repo.stargazers_count }}</span>
+                  </div>
+                  <button 
+                    class="connect-item-btn" 
+                    [disabled]="connectingRepo() === repo.full_name"
+                    (click)="connectRepo(repo)">
+                    {{ connectingRepo() === repo.full_name ? 'Connecting...' : 'Connect' }}
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
     </div>
   }
 </div>

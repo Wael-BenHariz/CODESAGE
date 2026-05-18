@@ -21,12 +21,20 @@ export class PrListComponent implements OnInit {
   isLoading = signal(true);
   filter = signal<'all' | 'open' | 'closed'>('all');
 
-  filteredPRs = () => {
+  get openCount() {
+    return this.pullRequests().filter(pr => pr.state === 'open').length;
+  }
+
+  get closedCount() {
+    return this.pullRequests().filter(pr => pr.state === 'closed' || pr.state === 'merged').length;
+  }
+
+  get filteredPRs() {
     const prs = this.pullRequests();
     const f = this.filter();
     if (f === 'all') return prs;
     return prs.filter(pr => pr.state === f);
-  };
+  }
 
   ngOnInit(): void {
     this.loadPullRequests();

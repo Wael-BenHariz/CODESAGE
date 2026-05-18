@@ -1,61 +1,63 @@
 <div class="repo-detail-page">
   @if (isLoading()) {
     <div class="loading">Loading repository...</div>
-  } @else if (repository(); as repo) {
-    <header class="page-header">
-      <div class="header-left">
-        <a routerLink="/repositories" class="back-link">← Repositories</a>
-        <h1>{{ repo.fullName }}</h1>
-      </div>
-      <div class="header-actions">
-        <button 
-          class="toggle-btn" 
-          [class.enabled]="repo.enabled"
-          (click)="toggleEnabled()">
-          {{ repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
-        </button>
-      </div>
-    </header>
+  } @else {
+    @if (repository(); as repo) {
+      <header class="page-header">
+        <div class="header-left">
+          <a routerLink="/repositories" class="back-link">← Repositories</a>
+          <h1>{{ repo.fullName }}</h1>
+        </div>
+        <div class="header-actions">
+          <button 
+            class="toggle-btn" 
+            [class.enabled]="repo.enabled"
+            (click)="toggleEnabled()">
+            {{ repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
+          </button>
+        </div>
+      </header>
 
-    <div class="repo-info-card">
-      <p class="description">{{ repo.description || 'No description available' }}</p>
-      <div class="meta-grid">
-        <div class="meta-item">
-          <span class="label">Language</span>
-          <span class="value">{{ repo.language || 'N/A' }}</span>
-        </div>
-        <div class="meta-item">
-          <span class="label">Default Branch</span>
-          <span class="value">{{ repo.defaultBranch }}</span>
-        </div>
-        <div class="meta-item">
-          <span class="label">Stars</span>
-          <span class="value">{{ repo.stars }}</span>
-        </div>
-        <div class="meta-item">
-          <span class="label">Forks</span>
-          <span class="value">{{ repo.forks }}</span>
-        </div>
-        <div class="meta-item">
-          <span class="label">Open Issues</span>
-          <span class="value">{{ repo.openIssues }}</span>
-        </div>
-        <div class="meta-item">
-          <span class="label">Status</span>
-          <span class="value" [class.enabled]="repo.enabled">
-            {{ repo.enabled ? 'Enabled' : 'Disabled' }}
-          </span>
+      <div class="repo-info-card">
+        <p class="description">{{ repo.description || 'No description available' }}</p>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="label">Language</span>
+            <span class="value">{{ repo.language || 'N/A' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Default Branch</span>
+            <span class="value">{{ repo.defaultBranch }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Stars</span>
+            <span class="value">{{ repo.stars }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Forks</span>
+            <span class="value">{{ repo.forks }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Open Issues</span>
+            <span class="value">{{ repo.openIssues }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Status</span>
+            <span class="value" [class.enabled]="repo.enabled">
+              {{ repo.enabled ? 'Enabled' : 'Disabled' }}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="actions-section">
-      <h2>Actions</h2>
-      <div class="action-buttons">
-        <a [routerLink]="['pulls']" class="action-btn primary">
-          View Pull Requests
-        </a>
+      <div class="actions-section">
+        <h2>Actions</h2>
+        <div class="action-buttons">
+          <a [routerLink]="['pulls']" class="action-btn primary">
+            View Pull Requests
+          </a>
+        </div>
       </div>
-    </div>
+    }
   }
 </div>

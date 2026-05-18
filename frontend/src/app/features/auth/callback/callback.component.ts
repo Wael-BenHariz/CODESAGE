@@ -18,7 +18,8 @@ export class CallbackComponent implements OnInit {
   error: string | null = null;
 
   ngOnInit(): void {
-    const code = this.route.snapshot.queryParamMap.get('code');
+    const token = this.route.snapshot.queryParamMap.get('token');
+    const refreshToken = this.route.snapshot.queryParamMap.get('refresh_token');
     const error = this.route.snapshot.queryParamMap.get('error');
 
     if (error) {
@@ -26,12 +27,13 @@ export class CallbackComponent implements OnInit {
       return;
     }
 
-    if (!code) {
-      this.error = 'No authorization code received';
+    if (!token) {
+      this.error = 'No authentication token received';
       return;
     }
 
-    this.auth.handleCallback(code).subscribe({
+    // Store tokens and fetch user info
+    this.auth.completeLogin(token, refreshToken || '').subscribe({
       next: () => {
         this.router.navigate(['/dashboard']);
       },

@@ -10,12 +10,22 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const token = auth.getToken();
 
-  if (token && !req.url.includes('/auth/')) {
+  console.log('[AuthInterceptor] URL:', req.url, 'Token present:', !!token);
+
+  const publicAuthUrls = ['/auth/github', '/auth/github/callback', '/auth/refresh', '/auth/login', '/auth/logout'];
+  const isPublicAuth = publicAuthUrls.some(url => req.url.includes(url));
+
+  if (token && !isPublicAuth) {
+    console.log('[AuthInterceptor] Adding Authorization header');
     req = req.clone({
       setHeaders: {
         Authorization: `Bearer ${token}`
       }
     });
+  } else if (token && isPublicAuth) {
+    console.log('[AuthInterceptor] Skipping - public auth URL');
+  } else if (!token) {
+    console.log('[AuthInterceptor] Skipping - no token');
   }
 
   return next(req).pipe(

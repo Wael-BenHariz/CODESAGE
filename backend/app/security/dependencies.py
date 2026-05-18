@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +29,12 @@ async def get_current_user(
     Raises:
         HTTPException: If no valid token is provided
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"get_current_user - credentials: {credentials}")
+    
     if not credentials:
+        logger.error("No credentials provided")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -36,7 +42,9 @@ async def get_current_user(
         )
     
     try:
+        logger.info(f"Verifying token type: {credentials.credentials[:20]}...")
         payload = token_manager.verify_token(credentials.credentials, token_type="access")
+        logger.info(f"Token payload: {payload}")
         user_id = payload.get("sub")
         
         if not user_id:
@@ -45,7 +53,17 @@ async def get_current_user(
                 detail="Invalid token payload",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-    except Exception:
+    except JWTError as e:
+        logger.error(f"JWTError: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid or expired token: {e}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

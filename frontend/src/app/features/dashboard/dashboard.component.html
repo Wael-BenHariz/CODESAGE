@@ -13,6 +13,7 @@
         <div class="user-menu">
           <img [src]="user()!.avatarUrl" [alt]="user()!.login" class="user-avatar" />
           <span class="user-name">{{ user()!.login }}</span>
+          <button class="switch-account-btn" (click)="switchAccount()">Switch Account</button>
           <button class="logout-btn" (click)="logout()">Logout</button>
         </div>
       }

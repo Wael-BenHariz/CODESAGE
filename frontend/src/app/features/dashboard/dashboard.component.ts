@@ -1,9 +1,10 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '../core/services/auth.service';
-import { GithubService } from '../core/services/github.service';
-import { Repository } from '../core/models/repository.model';
+import { AuthService } from '../../core/services/auth.service';
+import { GithubService } from '../../core/services/github.service';
+import { Repository } from '../../core/models/repository.model';
+import { User } from '../../core/models/user.model';
 
 @Component({
   selector: 'app-dashboard',
@@ -16,7 +17,7 @@ export class DashboardComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly github = inject(GithubService);
 
-  user = this.auth.currentUser;
+  user = signal<User | null>(null);
   repositories = signal<Repository[]>([]);
   isLoading = signal(true);
   stats = signal({
@@ -27,16 +28,17 @@ export class DashboardComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.user.set(this.auth.currentUser());
     this.loadDashboard();
   }
 
   private loadDashboard(): void {
     this.github.getRepositories().subscribe({
-      next: (repos) => {
+      next: (repos: Repository[]) => {
         this.repositories.set(repos);
         this.stats.set({
           totalRepos: repos.length,
-          enabledRepos: repos.filter(r => r.enabled).length,
+          enabledRepos: repos.filter((r: Repository) => r.enabled).length,
           openPRs: 0,
           pendingReviews: 0
         });
@@ -50,5 +52,9 @@ export class DashboardComponent implements OnInit {
 
   logout(): void {
     this.auth.logout();
+  }
+
+  switchAccount(): void {
+    this.auth.switchAccount();
   }
 }

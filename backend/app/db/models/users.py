@@ -11,7 +11,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.oauth_tokens import OAuthToken
-    from app.db.models.pull_requests import PullRequest
     from app.db.models.reviews import Review
 
 
@@ -88,13 +87,6 @@ class User(Base):
     oauth_tokens: Mapped[list["OAuthToken"]] = relationship(
         "OAuthToken",
         back_populates="user",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-
-    pull_requests: Mapped[list["PullRequest"]] = relationship(
-        "PullRequest",
-        back_populates="author",
         cascade="all, delete-orphan",
         lazy="selectin",
     )

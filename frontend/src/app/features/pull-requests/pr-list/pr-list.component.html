@@ -19,25 +19,25 @@
       class="filter-btn"
       [class.active]="filter() === 'open'"
       (click)="setFilter('open')">
-      Open ({{ pullRequests().filter(pr => pr.state === 'open').length }})
+      Open ({{ openCount }})
     </button>
     <button 
       class="filter-btn"
       [class.active]="filter() === 'closed'"
       (click)="setFilter('closed')">
-      Closed ({{ pullRequests().filter(pr => pr.state === 'closed' || pr.state === 'merged').length }})
+      Closed ({{ closedCount }})
     </button>
   </div>
 
   @if (isLoading()) {
     <div class="loading">Loading pull requests...</div>
-  } @else if (filteredPRs().length === 0) {
+  } @else if (filteredPRs.length === 0) {
     <div class="empty-state">
       <p>No pull requests found.</p>
     </div>
   } @else {
     <div class="pr-list">
-      @for (pr of filteredPRs(); track pr.id) {
+      @for (pr of filteredPRs; track pr.id) {
         <a [routerLink]="['/repositories', owner(), repo(), 'pulls', pr.number]" class="pr-item">
           <div class="pr-status">
             <span>{{ getStateIcon(pr.state) }}</span>

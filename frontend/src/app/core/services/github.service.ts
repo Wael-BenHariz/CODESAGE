@@ -1,8 +1,29 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { Repository, RepositoryStats } from '../models/repository.model';
 import { PullRequest } from '../models/pull-request.model';
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  default_branch: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  forks_count: number;
+  open_issues_count: number;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -11,7 +32,17 @@ export class GithubService {
   private readonly api = inject(ApiService);
 
   getRepositories(): Observable<Repository[]> {
-    return this.api.get<Repository[]>('/repositories');
+    return this.api.get<PaginatedResponse<Repository>>('/repositories').pipe(
+      map(response => response.items)
+    );
+  }
+
+  getGitHubRepositories(): Observable<GitHubRepo[]> {
+    return this.api.get<GitHubRepo[]>('/repositories/github');
+  }
+
+  connectRepository(githubRepoId: number): Observable<Repository> {
+    return this.api.post<Repository>(`/repositories/connect?github_repo_id=${githubRepoId}`, {});
   }
 
   getRepository(owner: string, repo: string): Observable<Repository> {

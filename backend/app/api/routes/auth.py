@@ -4,9 +4,11 @@ OAuth flow, token management, and user authentication.
 """
 
 import secrets
-from datetime import timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +26,8 @@ from app.schemas.user import UserResponse
 from app.security.jwt import create_access_token, create_refresh_token, verify_token
 from app.security.dependencies import get_current_user
 from app.services.github import github_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -47,6 +51,10 @@ async def github_login(
     """
     state = generate_state()
     
+    # Default redirect URL to frontend callback
+    if not redirect_url:
+        redirect_url = "http://localhost:4200/auth/callback"
+    
     # Store state with redirect URL
     oauth_states[state] = {
         "redirect_url": redirect_url,
@@ -62,6 +70,8 @@ async def github_login(
     }
 
 
+from fastapi.responses import RedirectResponse
+
 @router.get("/github/callback")
 async def github_callback(
     code: str = Query(..., description="Authorization code from GitHub"),
@@ -70,27 +80,94 @@ async def github_callback(
 ):
     """
     Handle GitHub OAuth callback.
-    Exchanges code for token and creates/updates user.
+    Exchanges code for token, creates/updates user, then redirects to frontend with JWT.
     """
+    logger.info(f"OAuth callback received - state: {state[:10]}..., code length: {len(code)}")
+    
     # Verify state
     if state not in oauth_states:
+        logger.error(f"Invalid state - available states: {list(oauth_states.keys())}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired state parameter",
         )
     
     state_data = oauth_states.pop(state)
+    logger.info(f"State verified - redirect_url: {state_data.get('redirect_url')}")
     
     try:
         # Exchange code for access token
+        logger.info("Exchanging code for token...")
         token_response = await github_service.exchange_code_for_token(code)
+        logger.info(f"Token response keys: {list(token_response.keys())}")
+        
+        access_token = token_response.get("access_token")
+        refresh_token = token_response.get("refresh_token")
+        
+        if not access_token:
+            logger.error(f"No access token in response: {token_response}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to obtain access token from GitHub",
+            )
+        
+        # Get user info from GitHub
+        logger.info("Fetching user info from GitHub...")
+        github_user = await github_service.get_user_info(access_token)
+        logger.info(f"GitHub user: {github_user.get('login')}")
+        
+        # Find or create user
+        user = await _get_or_create_user(db, github_user)
+        logger.info(f"User created/found: {user.id}")
+        
+        # Store/update OAuth token
+        await _store_token(db, user.id, access_token, refresh_token, token_response)
+        
+        # Generate JWT tokens
+        jwt_access = create_access_token(str(user.id))
+        jwt_refresh = create_refresh_token(str(user.id))
+        
+        # Redirect to frontend with JWT token
+        frontend_url = state_data.get("redirect_url", "http://localhost:4200/auth/callback")
+        redirect_url = f"{frontend_url}?token={jwt_access}&refresh_token={jwt_refresh}"
+        logger.info(f"Redirecting to frontend: {frontend_url}")
+        
+        return RedirectResponse(url=redirect_url)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OAuth flow failed with exception: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OAuth flow failed: {type(e).__name__}: {str(e)}",
+        )
+
+
+class FrontendCallback(BaseModel):
+    """Frontend OAuth callback with just the code."""
+    code: str = Field(..., description="Authorization code from GitHub")
+
+
+@router.post("/github/callback")
+async def github_callback_from_frontend(
+    body: FrontendCallback,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handle GitHub OAuth callback from frontend SPA.
+    Frontend sends the code after GitHub redirects to it.
+    """
+    try:
+        # Exchange code for access token
+        token_response = await github_service.exchange_code_for_token(body.code)
         access_token = token_response.get("access_token")
         refresh_token = token_response.get("refresh_token")
         
         if not access_token:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to obtain access token",
+                detail="Failed to obtain access token from GitHub",
             )
         
         # Get user info from GitHub
@@ -106,21 +183,16 @@ async def github_callback(
         jwt_access = create_access_token(str(user.id))
         jwt_refresh = create_refresh_token(str(user.id))
         
-        # Build response
-        response = {
-            "user_id": str(user.id),
-            "login": user.login,
+        return {
+            "user": UserResponse.model_validate(user),
             "access_token": jwt_access,
+            "refresh_token": jwt_refresh,
             "token_type": "bearer",
             "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         }
         
-        # Add refresh token if available
-        if jwt_refresh:
-            response["refresh_token"] = jwt_refresh
-        
-        return response
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -276,7 +348,3 @@ async def _store_token(
         db.add(token)
     
     await db.commit()
-
-
-# Import datetime for helper functions
-from datetime import datetime
