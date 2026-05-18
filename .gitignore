@@ -20,6 +20,8 @@ out/
 .nuxt/
 .swc/
 .cache/
+frontend/.angular/
+frontend/node_modules/
 
 # Docker
 .docker/
@@ -77,3 +79,18 @@ secrets.env
 tmp/
 temp/
 *.tmp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Executables
+ngrok.exe
+
+# Virtual environments
+venv/
+.env/
+
+# Opencode config
+.opencode/
+opencode.json
