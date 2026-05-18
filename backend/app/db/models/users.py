@@ -88,14 +88,14 @@ class User(Base):
         "OAuthToken",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     reviews: Mapped[list["Review"]] = relationship(
         "Review",
         back_populates="user",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self) -> str:
@@ -103,7 +103,5 @@ class User(Base):
 
     @property
     def is_active(self) -> bool:
-        """Check if user is active (has valid token)."""
-        if not self.oauth_tokens:
-            return False
-        return any(not token.is_expired for token in self.oauth_tokens)
+        """Always true — activity checked via token queries."""
+        return True

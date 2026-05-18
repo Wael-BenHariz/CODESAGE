@@ -6,7 +6,7 @@
   <div class="settings-sections">
     <section class="settings-section">
       <h2>Profile</h2>
-      <div class="profile-card">
+      <div class="card profile-card">
         @if (user(); as u) {
           <div class="profile-avatar">
             <img [src]="u.avatarUrl" [alt]="u.login" />
@@ -31,7 +31,7 @@
 
     <section class="settings-section">
       <h2>Review Preferences</h2>
-      <div class="preferences-card">
+      <div class="card preferences-card">
         <div class="preference-item">
           <label>Auto-review on PR open</label>
           <input type="checkbox" />
@@ -57,7 +57,7 @@
 
     <section class="settings-section">
       <h2>Notifications</h2>
-      <div class="notifications-card">
+      <div class="card notifications-card">
         <div class="notification-item">
           <span>Email notifications for new reviews</span>
           <input type="checkbox" checked />
@@ -71,19 +71,19 @@
 
     <section class="settings-section danger-zone">
       <h2>Danger Zone</h2>
-      <div class="danger-card">
+      <div class="card danger-card">
         <div class="danger-item">
           <div>
             <strong>Log out</strong>
             <p>Log out from your account on this device.</p>
           </div>
-          <button class="logout-btn" (click)="logout()">Log Out</button>
+          <button class="btn btn-danger" (click)="logout()">Log Out</button>
         </div>
       </div>
     </section>
 
     <div class="actions">
-      <button class="save-btn" [class.saving]="isSaving()" (click)="saveSettings()">
+      <button class="btn btn-primary" [class.saving]="isSaving()" (click)="saveSettings()">
         {{ isSaving() ? 'Saving...' : 'Save Changes' }}
       </button>
     </div>

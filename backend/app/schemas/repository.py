@@ -5,8 +5,9 @@ Request/Response models for repository management.
 
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RepositoryBase(BaseModel):
@@ -65,6 +66,24 @@ class RepositoryResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     model_config = {"from_attributes": True}
+
+    @field_validator("id", "installation_id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        if isinstance(v, UUID):
+            return str(v)
+        return v
+
+    @field_validator("owner", mode="before")
+    @classmethod
+    def extract_owner(cls, v, info):
+        if v:
+            return v
+        full_name = info.data.get("full_name") if info.data else None
+        if full_name:
+            parts = full_name.split("/", 1)
+            return parts[0] if len(parts) > 1 else ""
+        return v
 
 
 class RepositoryListResponse(BaseModel):

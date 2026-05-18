@@ -1,69 +1,99 @@
 .pr-list-page {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 32px;
+  padding: 32px 24px;
 }
 
 .page-header {
   margin-bottom: 24px;
 
   .back-link {
-    color: #718096;
-    text-decoration: none;
-    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #666666;
     display: block;
     margin-bottom: 8px;
 
     &:hover {
-      color: #667eea;
+      color: #00e87b;
     }
   }
 
   h1 {
-    font-size: 28px;
-    color: #1a202c;
+    font-size: 24px;
+    font-weight: 700;
+    color: #e5e5e5;
     margin: 0;
+    letter-spacing: -0.02em;
   }
 }
 
 .filters {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 24px;
 }
 
 .filter-btn {
-  padding: 8px 16px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  border-radius: 6px;
-  color: #4a5568;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #1e1e1e;
+  border-radius: 4px;
+  color: #666666;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.1s ease;
+
+  .count {
+    color: #444444;
+  }
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: #2a2a2a;
+    color: #a0a0a0;
   }
 
   &.active {
-    background: #667eea;
-    border-color: #667eea;
-    color: white;
+    background: rgba(0, 232, 123, 0.1);
+    border-color: rgba(0, 232, 123, 0.2);
+    color: #00e87b;
+
+    .count {
+      color: #00e87b;
+    }
   }
 }
 
 .loading,
 .empty-state {
   text-align: center;
-  padding: 48px;
-  color: #718096;
+  padding: 64px;
+  color: #666666;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #1e1e1e;
+  border-top-color: #00e87b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .pr-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .pr-item {
@@ -71,90 +101,131 @@
   align-items: center;
   gap: 16px;
   padding: 16px 20px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
   text-decoration: none;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 
   &:hover {
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    background: #1a1a1a;
+    border-color: #2a2a2a;
   }
 }
 
 .pr-status {
-  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.state-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 16px;
+
+  &.open {
+    background: rgba(0, 232, 123, 0.1);
+    color: #00e87b;
+  }
+
+  &.closed {
+    background: rgba(255, 68, 68, 0.1);
+    color: #ff4444;
+  }
+
+  &.merged {
+    background: rgba(170, 0, 255, 0.1);
+    color: #aa00ff;
+  }
 }
 
 .pr-content {
   flex: 1;
+  min-width: 0;
 }
 
 .pr-title {
-  font-size: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
   font-weight: 600;
-  color: #2d3748;
+  color: #e5e5e5;
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pr-meta {
   display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: #718096;
+  gap: 12px;
+  font-size: 12px;
+  color: #666666;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.pr-number {
+  color: #a0a0a0;
 }
 
 .pr-stats {
   display: flex;
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .stat {
-  font-size: 12px;
-  font-family: monospace;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
 
   &.additions {
-    background: #c6f6d5;
-    color: #2f855a;
+    background: rgba(0, 232, 123, 0.1);
+    color: #00e87b;
   }
 
   &.deletions {
-    background: #fed7d7;
-    color: #c53030;
+    background: rgba(255, 68, 68, 0.1);
+    color: #ff4444;
   }
 
   &.files {
-    background: #e2e8f0;
-    color: #4a5568;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    color: #a0a0a0;
   }
 }
 
 .pr-review-status {
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 3px;
   text-transform: uppercase;
   font-weight: 600;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 
   &.pending {
-    background: #fefcbf;
-    color: #d69e2e;
+    background: rgba(255, 170, 0, 0.1);
+    color: #ffaa00;
   }
 
   &.in_progress {
-    background: #bee3f8;
-    color: #3182ce;
+    background: rgba(0, 170, 255, 0.1);
+    color: #00aaff;
   }
 
   &.completed {
-    background: #c6f6d5;
-    color: #2f855a;
+    background: rgba(0, 232, 123, 0.1);
+    color: #00e87b;
   }
 
   &.failed {
-    background: #fed7d7;
-    color: #c53030;
+    background: rgba(255, 68, 68, 0.1);
+    color: #ff4444;
   }
 }

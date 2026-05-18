@@ -1,67 +1,94 @@
-.login-container {
+.login {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  background: #0a0a0a;
+  position: relative;
+  padding: 24px;
+}
+
+.grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
 }
 
 .login-card {
-  background: white;
-  border-radius: 16px;
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 8px;
   padding: 48px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  text-align: center;
-  max-width: 400px;
+  max-width: 420px;
   width: 100%;
+  position: relative;
+  animation: fadeIn 0.4s ease forwards;
 }
 
-.logo {
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logo-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 80px;
-  height: 80px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 20px;
-  margin-bottom: 24px;
-  color: white;
+  width: 56px;
+  height: 56px;
+  background: rgba(0, 232, 123, 0.1);
+  border: 1px solid rgba(0, 232, 123, 0.2);
+  border-radius: 8px;
+  font-size: 24px;
+  color: #00e87b;
+  margin-bottom: 20px;
 }
 
-.title {
-  font-size: 32px;
+.login-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
   font-weight: 700;
-  color: #1a202c;
+  color: #e5e5e5;
   margin: 0 0 8px;
+  letter-spacing: -0.02em;
 }
 
-.subtitle {
-  font-size: 16px;
-  color: #718096;
-  margin: 0 0 32px;
+.login-subtitle {
+  font-size: 15px;
+  color: #666666;
+  margin: 0;
 }
 
 .github-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   width: 100%;
-  padding: 16px 32px;
-  font-size: 16px;
-  font-weight: 600;
-  color: white;
-  background: #24292e;
-  border: none;
-  border-radius: 8px;
+  padding: 14px 24px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  color: #e5e5e5;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 
   &:hover {
-    background: #2f363d;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    background: #222222;
+    border-color: #3a3a3a;
+    transform: translateY(-1px);
   }
 
   &:active {
@@ -70,26 +97,33 @@
 }
 
 .github-icon {
-  width: 24px;
-  height: 24px;
-  fill: white;
+  width: 20px;
+  height: 20px;
+  fill: #e5e5e5;
 }
 
-.features {
-  margin-top: 40px;
+.login-features {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #1e1e1e;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .feature {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  color: #4a5568;
+  gap: 10px;
+  font-size: 13px;
+  color: #a0a0a0;
+  font-family: 'JetBrains Mono', monospace;
 }
 
-.feature-icon {
-  font-size: 18px;
+.feature-dot {
+  width: 6px;
+  height: 6px;
+  background: #00e87b;
+  border-radius: 50%;
+  flex-shrink: 0;
 }

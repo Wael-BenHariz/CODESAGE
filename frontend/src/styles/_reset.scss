@@ -1,7 +1,4 @@
-// Reset styles
-*,
-*::before,
-*::after {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -9,81 +6,35 @@
 
 html {
   font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  scroll-behavior: smooth;
+  line-height: 1.5;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  font-size: 1rem;
-  line-height: 1.5;
-  color: #2d3748;
-  background-color: #f7fafc;
+  min-height: 100vh;
+  overflow-x: hidden;
 }
 
-a {
-  color: #667eea;
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-
-img,
-picture,
-video,
-canvas,
-svg {
+img, svg {
   display: block;
   max-width: 100%;
 }
 
-input,
-button,
-textarea,
-select {
-  font: inherit;
-}
-
-p,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  overflow-wrap: break-word;
-}
-
-#root {
-  isolation: isolate;
-}
-
-ul,
-ol {
-  list-style: none;
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 button {
+  font: inherit;
   cursor: pointer;
+  border: none;
+  background: none;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+input, select, textarea {
+  font: inherit;
 }
 
-::-webkit-scrollbar-track {
-  background: #edf2f7;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #a0aec0;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #718096;
+ul, ol {
+  list-style: none;
 }

@@ -1,6 +1,9 @@
 <div class="pr-detail-page">
   @if (isLoading()) {
-    <div class="loading">Loading pull request...</div>
+    <div class="loading">
+      <div class="spinner"></div>
+      <span>Loading pull request...</span>
+    </div>
   } @else {
     <ng-container *ngIf="pullRequest() as pr">
       <header class="page-header">
@@ -9,25 +12,26 @@
             ← Pull Requests
           </a>
           <div class="pr-title-row">
-            <span class="pr-state" [style.color]="getStateColor(pr.state)">
-              {{ pr.state === 'open' ? '🟢' : pr.state === 'closed' ? '🔴' : '🟣' }}
+            <span class="state-badge" [class]="pr.state">
+              {{ pr.state === 'open' ? '●' : pr.state === 'closed' ? '✕' : '◉' }}
+              {{ pr.state }}
             </span>
             <h1>{{ pr.title }}</h1>
           </div>
           <div class="pr-meta">
-            <span>#{{ pr.number }}</span>
-            <span>{{ pr.baseBranch }} ← {{ pr.headBranch }}</span>
-            <span>by {{ pr.author.login }}</span>
+            <span class="pr-number">#{{ pr.number }}</span>
+            <span class="pr-branches">{{ pr.baseBranch }} ← {{ pr.headBranch }}</span>
+            <span class="pr-author">by {{ pr.author.login }}</span>
           </div>
         </div>
         <div class="header-actions">
           @if (!pr.reviewStatus || pr.reviewStatus.status === 'completed') {
             <button
-              class="review-btn"
+              class="btn btn-primary"
               [class.loading]="isReviewing()"
               [disabled]="isReviewing()"
               (click)="triggerReview()">
-              {{ isReviewing() ? 'Starting Review...' : '🔍 Start AI Review' }}
+              {{ isReviewing() ? 'Starting...' : 'Start AI Review' }}
             </button>
           } @else {
             <span class="review-status" [class]="pr.reviewStatus.status">
@@ -39,11 +43,11 @@
 
       <div class="pr-stats-bar">
         <div class="stat">
-          <span class="stat-value">+{{ pr.additions }}</span>
+          <span class="stat-value additions">+{{ pr.additions }}</span>
           <span class="stat-label">additions</span>
         </div>
         <div class="stat">
-          <span class="stat-value">-{{ pr.deletions }}</span>
+          <span class="stat-value deletions">-{{ pr.deletions }}</span>
           <span class="stat-label">deletions</span>
         </div>
         <div class="stat">
@@ -53,23 +57,23 @@
         @if (pr.reviewStatus) {
           <div class="stat">
             <span class="stat-value">{{ pr.reviewStatus.commentCount }}</span>
-            <span class="stat-label">review comments</span>
+            <span class="stat-label">comments</span>
           </div>
           <div class="stat">
             <span class="stat-value">{{ pr.reviewStatus.issueCount }}</span>
-            <span class="stat-label">issues found</span>
+            <span class="stat-label">issues</span>
           </div>
         }
       </div>
 
       @if (pr.body) {
-        <div class="pr-description">
+        <div class="card pr-description">
           <h3>Description</h3>
           <div class="description-content">{{ pr.body }}</div>
         </div>
       }
 
-      <div class="diff-section">
+      <div class="card diff-section">
         <h3>Changes</h3>
         <div class="diff-placeholder">
           <p>Diff view will be displayed here when Monaco Editor is integrated.</p>

@@ -1,11 +1,14 @@
 <div class="dashboard">
   <header class="header">
     <div class="header-left">
-      <h1 class="logo">CodeSage</h1>
+      <a href="/" class="logo">
+        <span class="logo-mark">▣</span>
+        <span class="logo-text">CodeSage</span>
+      </a>
       <nav class="nav">
-        <a routerLink="/dashboard" class="nav-link active">Dashboard</a>
-        <a routerLink="/repositories" class="nav-link">Repositories</a>
-        <a routerLink="/settings" class="nav-link">Settings</a>
+        <a routerLink="/dashboard" routerLinkActive="active" class="nav-link">Dashboard</a>
+        <a routerLink="/repositories" routerLinkActive="active" class="nav-link">Repositories</a>
+        <a routerLink="/settings" routerLinkActive="active" class="nav-link">Settings</a>
       </nav>
     </div>
     <div class="header-right">
@@ -13,58 +16,81 @@
         <div class="user-menu">
           <img [src]="user()!.avatarUrl" [alt]="user()!.login" class="user-avatar" />
           <span class="user-name">{{ user()!.login }}</span>
-          <button class="switch-account-btn" (click)="switchAccount()">Switch Account</button>
-          <button class="logout-btn" (click)="logout()">Logout</button>
+          <button class="btn btn-ghost" (click)="switchAccount()">Switch Account</button>
+          <button class="btn btn-ghost" (click)="logout()">Logout</button>
         </div>
       }
     </div>
   </header>
 
-  <main class="main-content">
-    <div class="welcome-section">
-      <h2>Welcome back, {{ user()?.login }}!</h2>
-      <p>Here is an overview of your code review activity.</p>
+  <main class="main">
+    <div class="welcome">
+      <h1>Welcome back, <span class="accent">{{ user()?.login }}</span></h1>
+      <p>Overview of your code review activity</p>
     </div>
 
-    <div class="stats-grid">
+    <div class="stats">
       <div class="stat-card">
-        <span class="stat-icon">📁</span>
-        <div class="stat-content">
+        <div class="stat-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+          </svg>
+        </div>
+        <div class="stat-info">
           <span class="stat-value">{{ stats().totalRepos }}</span>
-          <span class="stat-label">Total Repositories</span>
+          <span class="stat-label">Repositories</span>
         </div>
       </div>
       <div class="stat-card">
-        <span class="stat-icon">✅</span>
-        <div class="stat-content">
+        <div class="stat-icon success">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
+        <div class="stat-info">
           <span class="stat-value">{{ stats().enabledRepos }}</span>
-          <span class="stat-label">Enabled Repos</span>
+          <span class="stat-label">Enabled</span>
         </div>
       </div>
       <div class="stat-card">
-        <span class="stat-icon">🔀</span>
-        <div class="stat-content">
+        <div class="stat-icon info">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="18" cy="18" r="7"/><path d="M6 14.134v-3.134a10 10 0 0112.882-8.912"/>
+          </svg>
+        </div>
+        <div class="stat-info">
           <span class="stat-value">{{ stats().openPRs }}</span>
-          <span class="stat-label">Open Pull Requests</span>
+          <span class="stat-label">Open PRs</span>
         </div>
       </div>
       <div class="stat-card">
-        <span class="stat-icon">⏳</span>
-        <div class="stat-content">
+        <div class="stat-icon warning">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="stat-info">
           <span class="stat-value">{{ stats().pendingReviews }}</span>
-          <span class="stat-label">Pending Reviews</span>
+          <span class="stat-label">Pending</span>
         </div>
       </div>
     </div>
 
-    <div class="recent-activity">
-      <h3>Recent Repositories</h3>
+    <section class="section">
+      <div class="section-header">
+        <h2>Recent Repositories</h2>
+        <a routerLink="/repositories" class="btn btn-ghost">View All →</a>
+      </div>
+
       @if (isLoading()) {
-        <div class="loading">Loading...</div>
+        <div class="loading">
+          <div class="spinner"></div>
+          <span>Loading...</span>
+        </div>
       } @else if (repositories().length === 0) {
-        <div class="empty-state">
-          <p>No repositories connected yet.</p>
-          <a routerLink="/repositories" class="connect-btn">Connect Repository</a>
+        <div class="empty">
+          <p>No repositories connected yet</p>
+          <a routerLink="/repositories" class="btn btn-primary">Connect Repository</a>
         </div>
       } @else {
         <div class="repo-list">
@@ -72,20 +98,22 @@
             <a [routerLink]="['/repositories', repo.owner, repo.name]" class="repo-item">
               <div class="repo-info">
                 <span class="repo-name">{{ repo.fullName }}</span>
-                <span class="repo-desc">{{ repo.description || 'No description' }}</span>
+                @if (repo.description) {
+                  <span class="repo-desc">{{ repo.description }}</span>
+                }
               </div>
               <div class="repo-meta">
                 @if (repo.language) {
-                  <span class="repo-language">{{ repo.language }}</span>
+                  <span class="lang-badge">{{ repo.language }}</span>
                 }
-                <span class="repo-status" [class.enabled]="repo.enabled">
-                  {{ repo.enabled ? 'Enabled' : 'Disabled' }}
+                <span class="status-badge" [class.enabled]="repo.enabled">
+                  {{ repo.enabled ? 'enabled' : 'disabled' }}
                 </span>
               </div>
             </a>
           }
         </div>
       }
-    </div>
+    </section>
   </main>
 </div>

@@ -124,14 +124,14 @@ class Repository(Base):
         "PullRequest",
         back_populates="repository",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     webhook_events: Mapped[list["WebhookEvent"]] = relationship(
         "WebhookEvent",
         back_populates="repository",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

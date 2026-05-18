@@ -1,231 +1,303 @@
-.repository-list-page {
+.repo-page {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 32px;
+  padding: 32px 24px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 24px;
 
-  .back-link {
-    color: #718096;
-    text-decoration: none;
-    font-size: 14px;
-    display: block;
-    margin-bottom: 8px;
+  .header-left {
+    .back-link {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #666666;
+      display: block;
+      margin-bottom: 8px;
 
-    &:hover {
-      color: #667eea;
+      &:hover {
+        color: #00e87b;
+      }
     }
-  }
 
-  h1 {
-    font-size: 28px;
-    color: #1a202c;
-    margin: 0;
-  }
-}
-
-.connect-btn {
-  padding: 10px 20px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #5a67d8;
-  }
-}
-
-.connect-btn-primary {
-  display: inline-block;
-  margin-top: 16px;
-  padding: 12px 24px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #5a67d8;
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #e5e5e5;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
   }
 }
 
 .filters {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 24px;
 }
 
 .filter-btn {
-  padding: 8px 16px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  border-radius: 6px;
-  color: #4a5568;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #1e1e1e;
+  border-radius: 4px;
+  color: #666666;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.1s ease;
+
+  .count {
+    color: #444444;
+  }
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: #2a2a2a;
+    color: #a0a0a0;
   }
 
   &.active {
-    background: #667eea;
-    border-color: #667eea;
-    color: white;
+    background: rgba(0, 232, 123, 0.1);
+    border-color: rgba(0, 232, 123, 0.2);
+    color: #00e87b;
+
+    .count {
+      color: #00e87b;
+    }
   }
 }
 
-.loading,
-.empty-state {
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 64px;
+  color: #666666;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #1e1e1e;
+  border-top-color: #00e87b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty {
   text-align: center;
-  padding: 48px;
-  color: #718096;
+  padding: 64px;
+
+  p {
+    color: #666666;
+    margin: 0 0 16px;
+    font-size: 14px;
+  }
 }
 
 .repo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
 }
 
 .repo-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+  padding: 20px;
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    border-color: #2a2a2a;
+  }
 }
 
 .repo-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .repo-name {
-  font-size: 18px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
   font-weight: 600;
-  color: #2d3748;
+  color: #e5e5e5;
   text-decoration: none;
 
   &:hover {
-    color: #667eea;
+    color: #00e87b;
   }
 }
 
-.repo-status {
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: #fed7d7;
-  color: #c53030;
+.status-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff4444;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 
   &.enabled {
-    background: #c6f6d5;
-    color: #2f855a;
+    background: rgba(0, 232, 123, 0.1);
+    color: #00e87b;
   }
 }
 
-.repo-description {
-  color: #718096;
-  font-size: 14px;
-  margin: 0 0 16px;
+.repo-desc {
+  font-size: 13px;
+  color: #666666;
+  margin: 0 0 14px;
+  line-height: 1.5;
 }
 
 .repo-meta {
   display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.lang-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 3px;
+  color: #a0a0a0;
 }
 
 .meta-item {
-  font-size: 12px;
-  color: #718096;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #666666;
 }
 
 .repo-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid #1e1e1e;
 }
 
 .action-link {
-  color: #667eea;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #00e87b;
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
+  margin-right: auto;
 
   &:hover {
     text-decoration: underline;
   }
 }
 
-.toggle-btn,
-.delete-btn {
-  padding: 6px 12px;
-  border-radius: 4px;
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: all 0.1s ease;
   cursor: pointer;
-  transition: all 0.2s;
-}
+  border: 1px solid transparent;
 
-.toggle-btn {
-  background: #edf2f7;
-  border: none;
-  color: #4a5568;
-
-  &:hover {
-    background: #e2e8f0;
+  &.btn-sm {
+    padding: 5px 10px;
+    font-size: 11px;
   }
 }
 
-.delete-btn {
+.btn-primary {
+  background: #00e87b;
+  color: #0a0a0a;
+  border-color: #00e87b;
+
+  &:hover:not(:disabled) {
+    background: #00cc6d;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.btn-ghost {
   background: transparent;
-  border: 1px solid #fed7d7;
-  color: #c53030;
+  color: #666666;
+  border-color: transparent;
 
   &:hover {
-    background: #fed7d7;
+    color: #a0a0a0;
+    background: #1a1a1a;
+  }
+
+  &.danger {
+    color: #ff4444;
+
+    &:hover {
+      background: rgba(255, 68, 68, 0.1);
+    }
   }
 }
+
+// ─── Modal ───
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal {
-  background: white;
-  border-radius: 12px;
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 8px;
   width: 90%;
-  max-width: 700px;
+  max-width: 680px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .modal-header {
@@ -233,26 +305,25 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #1e1e1e;
 
   h2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e5e5e5;
     margin: 0;
-    font-size: 20px;
-    color: #1a202c;
   }
 }
 
 .close-btn {
-  background: none;
-  border: none;
   font-size: 24px;
-  color: #718096;
-  cursor: pointer;
-  padding: 0 4px;
+  color: #666666;
   line-height: 1;
+  padding: 4px;
 
   &:hover {
-    color: #1a202c;
+    color: #e5e5e5;
   }
 }
 
@@ -265,85 +336,66 @@
 .repo-select-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .repo-select-item {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px;
-  background: #f7fafc;
-  border-radius: 8px;
-  transition: all 0.2s;
+  padding: 14px 16px;
+  background: #1a1a1a;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  transition: all 0.1s ease;
 
   &:hover {
-    background: #edf2f7;
-  }
-
-  .repo-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-
-    .repo-name {
-      font-weight: 600;
-      color: #2d3748;
-    }
-
-    .repo-desc {
-      font-size: 13px;
-      color: #718096;
-    }
-  }
-
-  .repo-meta {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .private-badge {
-    font-size: 11px;
-    padding: 2px 6px;
-    background: #fed7d7;
-    color: #c53030;
-    border-radius: 4px;
-  }
-
-  .language-badge {
-    font-size: 11px;
-    padding: 2px 6px;
-    background: #e2e8f0;
-    color: #4a5568;
-    border-radius: 4px;
-  }
-
-  .meta-item {
-    font-size: 12px;
-    color: #718096;
+    background: #222222;
+    border-color: #2a2a2a;
   }
 }
 
-.connect-item-btn {
-  padding: 8px 16px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 6px;
+.repo-select-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.repo-select-name {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
+  font-weight: 600;
+  color: #e5e5e5;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  &:hover:not(:disabled) {
-    background: #5a67d8;
-  }
+.repo-select-desc {
+  font-size: 12px;
+  color: #666666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+.repo-select-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.private-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff4444;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }

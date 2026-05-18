@@ -1,16 +1,16 @@
-<div class="callback-container">
+<div class="callback">
   @if (error) {
-    <div class="error-card">
-      <span class="error-icon">⚠️</span>
+    <div class="callback-card error">
+      <div class="card-icon error-icon">✗</div>
       <h2>Authentication Failed</h2>
       <p>{{ error }}</p>
-      <a routerLink="/login" class="retry-btn">Try Again</a>
+      <a routerLink="/login" class="btn btn-primary">Try Again</a>
     </div>
   } @else {
-    <div class="loading-card">
+    <div class="callback-card">
       <div class="spinner"></div>
       <h2>Authenticating...</h2>
-      <p>Please wait while we complete the sign-in process.</p>
+      <p>Completing sign-in with GitHub</p>
     </div>
   }
 </div>

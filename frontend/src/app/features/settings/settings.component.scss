@@ -1,16 +1,18 @@
 .settings-page {
   max-width: 800px;
   margin: 0 auto;
-  padding: 32px;
+  padding: 32px 24px;
 }
 
 .page-header {
   margin-bottom: 32px;
 
   h1 {
-    font-size: 28px;
-    color: #1a202c;
+    font-size: 24px;
+    font-weight: 700;
+    color: #e5e5e5;
     margin: 0;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -22,20 +24,23 @@
 
 .settings-section {
   h2 {
-    font-size: 18px;
-    color: #1a202c;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e5e5e5;
     margin: 0 0 16px;
+  }
+
+  &.danger-zone h2 {
+    color: #ff4444;
   }
 }
 
-.profile-card,
-.preferences-card,
-.notifications-card,
-.danger-card {
-  background: white;
-  border-radius: 12px;
+.card {
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .profile-card {
@@ -45,9 +50,10 @@
 
 .profile-avatar {
   img {
-    width: 80px;
-    height: 80px;
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
+    border: 2px solid #2a2a2a;
   }
 }
 
@@ -55,7 +61,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .field {
@@ -64,25 +70,35 @@
   gap: 4px;
 
   label {
-    font-size: 12px;
-    color: #718096;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #666666;
     text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   input {
+    font-family: 'JetBrains Mono', monospace;
     padding: 10px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 14px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #e5e5e5;
 
     &:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: #00e87b;
     }
 
     &:disabled {
-      background: #f7fafc;
-      color: #718096;
+      background: #141414;
+      color: #666666;
+      cursor: not-allowed;
+    }
+
+    &::placeholder {
+      color: #444444;
     }
   }
 }
@@ -92,8 +108,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 0;
+  border-bottom: 1px solid #1e1e1e;
 
   &:last-child {
     border-bottom: none;
@@ -101,25 +117,32 @@
 
   label,
   span {
-    color: #2d3748;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #a0a0a0;
   }
 
   select {
+    font-family: 'JetBrains Mono', monospace;
     padding: 8px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    font-size: 14px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #e5e5e5;
+
+    &:focus {
+      outline: none;
+      border-color: #00e87b;
+    }
   }
 
   input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
+    accent-color: #00e87b;
     cursor: pointer;
   }
-}
-
-.danger-zone h2 {
-  color: #c53030;
 }
 
 .danger-item {
@@ -127,50 +150,61 @@
   justify-content: space-between;
   align-items: center;
 
-  p {
-    color: #718096;
+  strong {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
+    color: #e5e5e5;
+  }
+
+  p {
+    color: #666666;
+    font-size: 13px;
     margin: 4px 0 0;
   }
 }
 
-.logout-btn {
-  padding: 8px 16px;
-  background: #fed7d7;
-  color: #c53030;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.1s ease;
   cursor: pointer;
-  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background: #00e87b;
+  color: #0a0a0a;
+  border-color: #00e87b;
+
+  &:hover:not(:disabled) {
+    background: #00cc6d;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.btn-danger {
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff4444;
+  border-color: rgba(255, 68, 68, 0.2);
 
   &:hover {
-    background: #fc8181;
-    color: white;
+    background: rgba(255, 68, 68, 0.2);
   }
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.save-btn {
-  padding: 12px 32px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover:not(:disabled) {
-    background: #5a67d8;
-  }
-
-  &:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
 }

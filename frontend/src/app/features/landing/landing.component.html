@@ -1,50 +1,116 @@
-<div class="landing-page">
-  <header class="hero-header">
-    <nav class="nav">
-      <span class="logo">CodeSage</span>
-      <div class="nav-links">
-        <a href="#features">Features</a>
-        <a routerLink="/login" class="btn-primary">Get Started</a>
-      </div>
-    </nav>
+<div class="landing">
+  <div class="grid-bg"></div>
+  
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="logo">
+        <span class="logo-icon">▣</span>
+        <span class="logo-text">CodeSage</span>
+      </a>
+      <a routerLink="/login" class="nav-cta">Sign In →</a>
+    </div>
+  </nav>
 
-    <div class="hero">
-      <h1>AI-Powered Code Review</h1>
-      <p>Automated code analysis with intelligent suggestions for better pull requests.</p>
-      <div class="cta-buttons">
-        <a routerLink="/login" class="btn-primary large">Start Free</a>
-        <a href="#features" class="btn-secondary large">Learn More</a>
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="terminal-window">
+        <div class="terminal-header">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="terminal-title">codesage — review</span>
+        </div>
+        <div class="terminal-body">
+          <div class="line">
+            <span class="prompt">$</span>
+            <span class="cmd">codesage review</span>
+            <span class="cursor"></span>
+          </div>
+          <div class="line output">
+            <span class="success">✓</span> Analyzing pull request #42...
+          </div>
+          <div class="line output">
+            <span class="success">✓</span> Found 3 issues in 12 files
+          </div>
+          <div class="line output">
+            <span class="warning">⚠</span> Potential null reference in auth.ts:47
+          </div>
+          <div class="line output">
+            <span class="error">✗</span> Security: hardcoded credentials detected
+          </div>
+          <div class="line output">
+            <span class="info">ℹ</span> Performance: consider memoizing computeHash()
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-content">
+        <div class="badge-pill">AI-Powered Code Review</div>
+        <h1>Ship cleaner code.<br/><span class="accent">Catch issues early.</span></h1>
+        <p class="hero-desc">Automated PR analysis with intelligent suggestions. Connect your GitHub repos and let AI review every pull request before your team does.</p>
+        <div class="hero-actions">
+          <a routerLink="/login" class="btn btn-primary btn-lg">Get Started Free</a>
+          <a href="#features" class="btn btn-ghost btn-lg">See How It Works</a>
+        </div>
       </div>
     </div>
-  </header>
+  </section>
 
-  <section id="features" class="features-section">
-    <h2>Features</h2>
-    <div class="features-grid">
-      <div class="feature-card">
-        <span class="feature-icon">🔍</span>
-        <h3>Automated Analysis</h3>
-        <p>AI reviews every pull request automatically, catching issues before humans do.</p>
+  <section id="features" class="features">
+    <div class="features-inner">
+      <div class="section-header">
+        <span class="section-label">Features</span>
+        <h2>Everything you need for<br/>better code reviews</h2>
       </div>
-      <div class="feature-card">
-        <span class="feature-icon">💡</span>
-        <h3>Smart Suggestions</h3>
-        <p>Actionable feedback with code examples and best practice recommendations.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">🔒</span>
-        <h3>Secure Integration</h3>
-        <p>GitHub OAuth and App integration with secure token management.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">⚡</span>
-        <h3>Real-time Updates</h3>
-        <p>Instant notifications when review is complete or new comments added.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+          </div>
+          <h3>Automated Analysis</h3>
+          <p>AI reviews every pull request automatically, catching bugs, security issues, and code smells before humans do.</p>
+          <div class="feature-tag">AI-Powered</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+          </div>
+          <h3>Smart Suggestions</h3>
+          <p>Actionable feedback with code examples and best practice recommendations tailored to your codebase.</p>
+          <div class="feature-tag">Context-Aware</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+            </svg>
+          </div>
+          <h3>Secure Integration</h3>
+          <p>GitHub OAuth and App integration with encrypted token management. Your code never leaves GitHub's infrastructure.</p>
+          <div class="feature-tag">Encrypted</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <h3>Real-time Updates</h3>
+          <p>Instant notifications when reviews complete. Track progress and see results as they happen.</p>
+          <div class="feature-tag">Live</div>
+        </div>
       </div>
     </div>
   </section>
 
   <footer class="footer">
-    <p>Built with FastAPI + Angular</p>
+    <div class="footer-inner">
+      <span class="footer-logo">▣ CodeSage</span>
+      <span class="footer-copy">Built with FastAPI + Angular</span>
+    </div>
   </footer>
 </div>

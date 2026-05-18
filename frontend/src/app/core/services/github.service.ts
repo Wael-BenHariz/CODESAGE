@@ -25,6 +25,27 @@ export interface GitHubRepo {
   open_issues_count: number;
 }
 
+function mapRepo(raw: any): Repository {
+  const owner = raw.full_name?.split('/')[0] || '';
+  return {
+    id: raw.id,
+    name: raw.name,
+    fullName: raw.full_name,
+    owner,
+    description: raw.description,
+    private: raw.private,
+    defaultBranch: raw.default_branch,
+    language: raw.language,
+    stars: raw.stars ?? 0,
+    forks: raw.forks ?? 0,
+    openIssues: raw.open_issues ?? 0,
+    webhookEnabled: raw.webhook_enabled ?? false,
+    enabled: raw.enabled,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -32,8 +53,8 @@ export class GithubService {
   private readonly api = inject(ApiService);
 
   getRepositories(): Observable<Repository[]> {
-    return this.api.get<PaginatedResponse<Repository>>('/repositories').pipe(
-      map(response => response.items)
+    return this.api.get<PaginatedResponse<any>>('/repositories').pipe(
+      map(response => response.items.map(mapRepo))
     );
   }
 
@@ -42,7 +63,9 @@ export class GithubService {
   }
 
   connectRepository(githubRepoId: number): Observable<Repository> {
-    return this.api.post<Repository>(`/repositories/connect?github_repo_id=${githubRepoId}`, {});
+    return this.api.post<any>(`/repositories/connect?github_repo_id=${githubRepoId}`, {}).pipe(
+      map(mapRepo)
+    );
   }
 
   getRepository(owner: string, repo: string): Observable<Repository> {

@@ -97,6 +97,9 @@ async def connect_repository(
     Connect a GitHub repository to CodeSage.
     Creates installation and repository records.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Get user's OAuth token
     result = await db.execute(
         select(OAuthToken).where(OAuthToken.user_id == current_user.id)
@@ -139,14 +142,30 @@ async def connect_repository(
     
     if not installation:
         installation = GitHubInstallation(
-            app_id=int(settings.GITHUB_APP_ID) if hasattr(settings, 'GITHUB_APP_ID') and settings.GITHUB_APP_ID else 0,
-            installation_id=0,  # Placeholder - would be set by GitHub App webhook
+            app_id=0,
+            installation_id=current_user.github_id,
             account_id=current_user.github_id,
+            account_login=current_user.login,
             account_type="User",
             permissions={"pull_requests": "read", "contents": "read"},
         )
         db.add(installation)
-        await db.flush()
+        try:
+            await db.flush()
+        except Exception:
+            await db.rollback()
+            # Another request created it — fetch it
+            inst_result = await db.execute(
+                select(GitHubInstallation).where(
+                    GitHubInstallation.account_id == current_user.github_id
+                )
+            )
+            installation = inst_result.scalar_one_or_none()
+            if not installation:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create repository installation",
+                )
     
     # Create repository record
     repo = Repository(
@@ -269,12 +288,12 @@ async def get_repository_detail(
             detail="Repository not found",
         )
     
-    # Get review stats
-    from app.db.models import Review
+    # Get review stats - join through PullRequest since Review has pull_request_id FK
+    from app.db.models import Review, PullRequest
     reviews_count = await db.execute(
         select(func.count(Review.id))
-        .join_from(Review, Repository)
-        .where(Repository.id == repository_id)
+        .join(PullRequest, Review.pull_request_id == PullRequest.id)
+        .where(PullRequest.repository_id == repository_id)
         .where(Review.status == "completed")
     )
     

@@ -170,8 +170,43 @@ If you see "redirect_uri is not associated with this application":
 - **Default Docker DB**: `postgresql://codesage:codesage@localhost:5432/codesage`
 - **Test DB**: `postgresql://test:test@localhost:5432/codesage_test`
 
+## Session Progress Log
+
+### Completed Fixes & Features
+
+#### OAuth & Authentication
+- Fixed GitHub OAuth flow: backend now handles redirect and returns JWT to frontend via URL params
+- Added `POST /auth/github/callback` endpoint for token exchange
+- Added `prompt=select_account` to GitHub OAuth authorization URL
+- Fixed `User.is_active` property that was causing authentication failures
+- Updated auth interceptor to allow `/auth/me` without token (prevents "No credentials provided" error)
+
+#### Database & Models
+- Fixed `User-PullRequest` broken relationship (removed invalid relationship causing session crashes)
+- Fixed UUID-to-string conversion in `UserResponse` and `RepositoryResponse` Pydantic schemas
+- Changed `lazy="selectin"` to `lazy="select"` on relationships to prevent async session errors
+- Fixed `Review` join in `get_repository_detail` to go through `PullRequest` model
+
+#### Repository Management
+- Added `GET /repositories/github` endpoint to fetch user's GitHub repositories
+- Added `POST /repositories/connect` endpoint to connect a GitHub repository
+- `GitHubInstallation` uses `current_user.github_id` as `installation_id` (with race condition handling)
+
+#### Frontend API Integration
+- Mapped backend snake_case to frontend camelCase in `github.service.ts`
+- Fixed `repos.filter is not a function` by mapping paginated response correctly
+- Added "Switch Account" and "Connect Repository" UI features
+
+#### Frontend Redesign (Industrial Terminal Aesthetic)
+- Complete visual overhaul using dark theme with JetBrains Mono and electric green (#00e87b) accents
+- Redesigned global styles (`styles.scss`, `_reset.scss`, `_mixins.scss`)
+- Redesigned all pages: landing, login, callback, dashboard, repository list, PR list, PR detail, settings
+- Dark backgrounds (#0a0a0a, #111111), subtle borders (#1e1e1e), monospace typography throughout
+
 ## Known Gaps
 
 - Backend test suite is empty — `pytest` is installed but `backend/tests/` has no files
 - Frontend `package.json` missing `type-check` and `format:check` scripts referenced in CI
 - Docker Compose frontend service references `.next/` volume (Next.js artifact) but frontend is Angular — likely a copy-paste error in compose file
+- Monaco Editor diff view not yet integrated (placeholder in PR detail page)
+- Review preferences and notification settings in settings page are UI-only (no backend persistence yet)
