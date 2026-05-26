@@ -12,6 +12,92 @@ import httpx
 from app.config import settings
 
 
+class GeminiClient:
+    """Raw async Gemini API client shared by review services and agents."""
+
+    BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+    ):
+        self.api_key = api_key or settings.GEMINI_API_KEY
+        self.model = model or settings.GEMINI_MODEL
+        self.usage_records: list[dict[str, int]] = []
+
+    async def generate(
+        self,
+        prompt: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Generate Gemini text for a prompt."""
+
+        response = await self.generate_with_usage(prompt, temperature, max_tokens)
+        return response["text"]
+
+    async def generate_with_usage(
+        self,
+        prompt: str,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        """Generate Gemini text and return token usage metadata."""
+
+        url = f"{self.BASE_URL}/models/{self.model}:generateContent"
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                params={"key": self.api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": temperature,
+                        "maxOutputTokens": max_tokens,
+                        "topP": 0.95,
+                        "topK": 40,
+                    },
+                    "safetySettings": [
+                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                    ],
+                },
+                headers={"Content-Type": "application/json"},
+            )
+
+            response.raise_for_status()
+            data = response.json()
+            usage = data.get("usageMetadata", {})
+
+            result = {
+                "text": data["candidates"][0]["content"]["parts"][0]["text"],
+                "prompt_tokens": usage.get("promptTokenCount", 0),
+                "completion_tokens": usage.get("candidatesTokenCount", 0),
+                "total_tokens": usage.get("totalTokenCount", 0),
+            }
+            self.usage_records.append(
+                {
+                    "prompt_tokens": result["prompt_tokens"],
+                    "completion_tokens": result["completion_tokens"],
+                    "total_tokens": result["total_tokens"],
+                }
+            )
+            return result
+
+    def total_usage(self) -> dict[str, int]:
+        """Return aggregate usage for calls made through this client instance."""
+
+        return {
+            "prompt_tokens": sum(record.get("prompt_tokens", 0) for record in self.usage_records),
+            "completion_tokens": sum(record.get("completion_tokens", 0) for record in self.usage_records),
+            "total_tokens": sum(record.get("total_tokens", 0) for record in self.usage_records),
+        }
+
+
 class GeminiService:
     """
     Google Gemini AI integration for code review.
@@ -22,8 +108,6 @@ class GeminiService:
     - Structured response parsing
     - Token usage tracking
     """
-
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
     def __init__(
         self,
@@ -36,6 +120,7 @@ class GeminiService:
         self.model = model or settings.GEMINI_MODEL
         self.max_tokens = max_tokens or settings.GEMINI_MAX_TOKENS
         self.temperature = temperature or settings.GEMINI_TEMPERATURE
+        self.client = GeminiClient(api_key=self.api_key, model=self.model)
 
     async def generate_review(
         self,
@@ -136,42 +221,11 @@ class GeminiService:
         Returns:
             API response with generated content
         """
-        url = f"{self.BASE_URL}/models/{self.model}:generateContent"
-        
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                url,
-                params={"key": self.api_key},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": self.temperature,
-                        "maxOutputTokens": self.max_tokens,
-                        "topP": 0.95,
-                        "topK": 40,
-                    },
-                    "safetySettings": [
-                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                    ],
-                },
-                headers={"Content-Type": "application/json"},
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            # Extract usage statistics if available
-            usage = data.get("usageMetadata", {})
-            
-            return {
-                "text": data["candidates"][0]["content"]["parts"][0]["text"],
-                "prompt_tokens": usage.get("promptTokenCount", 0),
-                "completion_tokens": usage.get("candidatesTokenCount", 0),
-                "total_tokens": usage.get("totalTokenCount", 0),
-            }
+        return await self.client.generate_with_usage(
+            prompt,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
 
     def _build_review_prompt(
         self,

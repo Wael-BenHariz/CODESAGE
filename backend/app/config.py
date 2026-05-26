@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.0-flash"
     GEMINI_MAX_TOKENS: int = 8192
     GEMINI_TEMPERATURE: float = 0.7
+    AGENT_SECURITY_TEMPERATURE: float = 0.2
+    AGENT_COMPLEXITY_TEMPERATURE: float = 0.3
+    AGENT_PERFORMANCE_TEMPERATURE: float = 0.3
+    AGENT_STYLE_TEMPERATURE: float = 0.4
+    AGENT_TEST_TEMPERATURE: float = 0.4
+    AGENT_ORCHESTRATOR_TEMPERATURE: float = 0.2
+    AGENT_ORCHESTRATOR_MAX_TOKENS: int = 8192
 
     # BullMQ
     BULLMQ_REVIEW_QUEUE: str = "review-requests"

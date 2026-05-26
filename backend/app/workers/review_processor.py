@@ -3,7 +3,6 @@ Review Processor
 Worker that processes code review jobs using Gemini AI.
 """
 
-import json
 import traceback
 from datetime import datetime, timezone
 
@@ -11,10 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db import get_db_context
 from app.db.models import Review, ReviewComment, PullRequest, Repository
-from app.services.gemini import gemini_service
+from app.services.agents import ReviewContext
+from app.services.gemini import GeminiClient
 from app.services.github import github_service
+from app.services.review_orchestrator import ReviewOrchestrator
 
 
 async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
@@ -87,13 +87,15 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         # Determine language from files
         language = _detect_language(files)
         
-        # Call Gemini for review
-        review_result = await gemini_service.generate_review(
+        # Run specialist review agents in parallel, then synthesize a final review.
+        context = ReviewContext(
             pr_title=pr.title,
             pr_body=pr.body,
             diff=diff_content,
             language=language,
         )
+        orchestrator = ReviewOrchestrator(client=GeminiClient())
+        review_result = (await orchestrator.run(context)).model_dump(exclude_none=True)
         
         # Update review with results
         review.status = "completed"
@@ -173,7 +175,7 @@ async def _build_diff_content(
         deletions = file.get("deletions", 0)
         
         diff_lines.append(f"\n{'='*80}")
-        diff_lines.append(f"File: {filename} ({status}) +{addations} -{deletions}")
+        diff_lines.append(f"File: {filename} ({status}) +{additions} -{deletions}")
         diff_lines.append(f"{'='*80}\n")
         
         # Get patch if available
