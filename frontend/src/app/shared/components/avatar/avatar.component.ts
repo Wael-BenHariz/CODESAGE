@@ -6,20 +6,22 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <img 
-      [src]="src()" 
-      [alt]="alt()" 
+    <img
+      [src]="src()"
+      [alt]="alt()"
       class="avatar"
       [style.width.px]="size()"
       [style.height.px]="size()"
     />
   `,
-  styles: [`
-    .avatar {
-      border-radius: 50%;
-      object-fit: cover;
-    }
-  `]
+  styles: [
+    `
+      .avatar {
+        border-radius: 50%;
+        object-fit: cover;
+      }
+    `
+  ]
 })
 export class AvatarComponent {
   src = input.required<string>();

@@ -13,11 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import Repository, WebhookEvent, GitHubInstallation
-from app.schemas.webhook import (
-    WebhookProcessResult,
-    PullRequestWebhookData,
-)
+from app.db.models import GitHubInstallation, PullRequest, Repository, Review, User, WatchedRepo, WebhookEvent
+from app.schemas.webhook import WebhookProcessResult
 from app.services.github import github_service
 
 router = APIRouter()
@@ -62,7 +59,7 @@ async def handle_github_webhook(
     
     # Handle different event types
     if event_type == "pull_request":
-        return await _handle_pull_request_event(request, payload, delivery_id, db)
+        return await _handle_pull_request_event(payload, delivery_id, db)
     
     elif event_type == "installation":
         return await _handle_installation_event(payload, delivery_id, db)
@@ -80,7 +77,6 @@ async def handle_github_webhook(
 
 
 async def _handle_pull_request_event(
-    request: Request,
     payload: dict[str, Any],
     delivery_id: str,
     db: AsyncSession,
@@ -104,8 +100,13 @@ async def _handle_pull_request_event(
         )
     
     installation_id = installation.get("id")
+    install_record = await _get_installation_record(db, installation_id)
+    if not install_record:
+        installation_data = await github_service.get_app_installation(installation_id)
+        install_record = await _upsert_installation_record(db, installation_data)
+        await db.commit()
     
-    # Find or create repository record
+    # Find or create repository record for the real GitHub App installation.
     repo_result = await db.execute(
         select(Repository)
         .options(selectinload(Repository.installation))
@@ -116,7 +117,7 @@ async def _handle_pull_request_event(
     if not repo:
         # Create new repository record
         repo = Repository(
-            installation_id=installation_id,  # This needs to be a UUID, not int
+            installation_id=install_record.id,
             github_repo_id=repo_data.get("id"),
             name=repo_data.get("name", ""),
             full_name=repo_data.get("full_name", ""),
@@ -126,6 +127,13 @@ async def _handle_pull_request_event(
         db.add(repo)
         await db.commit()
         await db.refresh(repo)
+    else:
+        repo.installation_id = install_record.id
+        repo.name = repo_data.get("name", repo.name)
+        repo.full_name = repo_data.get("full_name", repo.full_name)
+        repo.private = repo_data.get("private", repo.private)
+        repo.default_branch = repo_data.get("default_branch", repo.default_branch)
+        await db.commit()
     
     # Create webhook event record
     webhook_event = WebhookEvent(
@@ -143,8 +151,6 @@ async def _handle_pull_request_event(
     # Process based on action
     if action in ["opened", "synchronize", "reopened"]:
         # Create or update PR record
-        from app.db.models import PullRequest
-        
         pr_result = await db.execute(
             select(PullRequest)
             .where(PullRequest.repository_id == repo.id)
@@ -161,6 +167,7 @@ async def _handle_pull_request_event(
             existing_pr.additions = pr_data.get("additions", 0)
             existing_pr.deletions = pr_data.get("deletions", 0)
             existing_pr.changed_files = pr_data.get("changed_files", 0)
+            pr_record = existing_pr
         else:
             # Create new PR record
             base = pr_data.get("base", {})
@@ -185,25 +192,47 @@ async def _handle_pull_request_event(
                 changed_files=pr_data.get("changed_files", 0),
             )
             db.add(new_pr)
+            pr_record = new_pr
         
         await db.commit()
+        await db.refresh(pr_record)
+
+        installation_owner = await db.scalar(
+            select(User).where(User.github_installation_id == installation_id)
+        )
+        watched_repo = None
+        if installation_owner:
+            watched_repo = await db.scalar(
+                select(WatchedRepo).where(
+                    WatchedRepo.repo_id == repo_data.get("id"),
+                    WatchedRepo.user_id == installation_owner.id,
+                    WatchedRepo.enabled.is_(True),
+                )
+            )
+
+        if not watched_repo:
+            webhook_event.processed = True
+            await db.commit()
+            return {
+                "status": "ignored",
+                "reason": "repo not enabled",
+            }
         
         # Trigger review if repository is enabled
         if repo.enabled:
-            from app.db.models import Review
             from app.workers.review_queue import queue_review
             
             # Check for pending reviews
             pending = await db.execute(
                 select(Review)
-                .where(Review.pull_request_id == repo.id)
+                .where(Review.pull_request_id == pr_record.id)
                 .where(Review.status.in_(["pending", "processing"]))
             )
             
             if not pending.scalar_one_or_none():
                 # Create new review
                 review = Review(
-                    pull_request_id=repo.id,
+                    pull_request_id=pr_record.id,
                     status="pending",
                     started_at=datetime.now(timezone.utc),
                 )
@@ -237,8 +266,6 @@ async def _handle_pull_request_event(
     
     elif action == "closed":
         # Update PR state
-        from app.db.models import PullRequest
-        
         pr_result = await db.execute(
             select(PullRequest)
             .where(PullRequest.repository_id == repo.id)
@@ -288,33 +315,13 @@ async def _handle_installation_event(
     installation_id = installation.get("id")
     account = installation.get("account", {})
     
-    if action == "created" or action == "suspended":
+    if action in ["created", "suspended", "unsuspended"]:
         # Create or update installation record
-        from app.db.models import GitHubInstallation
-        
-        result = await db.execute(
-            select(GitHubInstallation)
-            .where(GitHubInstallation.installation_id == installation_id)
-        )
-        record = result.scalar_one_or_none()
-        
-        if record:
-            # Update existing
-            record.account_login = account.get("login", "")
-            record.account_type = account.get("type", "User")
-            record.permissions = installation.get("permissions", {})
-        else:
-            # Create new
-            record = GitHubInstallation(
-                app_id=installation.get("app_id", 0),
-                installation_id=installation_id,
-                account_id=account.get("id", 0),
-                account_login=account.get("login", ""),
-                account_type=account.get("type", "User"),
-                permissions=installation.get("permissions", {}),
-            )
-            db.add(record)
-        
+        record = await _upsert_installation_record(db, installation)
+
+        for repo_data in payload.get("repositories", []):
+            await _upsert_repository_record(db, record, repo_data)
+
         await db.commit()
         
         return {
@@ -323,10 +330,8 @@ async def _handle_installation_event(
             "installation_id": installation_id,
         }
     
-    elif action == "deleted" or action == "unsuspended":
+    elif action == "deleted":
         # Delete installation and cascade to repositories
-        from app.db.models import GitHubInstallation
-        
         result = await db.execute(
             select(GitHubInstallation)
             .where(GitHubInstallation.installation_id == installation_id)
@@ -366,14 +371,7 @@ async def _handle_installation_repos_event(
     
     installation_id = installation.get("id")
     
-    # Find installation record
-    from app.db.models import GitHubInstallation
-    
-    result = await db.execute(
-        select(GitHubInstallation)
-        .where(GitHubInstallation.installation_id == installation_id)
-    )
-    install_record = result.scalar_one_or_none()
+    install_record = await _get_installation_record(db, installation_id)
     
     if not install_record:
         return {
@@ -383,34 +381,11 @@ async def _handle_installation_repos_event(
     
     # Add new repositories
     for repo in repos_added:
-        from app.db.models import Repository
-        
-        existing = await db.execute(
-            select(Repository)
-            .where(Repository.github_repo_id == repo.get("id"))
-        )
-        if not existing.scalar_one_or_none():
-            new_repo = Repository(
-                installation_id=install_record.id,
-                github_repo_id=repo.get("id"),
-                name=repo.get("name", ""),
-                full_name=repo.get("full_name", ""),
-                private=repo.get("private", False),
-                default_branch=repo.get("default_branch", "main"),
-            )
-            db.add(new_repo)
+        await _upsert_repository_record(db, install_record, repo)
     
     # Remove repositories
     for repo in repos_removed:
-        from app.db.models import Repository
-        
-        result = await db.execute(
-            select(Repository)
-            .where(Repository.github_repo_id == repo.get("id"))
-        )
-        record = result.scalar_one_or_none()
-        if record:
-            await db.delete(record)
+        await _delete_repository_record(db, repo.get("id"))
     
     await db.commit()
     
@@ -419,3 +394,82 @@ async def _handle_installation_repos_event(
         "repos_added": len(repos_added),
         "repos_removed": len(repos_removed),
     }
+
+
+async def _get_installation_record(
+    db: AsyncSession,
+    installation_id: int,
+) -> GitHubInstallation | None:
+    result = await db.execute(
+        select(GitHubInstallation).where(GitHubInstallation.installation_id == installation_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _upsert_installation_record(
+    db: AsyncSession,
+    installation_data: dict[str, Any],
+) -> GitHubInstallation:
+    installation_id = installation_data.get("id")
+    account = installation_data.get("account", {})
+    record = await _get_installation_record(db, installation_id)
+
+    if record:
+        record.app_id = installation_data.get("app_id", record.app_id)
+        record.account_id = account.get("id", record.account_id)
+        record.account_login = account.get("login", record.account_login)
+        record.account_type = account.get("type", record.account_type)
+        record.permissions = installation_data.get("permissions", record.permissions)
+        return record
+
+    record = GitHubInstallation(
+        app_id=installation_data.get("app_id", 0),
+        installation_id=installation_id,
+        account_id=account.get("id", 0),
+        account_login=account.get("login", ""),
+        account_type=account.get("type", "User"),
+        permissions=installation_data.get("permissions", {}),
+    )
+    db.add(record)
+    await db.flush()
+    return record
+
+
+async def _upsert_repository_record(
+    db: AsyncSession,
+    installation: GitHubInstallation,
+    repo_data: dict[str, Any],
+) -> Repository:
+    result = await db.execute(
+        select(Repository).where(Repository.github_repo_id == repo_data.get("id"))
+    )
+    record = result.scalar_one_or_none()
+    if record:
+        record.installation_id = installation.id
+        record.name = repo_data.get("name", record.name)
+        record.full_name = repo_data.get("full_name", record.full_name)
+        record.private = repo_data.get("private", record.private)
+        record.default_branch = repo_data.get("default_branch", record.default_branch)
+        return record
+
+    record = Repository(
+        installation_id=installation.id,
+        github_repo_id=repo_data.get("id"),
+        name=repo_data.get("name", ""),
+        full_name=repo_data.get("full_name", ""),
+        private=repo_data.get("private", False),
+        default_branch=repo_data.get("default_branch", "main"),
+        enabled=True,
+    )
+    db.add(record)
+    await db.flush()
+    return record
+
+
+async def _delete_repository_record(db: AsyncSession, github_repo_id: int) -> None:
+    result = await db.execute(
+        select(Repository).where(Repository.github_repo_id == github_repo_id)
+    )
+    record = result.scalar_one_or_none()
+    if record:
+        await db.delete(record)

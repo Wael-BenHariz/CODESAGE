@@ -4,17 +4,30 @@
       <a routerLink="/dashboard" class="back-link">← Dashboard</a>
       <h1>Repositories</h1>
     </div>
-    <button class="btn btn-primary" (click)="openConnectModal()">+ Connect</button>
+    <div class="header-actions">
+      @if (!githubInstalled()) {
+        <button class="btn btn-ghost" (click)="installGitHubApp()">Install GitHub App</button>
+      }
+      <button class="btn btn-primary" (click)="openConnectModal()">+ Connect</button>
+    </div>
   </header>
 
   <div class="filters">
     <button class="filter-btn" [class.active]="filter() === 'all'" (click)="setFilter('all')">
       All <span class="count">({{ repositories().length }})</span>
     </button>
-    <button class="filter-btn" [class.active]="filter() === 'enabled'" (click)="setFilter('enabled')">
+    <button
+      class="filter-btn"
+      [class.active]="filter() === 'enabled'"
+      (click)="setFilter('enabled')"
+    >
       Enabled <span class="count">({{ openCount }})</span>
     </button>
-    <button class="filter-btn" [class.active]="filter() === 'disabled'" (click)="setFilter('disabled')">
+    <button
+      class="filter-btn"
+      [class.active]="filter() === 'disabled'"
+      (click)="setFilter('disabled')"
+    >
       Disabled <span class="count">({{ disabledCount }})</span>
     </button>
   </div>
@@ -27,7 +40,11 @@
   } @else if (filteredRepos.length === 0 && repositories().length === 0) {
     <div class="empty">
       <p>No repositories connected yet</p>
-      <button class="btn btn-primary" (click)="openConnectModal()">Connect Repository</button>
+      @if (!githubInstalled()) {
+        <button class="btn btn-primary" (click)="installGitHubApp()">Install GitHub App</button>
+      } @else {
+        <button class="btn btn-primary" (click)="openConnectModal()">+ Select Repositories</button>
+      }
     </div>
   } @else if (filteredRepos.length === 0) {
     <div class="empty">
@@ -68,8 +85,13 @@
   }
 
   @if (showConnectModal()) {
-    <div class="modal-overlay" (click)="closeConnectModal()">
-      <div class="modal" (click)="$event.stopPropagation()">
+    <div
+      class="modal-overlay"
+      tabindex="-1"
+      (click)="onOverlayClick($event)"
+      (keyup.escape)="closeConnectModal()"
+    >
+      <div class="modal">
         <div class="modal-header">
           <h2>Connect Repository</h2>
           <button class="close-btn" (click)="closeConnectModal()">×</button>
@@ -82,27 +104,45 @@
             </div>
           } @else if (githubRepos().length === 0) {
             <div class="empty">
-              <p>All your accessible repositories are already connected</p>
+              @if (!githubInstalled()) {
+                <p>Install or update the GitHub App to grant repository access.</p>
+                <button class="btn btn-primary" (click)="installGitHubApp()">
+                  Install GitHub App
+                </button>
+              } @else {
+                <p>No repositories are available for this installation.</p>
+              }
             </div>
           } @else {
             <div class="repo-select-list">
               @for (repo of githubRepos(); track repo.id) {
                 <div class="repo-select-item">
                   <div class="repo-select-info">
-                    <span class="repo-select-name">{{ repo.full_name }}</span>
-                    <span class="repo-select-desc">{{ repo.description || 'No description' }}</span>
+                    <span class="repo-select-name">{{ repo.name }}</span>
+                    <span class="repo-select-desc">
+                      {{ repo.private ? 'Private repository' : 'Public repository' }}
+                    </span>
                   </div>
                   <div class="repo-select-meta">
                     @if (repo.private) {
                       <span class="private-badge">private</span>
                     }
-                    @if (repo.language) {
-                      <span class="lang-badge">{{ repo.language }}</span>
+                    @if (repo.enabled) {
+                      <span class="status-badge enabled">selected</span>
                     }
-                    <span class="meta-item">★ {{ repo.stargazers_count }}</span>
                   </div>
-                  <button class="btn btn-primary btn-sm" [disabled]="connectingRepo() === repo.full_name" (click)="connectRepo(repo)">
-                    {{ connectingRepo() === repo.full_name ? 'Connecting...' : 'Connect' }}
+                  <button
+                    class="btn btn-primary btn-sm"
+                    [disabled]="repo.enabled || connectingRepo() === repo.name"
+                    (click)="connectRepo(repo)"
+                  >
+                    {{
+                      repo.enabled
+                        ? 'Selected'
+                        : connectingRepo() === repo.name
+                          ? 'Saving...'
+                          : 'Select'
+                    }}
                   </button>
                 </div>
               }

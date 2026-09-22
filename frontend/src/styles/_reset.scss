@@ -1,4 +1,6 @@
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -14,7 +16,8 @@ body {
   overflow-x: hidden;
 }
 
-img, svg {
+img,
+svg {
   display: block;
   max-width: 100%;
 }
@@ -31,10 +34,13 @@ button {
   background: none;
 }
 
-input, select, textarea {
+input,
+select,
+textarea {
   font: inherit;
 }
 
-ul, ol {
+ul,
+ol {
   list-style: none;
 }

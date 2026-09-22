@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db.models import Review, ReviewComment, PullRequest, Repository
@@ -59,7 +60,9 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             raise ValueError("Pull request not found")
         
         repo_result = await db.execute(
-            select(Repository).where(Repository.id == pr.repository_id)
+            select(Repository)
+            .options(selectinload(Repository.installation))
+            .where(Repository.id == pr.repository_id)
         )
         repo = repo_result.scalar_one_or_none()
         
@@ -72,7 +75,7 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             owner,
             repo_name,
             pr.number,
-            repo.installation_id,
+            repo.installation.installation_id,
         )
         
         # Build diff content
@@ -131,7 +134,7 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             owner,
             repo_name,
             pr,
-            repo.installation_id,
+            repo.installation.installation_id,
             comments,
         )
         

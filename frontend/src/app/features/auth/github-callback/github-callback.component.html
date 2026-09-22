@@ -1,0 +1,7 @@
+<div class="github-callback">
+  <div class="callback-card">
+    <div class="spinner"></div>
+    <p class="status" [class.error]="!isSuccess()">{{ statusMessage() }}</p>
+    <a routerLink="/dashboard" class="continue-link">Continue to dashboard →</a>
+  </div>
+</div>

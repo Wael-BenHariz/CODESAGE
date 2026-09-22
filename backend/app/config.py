@@ -54,11 +54,14 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str = Field(..., description="GitHub OAuth App Client ID")
     GITHUB_CLIENT_SECRET: str = Field(..., description="GitHub OAuth App Client Secret")
     GITHUB_CALLBACK_URL: str = "http://localhost:8000/api/v1/auth/github/callback"
+    FRONTEND_URL: str = "http://localhost:4200"
 
     # GitHub App (for webhook integration)
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
+    GITHUB_APP_SLUG: str = Field(default="", description="GitHub App slug used for installation URL")
     GITHUB_APP_PRIVATE_KEY: str = Field(..., description="GitHub App private key (PEM)")
     GITHUB_WEBHOOK_SECRET: str = Field(..., description="GitHub webhook secret")
+    STATE_TOKEN_SECRET: str = Field(..., description="Secret used to sign GitHub App state tokens")
 
     # Google Gemini AI
     GEMINI_API_KEY: str = Field(..., description="Google Gemini API key")

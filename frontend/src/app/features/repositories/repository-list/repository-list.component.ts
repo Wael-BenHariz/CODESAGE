@@ -1,7 +1,7 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { GithubService, GitHubRepo } from '../../../core/services/github.service';
+import { GithubService, GitHubAppRepo } from '../../../core/services/github.service';
 import { Repository } from '../../../core/models/repository.model';
 
 @Component({
@@ -14,12 +14,15 @@ import { Repository } from '../../../core/models/repository.model';
 export class RepositoryListComponent implements OnInit {
   private readonly github = inject(GithubService);
 
+  /** Shared GitHub App install status (refreshed on init and after the App callback). */
+  readonly githubInstalled = this.github.githubInstalled;
+
   repositories = signal<Repository[]>([]);
   isLoading = signal(true);
   filter = signal<'all' | 'enabled' | 'disabled'>('all');
 
   showConnectModal = signal(false);
-  githubRepos = signal<GitHubRepo[]>([]);
+  githubRepos = signal<GitHubAppRepo[]>([]);
   isLoadingGitHubRepos = signal(false);
   connectingRepo = signal<string | null>(null);
 
@@ -35,16 +38,22 @@ export class RepositoryListComponent implements OnInit {
     const repos = this.repositories();
     const f = this.filter();
     if (f === 'all') return repos;
-    return repos.filter(r => f === 'enabled' ? r.enabled : !r.enabled);
+    return repos.filter(r => (f === 'enabled' ? r.enabled : !r.enabled));
   }
 
   ngOnInit(): void {
     this.loadRepositories();
+    this.refreshInstallStatus();
+  }
+
+  /** Always re-read install status on init so a stale "not installed" value is never shown. */
+  private refreshInstallStatus(): void {
+    this.github.getInstallStatus().subscribe({ error: () => undefined });
   }
 
   private loadRepositories(): void {
     this.github.getRepositories().subscribe({
-      next: (repos) => {
+      next: repos => {
         this.repositories.set(repos);
         this.isLoading.set(false);
       },
@@ -77,34 +86,49 @@ export class RepositoryListComponent implements OnInit {
     this.loadGitHubRepos();
   }
 
+  installGitHubApp(): void {
+    this.github.getInstallUrl().subscribe(({ url }) => {
+      window.location.href = url;
+    });
+  }
+
   closeConnectModal(): void {
     this.showConnectModal.set(false);
   }
 
+  /** Closes the modal only when the overlay backdrop itself was clicked. */
+  onOverlayClick(event: Event): void {
+    if (event.target === event.currentTarget) {
+      this.closeConnectModal();
+    }
+  }
+
   private loadGitHubRepos(): void {
     this.isLoadingGitHubRepos.set(true);
-    this.github.getGitHubRepositories().subscribe({
-      next: (repos) => {
+    this.github.getAppRepos().subscribe({
+      next: repos => {
         this.githubRepos.set(repos);
         this.isLoadingGitHubRepos.set(false);
       },
       error: () => {
+        this.githubRepos.set([]);
         this.isLoadingGitHubRepos.set(false);
       }
     });
   }
 
-  connectRepo(repo: GitHubRepo): void {
-    this.connectingRepo.set(repo.full_name);
-    this.github.connectRepository(repo.id).subscribe({
-      next: () => {
-        this.loadRepositories();
-        this.loadGitHubRepos();
-        this.connectingRepo.set(null);
-      },
-      error: () => {
-        this.connectingRepo.set(null);
-      }
-    });
+  connectRepo(repo: GitHubAppRepo): void {
+    this.connectingRepo.set(repo.name);
+    this.github
+      .saveRepoSelection([{ id: repo.id, name: repo.name, private: repo.private, enabled: true }])
+      .subscribe({
+        next: () => {
+          this.loadGitHubRepos();
+          this.connectingRepo.set(null);
+        },
+        error: () => {
+          this.connectingRepo.set(null);
+        }
+      });
   }
 }

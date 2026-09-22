@@ -3,7 +3,6 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
-import { environment } from '@env/environment';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
@@ -12,7 +11,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   console.log('[AuthInterceptor] URL:', req.url, 'Token present:', !!token);
 
-  const publicAuthUrls = ['/auth/github', '/auth/github/callback', '/auth/refresh', '/auth/login', '/auth/logout'];
+  // '/auth/github' must NOT be listed here: includes() would also match the
+  // protected '/auth/github/app/install-url' endpoint and strip its auth header.
+  const publicAuthUrls = ['/auth/github/callback', '/auth/refresh', '/auth/login', '/auth/logout'];
   const isPublicAuth = publicAuthUrls.some(url => req.url.includes(url));
 
   if (token && !isPublicAuth) {

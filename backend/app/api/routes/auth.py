@@ -6,11 +6,15 @@ OAuth flow, token management, and user authentication.
 import secrets
 import logging
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import JWTError, jwt
 
 from app.config import settings
 from app.db import get_db
@@ -38,6 +42,27 @@ oauth_states: dict[str, dict] = {}
 def generate_state() -> str:
     """Generate a cryptographically secure state string."""
     return secrets.token_urlsafe(32)
+
+
+def _create_installation_state_token(user_id: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "iat": now - timedelta(seconds=60),
+        "exp": now + timedelta(minutes=10),
+        "type": "github_app_installation_state",
+    }
+    return jwt.encode(payload, settings.STATE_TOKEN_SECRET, algorithm=settings.ALGORITHM)
+
+
+def _verify_installation_state_token(state_token: str) -> str:
+    payload = jwt.decode(state_token, settings.STATE_TOKEN_SECRET, algorithms=[settings.ALGORITHM])
+    if payload.get("type") != "github_app_installation_state":
+        raise JWTError("Invalid installation state token")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise JWTError("Missing user identifier in installation state token")
+    return str(user_id)
 
 
 @router.get("/github")
@@ -69,8 +94,6 @@ async def github_login(
         "state": state,
     }
 
-
-from fastapi.responses import RedirectResponse
 
 @router.get("/github/callback")
 async def github_callback(
@@ -271,6 +294,55 @@ async def logout(
     # In production, you'd also revoke the GitHub token
     
     return {"message": "Logged out successfully"}
+
+
+@router.get("/github/app/install-url")
+async def get_github_app_install_url(
+    current_user: User = Depends(get_current_user),
+):
+    """Generate the GitHub App installation URL with a signed state token."""
+
+    if not settings.GITHUB_APP_SLUG:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GitHub App slug is not configured",
+        )
+
+    state_token = _create_installation_state_token(str(current_user.id))
+    url = f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?{urlencode({'state': state_token})}"
+    return {"url": url}
+
+
+@router.get("/github/app/callback")
+async def github_app_callback(
+    installation_id: int = Query(..., description="GitHub App installation ID"),
+    setup_action: str = Query(..., description="GitHub installation setup action"),
+    state: str | None = Query(None, description="Signed installation state token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist the GitHub App installation on the signed-in user and redirect home."""
+
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
+
+    # Step 2: no state token means we cannot identify the user — do not proceed.
+    if not state:
+        return RedirectResponse(url=f"{frontend_url}/github/callback?success=false")
+
+    try:
+        user_id = _verify_installation_state_token(state)
+        user_uuid = UUID(user_id)
+    except (JWTError, ValueError):
+        return RedirectResponse(url=f"{frontend_url}/github/callback?success=false")
+
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    if not user:
+        return RedirectResponse(url=f"{frontend_url}/github/callback?success=false")
+
+    user.github_installation_id = installation_id
+    await db.commit()
+
+    return RedirectResponse(url=f"{frontend_url}/github/callback?success=true")
 
 
 # ==================== Helper Functions ====================

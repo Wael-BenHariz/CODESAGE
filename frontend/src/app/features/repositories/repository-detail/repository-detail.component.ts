@@ -26,7 +26,7 @@ export class RepositoryDetailComponent implements OnInit {
 
   private loadRepository(): void {
     this.github.getRepository(this.owner(), this.repo()).subscribe({
-      next: (repo) => {
+      next: repo => {
         this.repository.set(repo);
         this.isLoading.set(false);
       },

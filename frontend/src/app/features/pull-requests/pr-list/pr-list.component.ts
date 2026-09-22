@@ -42,7 +42,7 @@ export class PrListComponent implements OnInit {
 
   private loadPullRequests(): void {
     this.github.getPullRequests(`${this.owner()}/${this.repo()}`).subscribe({
-      next: (prs) => {
+      next: prs => {
         this.pullRequests.set(prs);
         this.isLoading.set(false);
       },
@@ -58,10 +58,14 @@ export class PrListComponent implements OnInit {
 
   getStateIcon(state: string): string {
     switch (state) {
-      case 'open': return '🟢';
-      case 'closed': return '🔴';
-      case 'merged': return '🟣';
-      default: return '⚪';
+      case 'open':
+        return '🟢';
+      case 'closed':
+        return '🔴';
+      case 'merged':
+        return '🟣';
+      default:
+        return '⚪';
     }
   }
 }
