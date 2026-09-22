@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import GitHubInstallation, OAuthToken, Repository, User
+from app.db.models import GitHubInstallation, OAuthToken, Repository, User, WatchedRepo
 from app.schemas.repository import (
     RepositoryResponse,
     RepositoryUpdate,
@@ -279,6 +279,60 @@ async def _upsert_repository(
     return repo
 
 
+async def _set_watched_state(
+    db: AsyncSession,
+    user_id,
+    repo: Repository,
+    enabled: bool,
+) -> None:
+    """Keep watched_repos (the review switch) in sync with enable/disable."""
+    result = await db.execute(
+        select(WatchedRepo).where(
+            WatchedRepo.user_id == user_id,
+            WatchedRepo.repo_id == repo.github_repo_id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if record:
+        record.enabled = enabled
+    else:
+        db.add(
+            WatchedRepo(
+                user_id=user_id,
+                repo_id=repo.github_repo_id,
+                repo_name=repo.full_name,
+                enabled=enabled,
+            )
+        )
+
+
+async def _watched_state_map(db: AsyncSession, user_id) -> dict[int, bool]:
+    """github_repo_id -> watched enabled for this user (absent = not watching)."""
+    result = await db.execute(select(WatchedRepo).where(WatchedRepo.user_id == user_id))
+    return {item.repo_id: item.enabled for item in result.scalars().all()}
+
+
+async def _set_repository_enabled(
+    repository_id: str,
+    enabled: bool,
+    db: AsyncSession,
+    current_user: User,
+) -> RepositoryResponse:
+    """Flip legacy repositories.enabled AND the watched (review) switch."""
+    result = await db.execute(select(Repository).where(Repository.id == repository_id))
+    repo = result.scalar_one_or_none()
+    if not repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
+        )
+    repo.enabled = enabled
+    await _set_watched_state(db, current_user.id, repo, enabled)
+    await db.commit()
+    await db.refresh(repo)
+    return RepositoryResponse.model_validate(repo)
+
+
 @router.post("/connect", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
 async def connect_repository(
     github_repo_id: int = Query(..., description="GitHub repository ID"),
@@ -321,6 +375,8 @@ async def connect_repository(
         )
 
     repo = await _upsert_repository(db, selected_installation, selected_repo)
+    # Connecting implies intent to review: create the watched (review) row too.
+    await _set_watched_state(db, current_user.id, repo, True)
     await db.commit()
     await db.refresh(repo)
     
@@ -371,9 +427,17 @@ async def list_repositories(
     
     result = await db.execute(query)
     repos = result.scalars().all()
+    watched = await _watched_state_map(db, current_user.id)
     
     return RepositoryListResponse(
-        items=[RepositoryResponse.model_validate(r) for r in repos],
+        items=[
+            # Badge truth: watched_repos is the review switch; no watched row
+            # means not watching (disabled) even if the legacy flag is True.
+            RepositoryResponse.model_validate(r).model_copy(
+                update={"enabled": watched.get(r.github_repo_id, False)}
+            )
+            for r in repos
+        ],
         total=total,
         page=page,
         per_page=per_page,
@@ -403,7 +467,10 @@ async def get_repository(
             detail="Repository not found",
         )
     
-    return RepositoryResponse.model_validate(repo)
+    watched = await _watched_state_map(db, current_user.id)
+    return RepositoryResponse.model_validate(repo).model_copy(
+        update={"enabled": watched.get(repo.github_repo_id, False)}
+    )
 
 
 @router.get("/{repository_id}/detail", response_model=RepositoryDetail)
@@ -440,6 +507,7 @@ async def get_repository_detail(
         .where(Review.status == "completed")
     )
     
+    watched = await _watched_state_map(db, current_user.id)
     return RepositoryDetail(
         id=str(repo.id),
         installation_id=str(repo.installation_id),
@@ -449,7 +517,7 @@ async def get_repository_detail(
         private=repo.private,
         default_branch=repo.default_branch,
         webhook_id=repo.webhook_id,
-        enabled=repo.enabled,
+        enabled=watched.get(repo.github_repo_id, False),
         created_at=repo.created_at,
         updated_at=repo.updated_at,
         settings=RepositorySettings(),
@@ -482,6 +550,7 @@ async def update_repository(
     # Update fields
     if update_data.enabled is not None:
         repo.enabled = update_data.enabled
+        await _set_watched_state(db, current_user.id, repo, update_data.enabled)
     if update_data.default_branch is not None:
         repo.default_branch = update_data.default_branch
     
@@ -489,6 +558,26 @@ async def update_repository(
     await db.refresh(repo)
     
     return RepositoryResponse.model_validate(repo)
+
+
+@router.post("/{repository_id}/enable", response_model=RepositoryResponse)
+async def enable_repository(
+    repository_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Grid toggle: enable reviews (legacy flag + watched_repos in sync)."""
+    return await _set_repository_enabled(repository_id, True, db, current_user)
+
+
+@router.post("/{repository_id}/disable", response_model=RepositoryResponse)
+async def disable_repository(
+    repository_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Grid toggle: disable reviews (legacy flag + watched_repos in sync)."""
+    return await _set_repository_enabled(repository_id, False, db, current_user)
 
 
 @router.delete("/{repository_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -512,6 +601,17 @@ async def delete_repository(
             detail="Repository not found",
         )
     
+    # Drop the watched (review) switch so removal sticks: a later webhook
+    # event recreates the repository row but stays gated off without it.
+    watched_result = await db.execute(
+        select(WatchedRepo).where(
+            WatchedRepo.user_id == current_user.id,
+            WatchedRepo.repo_id == repo.github_repo_id,
+        )
+    )
+    for record in watched_result.scalars().all():
+        await db.delete(record)
+
     # Delete repository (cascades to PRs and reviews)
     await db.delete(repo)
     await db.commit()

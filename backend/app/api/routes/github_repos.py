@@ -3,6 +3,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,13 @@ class RepoSelectionItem(BaseModel):
 
 class RepoSelectionPayload(BaseModel):
     repos: list[RepoSelectionItem]
+    sync: bool = Field(
+        default=False,
+        description=(
+            "Treat the payload as the complete desired state: watched repos "
+            "missing from it are disabled (deselect)."
+        ),
+    )
 
 
 class RepoStatusResponse(BaseModel):
@@ -65,7 +73,19 @@ async def get_github_app_repos(
     )
     watched_repos = {item.repo_id: item for item in watched_result.scalars().all()}
 
-    repos = await get_installation_repos(installation_id)
+    try:
+        repos = await get_installation_repos(installation_id)
+    except httpx.HTTPStatusError as exc:
+        # Stale/removed installation: surface a fixable 409, not an opaque 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="GitHub installation is invalid or removed. Reinstall the GitHub App.",
+        ) from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach GitHub to list repositories.",
+        ) from exc
     return [
         RepoResponse(
             id=repo["id"],
@@ -88,7 +108,9 @@ async def save_github_app_repo_selection(
     )
     existing = {item.repo_id: item for item in existing_result.scalars().all()}
 
+    payload_ids: set[int] = set()
     for repo in payload.repos:
+        payload_ids.add(repo.id)
         record = existing.get(repo.id)
         if record:
             record.repo_name = repo.name
@@ -102,6 +124,13 @@ async def save_github_app_repo_selection(
                     enabled=repo.enabled,
                 )
             )
+
+    if payload.sync:
+        # Full-state payload: watched repos absent from it are no longer
+        # selected (e.g. deselected or removed from the installation).
+        for record in existing.values():
+            if record.repo_id not in payload_ids:
+                record.enabled = False
 
     await db.commit()
     return {"saved": True}

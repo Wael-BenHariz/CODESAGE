@@ -34,7 +34,9 @@ class ReviewQueue:
         if self._queue is None:
             self._queue = Queue(
                 self.queue_name,
-                {"connection": {"url": self.redis_url}},
+                # bullmq accepts a URL string; a {"url": ...} dict is splatted
+                # into redis.Redis kwargs and crashes redis-py.
+                {"connection": self.redis_url},
             )
         return self._queue
 
@@ -44,7 +46,7 @@ class ReviewQueue:
         if self._events is None:
             self._events = QueueEvents(
                 self.queue_name,
-                {"connection": {"url": self.redis_url}},
+                {"connection": self.redis_url},
             )
         return self._events
 

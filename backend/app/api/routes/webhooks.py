@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -197,62 +197,74 @@ async def _handle_pull_request_event(
         await db.commit()
         await db.refresh(pr_record)
 
-        installation_owner = await db.scalar(
-            select(User).where(User.github_installation_id == installation_id)
-        )
+        # Resolve installation owner(s): users whose column matches this
+        # installation; the first one watching the repo (enabled) wins.
+        owners = (
+            await db.execute(
+                select(User)
+                .where(User.github_installation_id == installation_id)
+                .order_by(User.created_at.asc())
+            )
+        ).scalars().all()
         watched_repo = None
-        if installation_owner:
+        for owner in owners:
             watched_repo = await db.scalar(
                 select(WatchedRepo).where(
                     WatchedRepo.repo_id == repo_data.get("id"),
-                    WatchedRepo.user_id == installation_owner.id,
+                    WatchedRepo.user_id == owner.id,
                     WatchedRepo.enabled.is_(True),
                 )
             )
+            if watched_repo:
+                break
 
         if not watched_repo:
             webhook_event.processed = True
             await db.commit()
+            if not owners:
+                reason = "no user linked to this installation"
+            else:
+                reason = "repository not selected by installation owner"
             return {
                 "status": "ignored",
-                "reason": "repo not enabled",
+                "reason": reason,
             }
         
-        # Trigger review if repository is enabled
-        if repo.enabled:
-            from app.workers.review_queue import queue_review
+        # Trigger review -- watched_repos.enabled is the single review switch
+        # (legacy repositories.enabled is display-only and no longer gates).
+        from app.workers.review_queue import queue_review
             
-            # Check for pending reviews
-            pending = await db.execute(
-                select(Review)
-                .where(Review.pull_request_id == pr_record.id)
-                .where(Review.status.in_(["pending", "processing"]))
+        # Check for pending reviews
+        pending = await db.execute(
+            select(Review)
+            .where(Review.pull_request_id == pr_record.id)
+            .where(Review.status.in_(["pending", "processing"]))
+        )
+            
+        if not pending.scalar_one_or_none():
+            # Create new review
+            review = Review(
+                pull_request_id=pr_record.id,
+                status="pending",
+                started_at=datetime.now(timezone.utc),
             )
-            
-            if not pending.scalar_one_or_none():
-                # Create new review
-                review = Review(
-                    pull_request_id=pr_record.id,
-                    status="pending",
-                    started_at=datetime.now(timezone.utc),
-                )
-                db.add(review)
-                await db.commit()
-                await db.refresh(review)
+            db.add(review)
+            await db.commit()
+            await db.refresh(review)
                 
-                # Queue review job
-                await queue_review(str(review.id))
+            # Queue review job
+            await queue_review(str(review.id))
                 
-                # Mark event as processed
-                webhook_event.processed = True
-                await db.commit()
+            # Mark event as processed
+            webhook_event.processed = True
+            await db.commit()
                 
-                return WebhookProcessResult(
-                    event_id=str(webhook_event.id),
-                    processed=True,
-                    action_taken="created_review",
-                    review_id=str(review.id),
-                )
+            return WebhookProcessResult(
+                event_id=str(webhook_event.id),
+                processed=True,
+                action_taken="created_review",
+                review_id=str(review.id),
+            )
         
         # Mark event as processed
         webhook_event.processed = True
@@ -331,7 +343,14 @@ async def _handle_installation_event(
         }
     
     elif action == "deleted":
-        # Delete installation and cascade to repositories
+        # Delete installation and cascade to repositories; unlink users so
+        # /github/status flips back to "not installed".
+        await db.execute(
+            update(User)
+            .where(User.github_installation_id == installation_id)
+            .values(github_installation_id=None)
+        )
+        await db.commit()
         result = await db.execute(
             select(GitHubInstallation)
             .where(GitHubInstallation.installation_id == installation_id)
@@ -383,9 +402,16 @@ async def _handle_installation_repos_event(
     for repo in repos_added:
         await _upsert_repository_record(db, install_record, repo)
     
-    # Remove repositories
+    # Remove repositories (and turn off the review switch for them)
+    removed_ids = [repo.get("id") for repo in repos_removed if repo.get("id")]
     for repo in repos_removed:
         await _delete_repository_record(db, repo.get("id"))
+    if removed_ids:
+        await db.execute(
+            update(WatchedRepo)
+            .where(WatchedRepo.repo_id.in_(removed_ids))
+            .values(enabled=False)
+        )
     
     await db.commit()
     

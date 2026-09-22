@@ -101,7 +101,9 @@ export class GithubService {
 
   /** Persist watched (review-enabled) repositories for the current user. */
   saveRepoSelection(repos: GitHubAppRepo[]): Observable<{ saved: boolean }> {
-    return this.api.post<{ saved: boolean }>('/github/repos/selection', { repos });
+    // sync: true → payload is the complete desired state; backend disables
+    // watched repos missing from it (makes selection two-way / deselectable).
+    return this.api.post<{ saved: boolean }>('/github/repos/selection', { repos, sync: true });
   }
 
   connectRepository(githubRepoId: number): Observable<Repository> {
