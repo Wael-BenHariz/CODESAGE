@@ -17,12 +17,13 @@ export const routes: Routes = [
       import('./features/auth/callback/callback.component').then(m => m.CallbackComponent)
   },
   {
+    // No authGuard here: this route is GitHub's post-install redirect target and
+    // must render even when the session was lost on the full-page redirect.
     path: 'github/callback',
     loadComponent: () =>
       import('./features/auth/github-callback/github-callback.component').then(
         m => m.GithubCallbackComponent
-      ),
-    canActivate: [authGuard]
+      )
   },
   {
     path: 'dashboard',

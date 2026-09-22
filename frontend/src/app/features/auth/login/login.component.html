@@ -8,6 +8,12 @@
       <p class="login-subtitle">AI-powered code review for GitHub</p>
     </div>
 
+    @if (showInstallBanner()) {
+      <div class="install-banner" role="status">
+        GitHub App installed successfully. Please log in to continue.
+      </div>
+    }
+
     <button class="github-btn" (click)="loginWithGitHub()">
       <svg class="github-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path

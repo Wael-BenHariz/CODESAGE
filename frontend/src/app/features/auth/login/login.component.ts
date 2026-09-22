@@ -1,5 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
@@ -9,8 +10,17 @@ import { AuthService } from '../../../core/services/auth.service';
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss'
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+
+  readonly showInstallBanner = signal(false);
+
+  ngOnInit(): void {
+    this.showInstallBanner.set(
+      this.route.snapshot.queryParamMap.get('message') === 'app_installed'
+    );
+  }
 
   loginWithGitHub(): void {
     this.auth.login();
