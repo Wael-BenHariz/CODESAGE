@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable, map } from 'rxjs';
+import { Observable, map, tap } from 'rxjs';
 import { Repository, RepositoryStats } from '../models/repository.model';
 import { PullRequest } from '../models/pull-request.model';
 
@@ -25,6 +25,19 @@ export interface GitHubRepo {
   open_issues_count: number;
 }
 
+export interface GitHubInstallStatus {
+  installed: boolean;
+  installation_id: number | null;
+}
+
+export interface GitHubAppRepo {
+  id: number;
+  /** GitHub repository full name (owner/repo). */
+  name: string;
+  private: boolean;
+  enabled: boolean;
+}
+
 function mapRepo(raw: any): Repository {
   const owner = raw.full_name?.split('/')[0] || '';
   return {
@@ -42,7 +55,7 @@ function mapRepo(raw: any): Repository {
     webhookEnabled: raw.webhook_enabled ?? false,
     enabled: raw.enabled,
     createdAt: raw.created_at,
-    updatedAt: raw.updated_at,
+    updatedAt: raw.updated_at
   };
 }
 
@@ -52,20 +65,51 @@ function mapRepo(raw: any): Repository {
 export class GithubService {
   private readonly api = inject(ApiService);
 
+  private readonly _githubInstalled = signal<boolean | null>(null);
+  readonly githubInstalled = this._githubInstalled.asReadonly();
+
   getRepositories(): Observable<Repository[]> {
-    return this.api.get<PaginatedResponse<any>>('/repositories').pipe(
-      map(response => response.items.map(mapRepo))
-    );
+    return this.api
+      .get<PaginatedResponse<any>>('/repositories')
+      .pipe(map(response => response.items.map(mapRepo)));
   }
 
   getGitHubRepositories(): Observable<GitHubRepo[]> {
     return this.api.get<GitHubRepo[]>('/repositories/github');
   }
 
+  /**
+   * Signed GitHub App installation URL. The `state` claim is a JWT signed with
+   * STATE_TOKEN_SECRET so the /auth/github/app/callback endpoint can identify
+   * the installing user — never construct the GitHub URL manually.
+   */
+  getInstallUrl(): Observable<{ url: string }> {
+    return this.api.get<{ url: string }>('/auth/github/app/install-url');
+  }
+
+  /** GitHub App install status for the current user; keeps the shared signal in sync. */
+  getInstallStatus(): Observable<GitHubInstallStatus> {
+    return this.api
+      .get<GitHubInstallStatus>('/github/status')
+      .pipe(tap(status => this._githubInstalled.set(status.installed)));
+  }
+
+  /** Repositories accessible through the user's GitHub App installation. */
+  getAppRepos(): Observable<GitHubAppRepo[]> {
+    return this.api.get<GitHubAppRepo[]>('/github/repos');
+  }
+
+  /** Persist watched (review-enabled) repositories for the current user. */
+  saveRepoSelection(repos: GitHubAppRepo[]): Observable<{ saved: boolean }> {
+    // sync: true → payload is the complete desired state; backend disables
+    // watched repos missing from it (makes selection two-way / deselectable).
+    return this.api.post<{ saved: boolean }>('/github/repos/selection', { repos, sync: true });
+  }
+
   connectRepository(githubRepoId: number): Observable<Repository> {
-    return this.api.post<any>(`/repositories/connect?github_repo_id=${githubRepoId}`, {}).pipe(
-      map(mapRepo)
-    );
+    return this.api
+      .post<any>(`/repositories/connect?github_repo_id=${githubRepoId}`, {})
+      .pipe(map(mapRepo));
   }
 
   getRepository(owner: string, repo: string): Observable<Repository> {

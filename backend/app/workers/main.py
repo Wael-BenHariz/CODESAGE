@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 worker: Optional[Worker] = None
 
 
-async def process_job(job: dict) -> dict:
+async def process_job(job, token: Optional[str] = None, *args) -> dict:
     """
     Job processor handler.
     
@@ -38,21 +38,21 @@ async def process_job(job: dict) -> dict:
     """
     from app.db import get_db_context
     
-    logger.info(f"Processing job {job.get('id', 'unknown')}")
+    logger.info(f"Processing job {job.id}")
     
     try:
         async with get_db_context() as db:
             result = await process_review_job(job.data, db)
             
             if result.get("success"):
-                logger.info(f"Job {job.get('id')} completed successfully")
+                logger.info(f"Job {job.id} completed successfully")
             else:
-                logger.error(f"Job {job.get('id')} failed: {result.get('error')}")
+                logger.error(f"Job {job.id} failed: {result.get('error')}")
             
             return result
             
     except Exception as e:
-        logger.exception(f"Error processing job {job.get('id')}: {e}")
+        logger.exception(f"Error processing job {job.id}: {e}")
         raise
 
 
@@ -73,23 +73,28 @@ async def start_worker() -> Worker:
         settings.BULLMQ_REVIEW_QUEUE,
         process_job,
         {
-            "connection": {"url": settings.REDIS_URL},
+            # bullmq accepts a URL string; a {"url": ...} dict is splatted into
+            # redis.Redis kwargs and crashes redis-py.
+            "connection": settings.REDIS_URL,
             "concurrency": settings.BULLMQ_CONCURRENCY,
         },
     )
     
     # Event handlers
-    @worker.on("completed")
     def handle_completed(job, result):
         logger.info(f"Job {job.id} completed: {result}")
+
+    worker.on("completed", handle_completed)
     
-    @worker.on("failed")
     def handle_failed(job, err):
         logger.error(f"Job {job.id} failed: {err}")
+
+    worker.on("failed", handle_failed)
     
-    @worker.on("progress")
     def handle_progress(job, progress):
         logger.debug(f"Job {job.id} progress: {progress}%")
+
+    worker.on("progress", handle_progress)
     
     logger.info(f"Worker started, listening on queue: {settings.BULLMQ_REVIEW_QUEUE}")
     
@@ -123,14 +128,18 @@ async def main():
         asyncio.create_task(stop_worker())
     
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: shutdown_handler(s))
+        try:
+            loop.add_signal_handler(sig, lambda s=sig: shutdown_handler(s))
+        except NotImplementedError:
+            # Windows event loops don't support add_signal_handler; the
+            # finally block below still runs on KeyboardInterrupt.
+            logger.warning(f"Signal handler for {sig} unsupported on this platform")
     
     try:
         worker = await start_worker()
         
-        # Keep running until stopped
-        while worker and worker.isRunning():
-            await asyncio.sleep(1)
+        # Run until stopped (run() blocks; close()/signal breaks the loop)
+        await worker.run()
             
     except Exception as e:
         logger.exception(f"Worker error: {e}")

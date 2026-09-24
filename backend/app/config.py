@@ -54,17 +54,34 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str = Field(..., description="GitHub OAuth App Client ID")
     GITHUB_CLIENT_SECRET: str = Field(..., description="GitHub OAuth App Client Secret")
     GITHUB_CALLBACK_URL: str = "http://localhost:8000/api/v1/auth/github/callback"
+    FRONTEND_URL: str = "http://localhost:4200"
 
     # GitHub App (for webhook integration)
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
+    GITHUB_APP_SLUG: str = Field(default="", description="GitHub App slug used for installation URL")
     GITHUB_APP_PRIVATE_KEY: str = Field(..., description="GitHub App private key (PEM)")
     GITHUB_WEBHOOK_SECRET: str = Field(..., description="GitHub webhook secret")
+    STATE_TOKEN_SECRET: str = Field(..., description="Secret used to sign GitHub App state tokens")
 
     # Google Gemini AI
-    GEMINI_API_KEY: str = Field(..., description="Google Gemini API key")
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_API_KEY: str = Field(..., description="Google Gemini API key (legacy client)")
+    GEMINI_MODEL: str = "gemini-3.6-flash"
     GEMINI_MAX_TOKENS: int = 8192
     GEMINI_TEMPERATURE: float = 0.7
+
+    GROQ_API_KEY: str = Field(..., description="Groq API key (active review LLM)")
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    # Groq free tier TPM (~8000 tokens/request) leaves no room for the full
+    # 100k-char fetch cap inside one prompt: cap the diff the LLM sees per
+    # review so large PRs degrade to a partial review instead of a 413.
+    LLM_DIFF_CHAR_CAP: int = 16000
+    AGENT_SECURITY_TEMPERATURE: float = 0.2
+    AGENT_COMPLEXITY_TEMPERATURE: float = 0.3
+    AGENT_PERFORMANCE_TEMPERATURE: float = 0.3
+    AGENT_STYLE_TEMPERATURE: float = 0.4
+    AGENT_TEST_TEMPERATURE: float = 0.4
+    AGENT_ORCHESTRATOR_TEMPERATURE: float = 0.2
+    AGENT_ORCHESTRATOR_MAX_TOKENS: int = 8192
 
     # BullMQ
     BULLMQ_REVIEW_QUEUE: str = "review-requests"

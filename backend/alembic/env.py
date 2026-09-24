@@ -16,6 +16,7 @@ from app.db.models import (  # noqa: F401
     Repository,
     Review,
     ReviewComment,
+    WatchedRepo,
     User,
     WebhookEvent,
 )

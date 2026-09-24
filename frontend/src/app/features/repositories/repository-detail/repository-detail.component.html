@@ -9,10 +9,7 @@
           <h1>{{ repo.fullName }}</h1>
         </div>
         <div class="header-actions">
-          <button 
-            class="toggle-btn" 
-            [class.enabled]="repo.enabled"
-            (click)="toggleEnabled()">
+          <button class="toggle-btn" [class.enabled]="repo.enabled" (click)="toggleEnabled()">
             {{ repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
           </button>
         </div>
@@ -53,9 +50,7 @@
       <div class="actions-section">
         <h2>Actions</h2>
         <div class="action-buttons">
-          <a [routerLink]="['pulls']" class="action-btn primary">
-            View Pull Requests
-          </a>
+          <a [routerLink]="['pulls']" class="action-btn primary"> View Pull Requests </a>
         </div>
       </div>
     }

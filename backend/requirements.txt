@@ -25,6 +25,9 @@ httpx>=0.26.0
 # Redis
 redis>=5.0.1
 
+# BullMQ (review queue worker)
+bullmq>=3.0.0
+
 # Configuration
 python-dotenv>=1.0.0
 

@@ -30,6 +30,8 @@ export class DashboardComponent implements OnInit {
   ngOnInit(): void {
     this.user.set(this.auth.currentUser());
     this.loadDashboard();
+    // Re-read GitHub App install status so shared state is never stale.
+    this.github.getInstallStatus().subscribe({ error: () => undefined });
   }
 
   private loadDashboard(): void {

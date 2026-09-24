@@ -13,16 +13,21 @@
           </div>
           <div class="profile-info">
             <div class="field">
-              <label>Username</label>
-              <input type="text" [value]="u.login" disabled />
+              <label for="settings-username">Username</label>
+              <input id="settings-username" type="text" [value]="u.login" disabled />
             </div>
             <div class="field">
-              <label>Email</label>
-              <input type="email" [value]="u.email" disabled />
+              <label for="settings-email">Email</label>
+              <input id="settings-email" type="email" [value]="u.email" disabled />
             </div>
             <div class="field">
-              <label>Name</label>
-              <input type="text" [value]="u.name || ''" placeholder="Your name" />
+              <label for="settings-name">Name</label>
+              <input
+                id="settings-name"
+                type="text"
+                [value]="u.name || ''"
+                placeholder="Your name"
+              />
             </div>
           </div>
         }
@@ -33,24 +38,24 @@
       <h2>Review Preferences</h2>
       <div class="card preferences-card">
         <div class="preference-item">
-          <label>Auto-review on PR open</label>
-          <input type="checkbox" />
+          <label for="settings-auto-review">Auto-review on PR open</label>
+          <input id="settings-auto-review" type="checkbox" />
         </div>
         <div class="preference-item">
-          <label>Review frequency</label>
-          <select>
+          <label for="settings-review-frequency">Review frequency</label>
+          <select id="settings-review-frequency">
             <option value="immediate">Immediate</option>
             <option value="hourly">Hourly</option>
             <option value="daily">Daily</option>
           </select>
         </div>
         <div class="preference-item">
-          <label>Include security scans</label>
-          <input type="checkbox" checked />
+          <label for="settings-security-scans">Include security scans</label>
+          <input id="settings-security-scans" type="checkbox" checked />
         </div>
         <div class="preference-item">
-          <label>Include performance checks</label>
-          <input type="checkbox" checked />
+          <label for="settings-performance-checks">Include performance checks</label>
+          <input id="settings-performance-checks" type="checkbox" checked />
         </div>
       </div>
     </section>

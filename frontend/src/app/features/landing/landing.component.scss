@@ -8,9 +8,8 @@
 .grid-bg {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
   background-size: 64px 64px;
   pointer-events: none;
 }
@@ -95,7 +94,7 @@
   border: 1px solid #2a2a2a;
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: fadeIn 0.6s ease forwards;
 }
 
@@ -113,9 +112,15 @@
   height: 12px;
   border-radius: 50%;
 
-  &.red { background: #ff5f56; }
-  &.yellow { background: #ffbd2e; }
-  &.green { background: #27c93f; }
+  &.red {
+    background: #ff5f56;
+  }
+  &.yellow {
+    background: #ffbd2e;
+  }
+  &.green {
+    background: #27c93f;
+  }
 }
 
 .terminal-title {
@@ -159,10 +164,18 @@
   color: #a0a0a0;
 }
 
-.success { color: #00e87b; }
-.warning { color: #ffaa00; }
-.error { color: #ff4444; }
-.info { color: #00aaff; }
+.success {
+  color: #00e87b;
+}
+.warning {
+  color: #ffaa00;
+}
+.error {
+  color: #ff4444;
+}
+.info {
+  color: #00aaff;
+}
 
 // ─── Hero Content ───
 
@@ -400,16 +413,33 @@ h1 {
 // ─── Animations ───
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(-12px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }

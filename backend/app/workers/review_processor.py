@@ -3,111 +3,271 @@ Review Processor
 Worker that processes code review jobs using Gemini AI.
 """
 
-import json
+import logging
 import traceback
 from datetime import datetime, timezone
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.db import get_db_context
 from app.db.models import Review, ReviewComment, PullRequest, Repository
-from app.services.gemini import gemini_service
+from app.services.agents import ReviewContext
+from app.services.groq import GroqClient
 from app.services.github import github_service
+from app.services.github_app import get_installation_token
+from app.services.review_orchestrator import ReviewOrchestrator
+
+logger = logging.getLogger(__name__)
+
+# Hard cap on the unified diff sent to the LLM.
+DIFF_MAX_CHARS = 100_000
+DIFF_TRUNCATION_NOTE = "[diff truncated - showing first 100k characters]"
+EMPTY_DIFF_SUMMARY = "No reviewable changes found."
+
+
+class ReviewPostError(Exception):
+    """GitHub PR review POST failure (carries HTTP status + raw response body)."""
+
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(f"GitHub review POST failed ({status_code}): {detail}")
+        self.status_code = status_code
+        self.detail = detail
+
+
+async def post_pr_review(
+    full_name: str,
+    pr_number: int,
+    commit_sha: str,
+    body: str,
+    installation_token: str,
+) -> int:
+    """
+    Post a single pull request review (summary body only, no inline comments).
+
+    Args:
+        full_name: Repository full name (owner/repo)
+        pr_number: Pull request number
+        commit_sha: HEAD sha to attach the review to (stored head_sha)
+        body: Review summary markdown (posted verbatim)
+        installation_token: GitHub App installation access token
+
+    Returns:
+        GitHub review ID
+
+    Raises:
+        ReviewPostError: On 401/403/404/422 responses (detail = raw body)
+    """
+    url = f"https://api.github.com/repos/{full_name}/pulls/{pr_number}/reviews"
+    headers = {
+        "Authorization": f"token {installation_token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    # Always COMMENT -- the bot must never approve or request changes.
+    payload = {
+        "commit_id": commit_sha,
+        "body": body,
+        "event": "COMMENT",
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(url, json=payload, headers=headers)
+
+    if response.status_code in (401, 403, 404, 422):
+        raise ReviewPostError(response.status_code, response.text)
+    response.raise_for_status()
+    data = response.json()
+    return int(data.get("id") or 0)
+
+
+def _classify_error(exc: Exception) -> str:
+    """Map an exception to a review.error_message string."""
+    if isinstance(exc, ReviewPostError):
+        if exc.status_code in (401, 403):
+            return f"installation token error: GitHub review POST returned {exc.status_code}"
+        if exc.status_code == 422:
+            return f"GitHub review POST rejected (422): {exc.detail}"
+        return str(exc)
+    if isinstance(exc, httpx.HTTPStatusError):
+        url = str(exc.request.url) if exc.request is not None else ""
+        status_code = exc.response.status_code if exc.response is not None else None
+        if "api.groq.com" in url:
+            return f"Groq API error: HTTP {status_code} for {url.split('?')[0]}"
+        if status_code in (401, 403):
+            return f"installation token error: GitHub API returned {status_code}"
+        if status_code == 404:
+            return "GitHub API 404: repository or pull request was deleted"
+        return f"GitHub API error: {exc}"
+    if isinstance(exc, httpx.TimeoutException):
+        return f"Timeout calling GitHub or Groq API: {exc}"
+    return str(exc)
 
 
 async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
     """
     Process a code review job.
-    
-    Fetches PR details, calls Gemini API for review, and stores results.
-    
+
+    Pipeline: load rows -> idempotency guard -> processing -> diff fetch
+    (installation token, paginated, filtered, capped) -> LLM review ->
+    post summary review to GitHub -> store results -> completed.
+
     Args:
         job_data: Job payload with review_id
         db: Database session
-        
+
     Returns:
         Processing result
     """
     review_id = job_data.get("review_id")
-    
+
     if not review_id:
         return {"success": False, "error": "Missing review_id"}
-    
+
     # Get review record
     result = await db.execute(
         select(Review).where(Review.id == review_id)
     )
     review = result.scalar_one_or_none()
-    
+
     if not review:
         return {"success": False, "error": "Review not found"}
-    
+
+    # Idempotency guard: only pending reviews are processed.
+    if review.status != "pending":
+        logger.warning(
+            "Skipping review %s: status is %r (not pending)", review_id, review.status
+        )
+        return {
+            "success": True,
+            "review_id": review_id,
+            "skipped": "review not pending",
+        }
+
     # Update status to processing
     review.status = "processing"
     await db.commit()
-    
+
     try:
-        # Get PR and repository info
+        # Load PullRequest -> Repository -> GitHubInstallation
         pr_result = await db.execute(
             select(PullRequest).where(PullRequest.id == review.pull_request_id)
         )
         pr = pr_result.scalar_one_or_none()
-        
+
         if not pr:
             raise ValueError("Pull request not found")
-        
+
         repo_result = await db.execute(
-            select(Repository).where(Repository.id == pr.repository_id)
+            select(Repository)
+            .options(selectinload(Repository.installation))
+            .where(Repository.id == pr.repository_id)
         )
         repo = repo_result.scalar_one_or_none()
-        
-        if not repo:
-            raise ValueError("Repository not found")
-        
-        # Get changed files from GitHub
+
+        if not repo or not repo.installation:
+            raise ValueError("Repository or GitHub App installation not found")
+
+        installation = repo.installation
+
+        # Installation access token (GitHub App JWT flow -- never the user
+        # OAuth token, which may be expired or missing for App-installed repos).
+        token = await get_installation_token(installation.installation_id)
+
+        # Fetch changed files (paginated) using the installation token.
         owner, repo_name = repo.full_name.split("/", 1)
         files = await github_service.get_pull_request_files(
             owner,
             repo_name,
             pr.number,
-            repo.installation_id,
+            installation.installation_id,
         )
-        
-        # Build diff content
-        diff_content = await _build_diff_content(
-            github_service,
-            owner,
-            repo_name,
-            pr,
-            files,
-        )
-        
-        # Determine language from files
+
+        # Filter out binary files / removed files that have no patch. If
+        # nothing reviewable remains, finish cleanly without calling the LLM.
+        reviewable_files = [f for f in files if f.get("patch")]
+        if not reviewable_files:
+            review.summary = EMPTY_DIFF_SUMMARY
+            review.status = "completed"
+            review.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {
+                "success": True,
+                "review_id": review_id,
+                "comments_count": 0,
+                "summary": review.summary,
+            }
+
+        # Build capped diff content + detect primary language.
+        diff_content = _build_diff_content(reviewable_files)
+        if len(diff_content) > settings.LLM_DIFF_CHAR_CAP:
+            diff_content = (
+                diff_content[: settings.LLM_DIFF_CHAR_CAP]
+                + "\n[diff truncated for LLM context limit — "
+                "review the visible portion only]"
+            )
         language = _detect_language(files)
-        
-        # Call Gemini for review
-        review_result = await gemini_service.generate_review(
+
+        # Run specialist review agents in parallel, then synthesize.
+        context = ReviewContext(
             pr_title=pr.title,
             pr_body=pr.body,
             diff=diff_content,
             language=language,
         )
-        
-        # Update review with results
-        review.status = "completed"
-        review.summary = review_result.get("summary", "")
-        review.gemini_model = settings.GEMINI_MODEL
-        
-        # Store token usage
-        if "usage" in review_result:
+        orchestrator = ReviewOrchestrator(client=GroqClient())
+        review_result = (await orchestrator.run(context)).model_dump(exclude_none=True)
+        summary = review_result.get("summary", "")
+
+        # Post ONE summary review to GitHub (no inline comments), attached to
+        # the head_sha stored by the webhook at event time.
+        github_review_id = None
+        post_note = None
+        try:
+            github_review_id = await post_pr_review(
+                full_name=repo.full_name,
+                pr_number=pr.number,
+                commit_sha=pr.head_sha,
+                body=summary,
+                installation_token=token,
+            )
+        except ReviewPostError as exc:
+            if exc.status_code == 404:
+                # PR closed/deleted after the event: finish gracefully.
+                logger.warning(
+                    "PR %s #%s no longer available for review posting: %s",
+                    repo.full_name,
+                    pr.number,
+                    exc.detail,
+                )
+                post_note = "PR no longer available for review posting"
+            elif exc.status_code == 422:
+                # GitHub often returns useful detail -- log the full body.
+                logger.error(
+                    "GitHub review POST 422 for %s #%s -- full response body: %s",
+                    repo.full_name,
+                    pr.number,
+                    exc.detail,
+                )
+                raise
+            else:
+                raise
+
+        # Store results in DB.
+        review.summary = summary
+        review.overall_severity = review_result.get("overall_severity", "info")
+        review.gemini_model = settings.GROQ_MODEL
+        if review_result.get("usage"):
             review.tokens_used = review_result["usage"].get("total_tokens", 0)
-        
+        review.github_review_id = github_review_id
+        if post_note:
+            review.error_message = post_note
         review.completed_at = datetime.now(timezone.utc)
-        await db.commit()
-        
-        # Store review comments
+        review.status = "completed"
+
         comments = review_result.get("comments", [])
         for comment in comments:
             review_comment = ReviewComment(
@@ -118,77 +278,74 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
                 body=comment.get("body", ""),
                 severity=comment.get("severity", "info"),
                 category=comment.get("category", "general"),
+                suggestion=comment.get("suggestion"),
             )
             db.add(review_comment)
-        
+
         await db.commit()
-        
-        # Optionally post comments to GitHub
-        await _post_comments_to_github(
-            github_service,
-            owner,
-            repo_name,
-            pr,
-            repo.installation_id,
-            comments,
-        )
-        
+
         return {
             "success": True,
             "review_id": review_id,
             "comments_count": len(comments),
             "summary": review.summary,
+            "github_review_id": github_review_id,
         }
-        
+
     except Exception as e:
-        # Update review as failed
+        error_message = _classify_error(e)
+        logger.error("Review %s failed: %s\n%s", review_id, error_message, traceback.format_exc())
+        # Update review as failed (never re-raise: BullMQ must not retry
+        # automatically; the DB row is the source of truth).
         review.status = "failed"
-        review.error_message = str(e)
+        review.error_message = error_message
         review.completed_at = datetime.now(timezone.utc)
         await db.commit()
-        
+
         return {
             "success": False,
             "review_id": review_id,
-            "error": str(e),
+            "error": error_message,
             "traceback": traceback.format_exc(),
         }
 
 
-async def _build_diff_content(
-    github_service,
-    owner: str,
-    repo_name: str,
-    pr,
-    files: list[dict],
-) -> str:
-    """Build formatted diff content for review."""
-    
+def _build_diff_content(files: list[dict]) -> str:
+    """
+    Build unified diff content from the patch fields of each file.
+
+    Total size is capped at DIFF_MAX_CHARS with a truncation note appended.
+    """
     diff_lines = []
-    
-    for file in files[:50]:  # Limit to first 50 files
+
+    for file in files:
         filename = file.get("filename", "")
         status = file.get("status", "modified")
         additions = file.get("additions", 0)
         deletions = file.get("deletions", 0)
-        
+
         diff_lines.append(f"\n{'='*80}")
-        diff_lines.append(f"File: {filename} ({status}) +{addations} -{deletions}")
+        diff_lines.append(f"File: {filename} ({status}) +{additions} -{deletions}")
         diff_lines.append(f"{'='*80}\n")
-        
-        # Get patch if available
+
         patch = file.get("patch", "")
         if patch:
             diff_lines.append(patch)
-        else:
-            diff_lines.append(f"# Diff not available for {filename}")
-    
-    return "\n".join(diff_lines)
+
+    diff = "\n".join(diff_lines)
+    if len(diff) > DIFF_MAX_CHARS:
+        diff = diff[:DIFF_MAX_CHARS] + "\n" + DIFF_TRUNCATION_NOTE
+    return diff
 
 
 def _detect_language(files: list[dict]) -> str:
-    """Detect primary programming language from file extensions."""
-    
+    """
+    Detect primary programming language by file-extension frequency.
+
+    The extension with the most changed files wins. Falls back to
+    "unknown" when no recognizable extension is present.
+    """
+
     extensions: dict[str, str] = {
         ".py": "python",
         ".js": "javascript",
@@ -211,107 +368,19 @@ def _detect_language(files: list[dict]) -> str:
         ".vue": "vue",
         ".svelte": "svelte",
     }
-    
-    language_counts: dict[str, int] = {}
-    
+
+    ext_counts: dict[str, int] = {}
+
     for file in files:
         filename = file.get("filename", "")
-        ext = "." + filename.split(".")[-1] if "." in filename else ""
-        
-        lang = extensions.get(ext.lower(), "unknown")
-        if lang != "unknown":
-            language_counts[lang] = language_counts.get(lang, 0) + 1
-    
-    if language_counts:
-        return max(language_counts, key=language_counts.get)
-    
-    return "text"
+        if "." not in filename:
+            continue
+        ext = "." + filename.rsplit(".", 1)[-1].lower()
+        if ext in extensions:
+            ext_counts[ext] = ext_counts.get(ext, 0) + 1
 
+    if not ext_counts:
+        return "unknown"
 
-async def _post_comments_to_github(
-    github_service,
-    owner: str,
-    repo_name: str,
-    pr,
-    installation_id: int,
-    comments: list[dict],
-) -> None:
-    """
-    Post review comments to GitHub.
-    
-    Groups comments by file and posts as a review.
-    """
-    # Group comments by file
-    file_comments: dict[str, list[dict]] = {}
-    
-    for comment in comments:
-        file_path = comment.get("file_path", "")
-        if file_path not in file_comments:
-            file_comments[file_path] = []
-        file_comments[file_path].append(comment)
-    
-    # Build review comments
-    review_comments = []
-    
-    for file_path, file_comments_list in file_comments.items():
-        for comment in file_comments_list:
-            line = comment.get("line_number")
-            if line:
-                review_comments.append({
-                    "path": file_path,
-                    "line": str(line),
-                    "body": _format_comment_body(comment),
-                })
-    
-    if not review_comments:
-        return
-    
-    # Create review with comments
-    try:
-        summary = f"## CodeSage AI Review\n\n"
-        summary += f"Found {len(comments)} issues:\n"
-        
-        severity_counts = {"error": 0, "warning": 0, "info": 0, "suggestion": 0}
-        for c in comments:
-            severity = c.get("severity", "info")
-            severity_counts[severity] = severity_counts.get(severity, 0) + 1
-        
-        for sev, count in severity_counts.items():
-            if count > 0:
-                summary += f"- {sev.capitalize()}: {count}\n"
-        
-        await github_service.create_review(
-            owner,
-            repo_name,
-            pr.number,
-            summary,
-            "COMMENT",
-            review_comments[:20],  # GitHub limits to 20 files per review
-            installation_id,
-        )
-    except Exception:
-        # Don't fail the review if posting to GitHub fails
-        pass
-
-
-def _format_comment_body(comment: dict) -> str:
-    """Format a review comment with severity and suggestion."""
-    
-    severity = comment.get("severity", "info").upper()
-    category = comment.get("category", "general")
-    body = comment.get("body", "")
-    suggestion = comment.get("suggestion")
-    
-    emoji = {
-        "error": "\U0001F6AB",
-        "warning": "\u26A0\uFE0F",
-        "info": "\u2139\uFE0F",
-        "suggestion": "\U0001F4A1",
-    }.get(comment.get("severity", "info"), "\u2139\uFE0F")
-    
-    result = f"{emoji} **{severity}** [{category}]\n\n{body}"
-    
-    if suggestion:
-        result += f"\n\n**Suggestion:**\n```\n{suggestion}\n```"
-    
-    return result
+    top_ext = max(ext_counts, key=lambda e: ext_counts[e])
+    return extensions[top_ext]

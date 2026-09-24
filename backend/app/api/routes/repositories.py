@@ -3,6 +3,7 @@ Repository Routes
 Repository management and configuration endpoints.
 """
 
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -11,9 +12,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
 from app.db import get_db
-from app.db.models import User, Repository, GitHubInstallation, OAuthToken
+from app.db.models import GitHubInstallation, OAuthToken, Repository, User, WatchedRepo
 from app.schemas.repository import (
     RepositoryResponse,
     RepositoryUpdate,
@@ -25,6 +25,8 @@ from app.security.dependencies import get_current_user
 from app.services.github import github_service
 
 router = APIRouter()
+
+installation_states: dict[str, int] = {}
 
 
 class GitHubRepoInfo(BaseModel):
@@ -41,50 +43,294 @@ class GitHubRepoInfo(BaseModel):
     open_issues_count: int = 0
 
 
+class GitHubAppInstallUrl(BaseModel):
+    """GitHub App installation URL response."""
+
+    installation_url: str
+    state: str
+
+
+class GitHubInstallationSyncResponse(BaseModel):
+    """Result of syncing one GitHub App installation."""
+
+    installation_id: int
+    repositories_synced: int
+
+
+@router.get("/install-url", response_model=GitHubAppInstallUrl)
+async def get_github_app_install_url(
+    current_user: User = Depends(get_current_user),
+):
+    """Return the GitHub App installation URL for repository access."""
+
+    state = secrets.token_urlsafe(32)
+    installation_states[state] = current_user.github_id
+    return GitHubAppInstallUrl(
+        installation_url=github_service.get_app_installation_url(state),
+        state=state,
+    )
+
+
+@router.post("/installations/sync", response_model=GitHubInstallationSyncResponse)
+async def sync_github_app_installation(
+    installation_id: int = Query(..., description="GitHub App installation ID"),
+    state: Optional[str] = Query(None, description="Optional installation state returned by GitHub"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Sync a real GitHub App installation and its accessible repositories."""
+
+    if state is not None:
+        expected_github_id = installation_states.pop(state, None)
+        if expected_github_id != current_user.github_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid installation state",
+            )
+
+    installation_data = await github_service.get_app_installation(installation_id)
+    installation = await _upsert_installation(db, installation_data)
+    await _ensure_installation_accessible_to_user(db, installation, current_user)
+    repos = await _sync_installation_repositories(db, installation, installation_id)
+    await db.commit()
+
+    return GitHubInstallationSyncResponse(
+        installation_id=installation_id,
+        repositories_synced=len(repos),
+    )
+
+
 @router.get("/github", response_model=list[GitHubRepoInfo])
 async def list_github_repos(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    List user's GitHub repositories (not yet connected to CodeSage).
-    Uses the user's OAuth token to fetch repos from GitHub.
+    List repositories accessible through the user's GitHub App installation.
     """
-    # Get user's OAuth token
+    installations = await _get_user_installations(db, current_user)
+    if not installations:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Install the GitHub App before connecting repositories.",
+        )
+
+    connected_result = await db.execute(select(Repository.full_name))
+    connected_names = {r[0] for r in connected_result.all()}
+
+    response: list[GitHubRepoInfo] = []
+    seen_repo_ids: set[int] = set()
+    for installation in installations:
+        repos = await github_service.get_installed_repos(installation.installation_id)
+        for repo in repos:
+            repo_id = repo["id"]
+            if repo_id in seen_repo_ids or repo["full_name"] in connected_names:
+                continue
+            seen_repo_ids.add(repo_id)
+            response.append(
+                GitHubRepoInfo(
+                    id=repo_id,
+                    name=repo["name"],
+                    full_name=repo["full_name"],
+                    private=repo.get("private", False),
+                    default_branch=repo.get("default_branch", "main"),
+                    description=repo.get("description"),
+                    language=repo.get("language"),
+                    stargazers_count=repo.get("stargazers_count", 0),
+                    forks_count=repo.get("forks_count", 0),
+                    open_issues_count=repo.get("open_issues_count", 0),
+                )
+            )
+    return response
+
+
+async def _get_user_installations(
+    db: AsyncSession,
+    current_user: User,
+) -> list[GitHubInstallation]:
+    token_record = await _get_current_oauth_token(db, current_user)
+    if token_record:
+        github_installations = await github_service.get_user_app_installations(token_record.access_token)
+        github_installation_ids = [item["id"] for item in github_installations]
+        if github_installation_ids:
+            result = await db.execute(
+                select(GitHubInstallation).where(
+                    GitHubInstallation.installation_id.in_(github_installation_ids)
+                )
+            )
+            return list(result.scalars().all())
+
+    result = await db.execute(
+        select(GitHubInstallation).where(GitHubInstallation.account_id == current_user.github_id)
+    )
+    return list(result.scalars().all())
+
+
+async def _ensure_installation_accessible_to_user(
+    db: AsyncSession,
+    installation: GitHubInstallation,
+    current_user: User,
+) -> None:
+    if installation.account_id != current_user.github_id:
+        token_record = await _get_current_oauth_token(db, current_user)
+        if token_record:
+            github_installations = await github_service.get_user_app_installations(token_record.access_token)
+            accessible_ids = {item["id"] for item in github_installations}
+            if installation.installation_id in accessible_ids:
+                return
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Installation is not accessible to the authenticated GitHub user.",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="GitHub token expired. Please log in again before syncing installations.",
+        )
+
+
+async def _get_current_oauth_token(
+    db: AsyncSession,
+    current_user: User,
+) -> OAuthToken | None:
     result = await db.execute(
         select(OAuthToken).where(OAuthToken.user_id == current_user.id)
     )
     token_record = result.scalar_one_or_none()
-    
     if not token_record or token_record.is_expired:
+        return None
+    return token_record
+
+
+async def _upsert_installation(
+    db: AsyncSession,
+    installation_data: dict,
+) -> GitHubInstallation:
+    installation_id = installation_data.get("id")
+    account = installation_data.get("account", {})
+    result = await db.execute(
+        select(GitHubInstallation).where(GitHubInstallation.installation_id == installation_id)
+    )
+    record = result.scalar_one_or_none()
+
+    if record:
+        record.app_id = installation_data.get("app_id", record.app_id)
+        record.account_id = account.get("id", record.account_id)
+        record.account_login = account.get("login", record.account_login)
+        record.account_type = account.get("type", record.account_type)
+        record.permissions = installation_data.get("permissions", record.permissions)
+        return record
+
+    record = GitHubInstallation(
+        app_id=installation_data.get("app_id", 0),
+        installation_id=installation_id,
+        account_id=account.get("id", 0),
+        account_login=account.get("login", ""),
+        account_type=account.get("type", "User"),
+        permissions=installation_data.get("permissions", {}),
+    )
+    db.add(record)
+    await db.flush()
+    return record
+
+
+async def _sync_installation_repositories(
+    db: AsyncSession,
+    installation: GitHubInstallation,
+    github_installation_id: int,
+) -> list[Repository]:
+    repos_data = await github_service.get_installed_repos(github_installation_id)
+    synced: list[Repository] = []
+    for repo_data in repos_data:
+        repo = await _upsert_repository(db, installation, repo_data)
+        synced.append(repo)
+    return synced
+
+
+async def _upsert_repository(
+    db: AsyncSession,
+    installation: GitHubInstallation,
+    repo_data: dict,
+) -> Repository:
+    result = await db.execute(
+        select(Repository).where(Repository.github_repo_id == repo_data.get("id"))
+    )
+    repo = result.scalar_one_or_none()
+    if repo:
+        repo.installation_id = installation.id
+        repo.name = repo_data.get("name", repo.name)
+        repo.full_name = repo_data.get("full_name", repo.full_name)
+        repo.private = repo_data.get("private", repo.private)
+        repo.default_branch = repo_data.get("default_branch", repo.default_branch)
+        return repo
+
+    repo = Repository(
+        installation_id=installation.id,
+        github_repo_id=repo_data.get("id"),
+        name=repo_data.get("name", ""),
+        full_name=repo_data.get("full_name", ""),
+        private=repo_data.get("private", False),
+        default_branch=repo_data.get("default_branch", "main"),
+        enabled=True,
+    )
+    db.add(repo)
+    await db.flush()
+    return repo
+
+
+async def _set_watched_state(
+    db: AsyncSession,
+    user_id,
+    repo: Repository,
+    enabled: bool,
+) -> None:
+    """Keep watched_repos (the review switch) in sync with enable/disable."""
+    result = await db.execute(
+        select(WatchedRepo).where(
+            WatchedRepo.user_id == user_id,
+            WatchedRepo.repo_id == repo.github_repo_id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if record:
+        record.enabled = enabled
+    else:
+        db.add(
+            WatchedRepo(
+                user_id=user_id,
+                repo_id=repo.github_repo_id,
+                repo_name=repo.full_name,
+                enabled=enabled,
+            )
+        )
+
+
+async def _watched_state_map(db: AsyncSession, user_id) -> dict[int, bool]:
+    """github_repo_id -> watched enabled for this user (absent = not watching)."""
+    result = await db.execute(select(WatchedRepo).where(WatchedRepo.user_id == user_id))
+    return {item.repo_id: item.enabled for item in result.scalars().all()}
+
+
+async def _set_repository_enabled(
+    repository_id: str,
+    enabled: bool,
+    db: AsyncSession,
+    current_user: User,
+) -> RepositoryResponse:
+    """Flip legacy repositories.enabled AND the watched (review) switch."""
+    result = await db.execute(select(Repository).where(Repository.id == repository_id))
+    repo = result.scalar_one_or_none()
+    if not repo:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="GitHub token expired. Please log in again.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository not found",
         )
-    
-    # Fetch repos from GitHub
-    repos = await github_service.get_user_repos(token_record.access_token)
-    
-    # Filter out already connected repos
-    connected_result = await db.execute(select(Repository.full_name))
-    connected_names = {r[0] for r in connected_result.all()}
-    
-    return [
-        GitHubRepoInfo(
-            id=r["id"],
-            name=r["name"],
-            full_name=r["full_name"],
-            private=r.get("private", False),
-            default_branch=r.get("default_branch", "main"),
-            description=r.get("description"),
-            language=r.get("language"),
-            stargazers_count=r.get("stargazers_count", 0),
-            forks_count=r.get("forks_count", 0),
-            open_issues_count=r.get("open_issues_count", 0),
-        )
-        for r in repos
-        if r["full_name"] not in connected_names
-    ]
+    repo.enabled = enabled
+    await _set_watched_state(db, current_user.id, repo, enabled)
+    await db.commit()
+    await db.refresh(repo)
+    return RepositoryResponse.model_validate(repo)
 
 
 @router.post("/connect", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
@@ -95,34 +341,15 @@ async def connect_repository(
 ):
     """
     Connect a GitHub repository to CodeSage.
-    Creates installation and repository records.
+    Requires repository access from a real GitHub App installation.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Get user's OAuth token
-    result = await db.execute(
-        select(OAuthToken).where(OAuthToken.user_id == current_user.id)
-    )
-    token_record = result.scalar_one_or_none()
-    
-    if not token_record or token_record.is_expired:
+    installations = await _get_user_installations(db, current_user)
+    if not installations:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="GitHub token expired. Please log in again.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Install the GitHub App before connecting repositories.",
         )
-    
-    # Fetch repo details from GitHub
-    repos = await github_service.get_user_repos(token_record.access_token)
-    repo_data = next((r for r in repos if r["id"] == github_repo_id), None)
-    
-    if not repo_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Repository not found on GitHub",
-        )
-    
-    # Check if already connected
+
     existing = await db.execute(
         select(Repository).where(Repository.github_repo_id == github_repo_id)
     )
@@ -131,53 +358,25 @@ async def connect_repository(
             status_code=status.HTTP_409_CONFLICT,
             detail="Repository already connected",
         )
-    
-    # Find or create installation for this user
-    inst_result = await db.execute(
-        select(GitHubInstallation).where(
-            GitHubInstallation.account_id == current_user.github_id
+
+    selected_installation: GitHubInstallation | None = None
+    selected_repo: dict | None = None
+    for installation in installations:
+        repos = await github_service.get_installed_repos(installation.installation_id)
+        selected_repo = next((repo for repo in repos if repo.get("id") == github_repo_id), None)
+        if selected_repo:
+            selected_installation = installation
+            break
+
+    if not selected_installation or not selected_repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Repository is not available through the installed GitHub App.",
         )
-    )
-    installation = inst_result.scalar_one_or_none()
-    
-    if not installation:
-        installation = GitHubInstallation(
-            app_id=0,
-            installation_id=current_user.github_id,
-            account_id=current_user.github_id,
-            account_login=current_user.login,
-            account_type="User",
-            permissions={"pull_requests": "read", "contents": "read"},
-        )
-        db.add(installation)
-        try:
-            await db.flush()
-        except Exception:
-            await db.rollback()
-            # Another request created it — fetch it
-            inst_result = await db.execute(
-                select(GitHubInstallation).where(
-                    GitHubInstallation.account_id == current_user.github_id
-                )
-            )
-            installation = inst_result.scalar_one_or_none()
-            if not installation:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create repository installation",
-                )
-    
-    # Create repository record
-    repo = Repository(
-        installation_id=installation.id,
-        github_repo_id=github_repo_id,
-        name=repo_data["name"],
-        full_name=repo_data["full_name"],
-        private=repo_data.get("private", False),
-        default_branch=repo_data.get("default_branch", "main"),
-        enabled=True,
-    )
-    db.add(repo)
+
+    repo = await _upsert_repository(db, selected_installation, selected_repo)
+    # Connecting implies intent to review: create the watched (review) row too.
+    await _set_watched_state(db, current_user.id, repo, True)
     await db.commit()
     await db.refresh(repo)
     
@@ -228,9 +427,17 @@ async def list_repositories(
     
     result = await db.execute(query)
     repos = result.scalars().all()
+    watched = await _watched_state_map(db, current_user.id)
     
     return RepositoryListResponse(
-        items=[RepositoryResponse.model_validate(r) for r in repos],
+        items=[
+            # Badge truth: watched_repos is the review switch; no watched row
+            # means not watching (disabled) even if the legacy flag is True.
+            RepositoryResponse.model_validate(r).model_copy(
+                update={"enabled": watched.get(r.github_repo_id, False)}
+            )
+            for r in repos
+        ],
         total=total,
         page=page,
         per_page=per_page,
@@ -260,7 +467,10 @@ async def get_repository(
             detail="Repository not found",
         )
     
-    return RepositoryResponse.model_validate(repo)
+    watched = await _watched_state_map(db, current_user.id)
+    return RepositoryResponse.model_validate(repo).model_copy(
+        update={"enabled": watched.get(repo.github_repo_id, False)}
+    )
 
 
 @router.get("/{repository_id}/detail", response_model=RepositoryDetail)
@@ -297,6 +507,7 @@ async def get_repository_detail(
         .where(Review.status == "completed")
     )
     
+    watched = await _watched_state_map(db, current_user.id)
     return RepositoryDetail(
         id=str(repo.id),
         installation_id=str(repo.installation_id),
@@ -306,7 +517,7 @@ async def get_repository_detail(
         private=repo.private,
         default_branch=repo.default_branch,
         webhook_id=repo.webhook_id,
-        enabled=repo.enabled,
+        enabled=watched.get(repo.github_repo_id, False),
         created_at=repo.created_at,
         updated_at=repo.updated_at,
         settings=RepositorySettings(),
@@ -339,6 +550,7 @@ async def update_repository(
     # Update fields
     if update_data.enabled is not None:
         repo.enabled = update_data.enabled
+        await _set_watched_state(db, current_user.id, repo, update_data.enabled)
     if update_data.default_branch is not None:
         repo.default_branch = update_data.default_branch
     
@@ -346,6 +558,26 @@ async def update_repository(
     await db.refresh(repo)
     
     return RepositoryResponse.model_validate(repo)
+
+
+@router.post("/{repository_id}/enable", response_model=RepositoryResponse)
+async def enable_repository(
+    repository_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Grid toggle: enable reviews (legacy flag + watched_repos in sync)."""
+    return await _set_repository_enabled(repository_id, True, db, current_user)
+
+
+@router.post("/{repository_id}/disable", response_model=RepositoryResponse)
+async def disable_repository(
+    repository_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Grid toggle: disable reviews (legacy flag + watched_repos in sync)."""
+    return await _set_repository_enabled(repository_id, False, db, current_user)
 
 
 @router.delete("/{repository_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -369,6 +601,17 @@ async def delete_repository(
             detail="Repository not found",
         )
     
+    # Drop the watched (review) switch so removal sticks: a later webhook
+    # event recreates the repository row but stays gated off without it.
+    watched_result = await db.execute(
+        select(WatchedRepo).where(
+            WatchedRepo.user_id == current_user.id,
+            WatchedRepo.repo_id == repo.github_repo_id,
+        )
+    )
+    for record in watched_result.scalars().all():
+        await db.delete(record)
+
     # Delete repository (cascades to PRs and reviews)
     await db.delete(repo)
     await db.commit()

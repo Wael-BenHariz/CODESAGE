@@ -1,0 +1,15 @@
+# Build output
+dist/
+out-tsc/
+.angular/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Lock files
+package-lock.json
+
+# Misc
+*.min.js
+*.min.css

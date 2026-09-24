@@ -28,7 +28,7 @@ export class PrDetailComponent implements OnInit {
 
   private loadPullRequest(): void {
     this.github.getPullRequest(this.owner(), this.repo(), this.number()).subscribe({
-      next: (pr) => {
+      next: pr => {
         this.pullRequest.set(pr);
         this.isLoading.set(false);
       },
@@ -56,10 +56,14 @@ export class PrDetailComponent implements OnInit {
 
   getStateColor(state: string): string {
     switch (state) {
-      case 'open': return '#2f855a';
-      case 'closed': return '#c53030';
-      case 'merged': return '#805ad5';
-      default: return '#718096';
+      case 'open':
+        return '#2f855a';
+      case 'closed':
+        return '#c53030';
+      case 'merged':
+        return '#805ad5';
+      default:
+        return '#718096';
     }
   }
 }

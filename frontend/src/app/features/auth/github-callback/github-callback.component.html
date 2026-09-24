@@ -1,0 +1,18 @@
+<div class="github-callback">
+  <div class="callback-card">
+    @if (state() === 'processing') {
+      <div class="spinner"></div>
+    }
+    <p class="status" [class.error]="!isSuccess()">{{ statusMessage() }}</p>
+
+    @if (state() === 'error') {
+      <button class="retry-btn" (click)="retry()">Try again</button>
+    } @else if (state() === 'success') {
+      <a routerLink="/login" [queryParams]="{ message: 'app_installed' }" class="continue-link">
+        Log in to continue →
+      </a>
+    } @else {
+      <a routerLink="/dashboard" class="continue-link">Continue to dashboard →</a>
+    }
+  </div>
+</div>

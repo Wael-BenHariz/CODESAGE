@@ -37,7 +37,7 @@ export class CallbackComponent implements OnInit {
       next: () => {
         this.router.navigate(['/dashboard']);
       },
-      error: (err) => {
+      error: _err => {
         this.error = 'Authentication failed. Please try again.';
       }
     });

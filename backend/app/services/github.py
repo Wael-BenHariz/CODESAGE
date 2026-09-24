@@ -65,6 +65,13 @@ class GitHubService:
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return f"https://github.com/login/oauth/authorize?{query}"
 
+    def get_app_installation_url(self, state: str) -> str:
+        """Generate the GitHub App installation URL."""
+
+        if not settings.GITHUB_APP_SLUG:
+            raise ValueError("GITHUB_APP_SLUG must be configured to install the GitHub App")
+        return f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?state={state}"
+
     async def exchange_code_for_token(self, code: str) -> dict[str, Any]:
         """
         Exchange authorization code for OAuth access token.
@@ -289,6 +296,31 @@ class GitHubService:
         
         return repos
 
+    async def get_user_app_installations(self, access_token: str) -> list[dict[str, Any]]:
+        """List GitHub App installations accessible to the OAuth user."""
+
+        installations = []
+        page = 1
+
+        try:
+            while True:
+                data = await self._get(
+                    "/user/installations",
+                    access_token,
+                    {"per_page": 100, "page": page},
+                )
+                page_items = data.get("installations", [])
+                if not page_items:
+                    break
+                installations.extend(page_items)
+                if len(page_items) < 100:
+                    break
+                page += 1
+        except httpx.HTTPStatusError:
+            return []
+
+        return installations
+
     async def get_repository(
         self,
         owner: str,
@@ -386,11 +418,23 @@ class GitHubService:
             List of changed files
         """
         token = await self._get_installation_token(installation_id)
-        return await self._get(
-            f"/repos/{owner}/{repo}/pulls/{pr_number}/files",
-            token,
-            {"per_page": per_page},
-        )
+
+        # Paginate: GitHub returns max 100 files per page.
+        files: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            batch = await self._get(
+                f"/repos/{owner}/{repo}/pulls/{pr_number}/files",
+                token,
+                {"per_page": per_page, "page": page},
+            )
+            if not isinstance(batch, list) or not batch:
+                break
+            files.extend(batch)
+            if len(batch) < per_page:
+                break
+            page += 1
+        return files
 
     async def get_pull_request_commits(
         self,
@@ -580,9 +624,10 @@ class GitHubService:
         else:
             return False
         
-        # Compute HMAC
+        # Compute HMAC — explicit UTF-8 to match GitHub's signing exactly
+        # (equivalent to: "sha256=" + hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest())
         mac = hmac.new(
-            self.webhook_secret.encode(),
+            self.webhook_secret.encode("utf-8"),
             payload,
             hashlib.sha256,
         )
@@ -602,7 +647,7 @@ class GitHubService:
             HMAC signature in format sha256=xxx
         """
         mac = hmac.new(
-            self.webhook_secret.encode(),
+            self.webhook_secret.encode("utf-8"),
             payload,
             hashlib.sha256,
         )
@@ -633,15 +678,15 @@ class GitHubService:
         Returns:
             List of repository data
         """
-        jwt_token = self.create_app_jwt()
+        token = await self._get_installation_token(installation_id)
         
         repos = []
         page = 1
         
         while True:
             data = await self._get(
-                f"/app/installations/{installation_id}/repositories",
-                jwt_token,
+                "/installation/repositories",
+                token,
                 {"per_page": 100, "page": page},
             )
             repos.extend(data.get("repositories", []))
@@ -669,23 +714,9 @@ class GitHubService:
         Returns:
             Created webhook data
         """
-        token = await self._get_installation_token(installation_id)
-        
-        # This would be called with your actual webhook URL
-        webhook_url = f"https://your-domain.com/api/v1/webhooks/github"
-        
-        data = {
-            "name": "web",
-            "active": True,
-            "events": ["pull_request", "push"],
-            "config": {
-                "url": webhook_url,
-                "content_type": "json",
-                "secret": self.webhook_secret,
-            },
-        }
-        
-        return await self._post(f"/repos/{owner}/{repo}/hooks", token, data)
+        raise RuntimeError(
+            "Per-repository webhooks are disabled; configure the central GitHub App webhook instead."
+        )
 
     async def _get_installation_token(self, installation_id: int) -> str:
         """Get cached installation token."""

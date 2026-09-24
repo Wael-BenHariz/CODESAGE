@@ -94,3 +94,7 @@ venv/
 # Opencode config
 .opencode/
 opencode.json
+
+# Local Redis runtime artifacts
+dump.rdb
+server_log.txt

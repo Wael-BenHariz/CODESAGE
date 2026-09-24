@@ -42,10 +42,10 @@ export class AuthService {
   login(): void {
     // Fetch fresh OAuth URL from backend each time (never cached)
     this.http.get<{ authorization_url: string }>(`${environment.apiUrl}/auth/github`).subscribe({
-      next: (response) => {
+      next: response => {
         window.location.href = response.authorization_url;
       },
-      error: (error) => {
+      error: error => {
         console.error('Failed to initiate GitHub OAuth:', error);
         this._error.set('Failed to start GitHub login. Please try again.');
       }
@@ -73,12 +73,12 @@ export class AuthService {
 
     // Fetch user info from backend
     return this.http.get<User>(`${environment.apiUrl}/auth/me`).pipe(
-      tap((user) => {
+      tap(user => {
         this.setUser(user);
         this._currentUser.set(user);
         this._isLoading.set(false);
       }),
-      catchError((error) => {
+      catchError(error => {
         this._isLoading.set(false);
         this._error.set(error.error?.message || 'Failed to load user profile');
         throw error;
@@ -90,20 +90,22 @@ export class AuthService {
     this._isLoading.set(true);
     this._error.set(null);
 
-    return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/github/callback`, { code }).pipe(
-      map((response) => response.user),
-      tap((user) => {
-        this.setUser(user);
-        this._currentUser.set(user);
-        this._isLoading.set(false);
-        this.router.navigate(['/dashboard']);
-      }),
-      catchError((error) => {
-        this._isLoading.set(false);
-        this._error.set(error.error?.message || 'Authentication failed');
-        throw error;
-      })
-    );
+    return this.http
+      .post<AuthResponse>(`${environment.apiUrl}/auth/github/callback`, { code })
+      .pipe(
+        map(response => response.user),
+        tap(user => {
+          this.setUser(user);
+          this._currentUser.set(user);
+          this._isLoading.set(false);
+          this.router.navigate(['/dashboard']);
+        }),
+        catchError(error => {
+          this._isLoading.set(false);
+          this._error.set(error.error?.message || 'Authentication failed');
+          throw error;
+        })
+      );
   }
 
   logout(): void {
@@ -115,12 +117,12 @@ export class AuthService {
 
   refreshToken(): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/refresh`, {}).pipe(
-      tap((response) => {
+      tap(response => {
         this.setToken(response.accessToken);
         this.setUser(response.user);
         this._currentUser.set(response.user);
       }),
-      catchError((error) => {
+      catchError(error => {
         this.logout();
         throw error;
       })
@@ -129,16 +131,16 @@ export class AuthService {
 
   updateProfile(updates: Partial<User>): Observable<User> {
     return this.http.patch<User>(`${environment.apiUrl}/users/me`, updates).pipe(
-      tap((user) => {
+      tap(user => {
         this._currentUser.set(user);
         this.setUser(user);
       })
     );
   }
 
-  private validateToken(token: string): Observable<User> {
+  private validateToken(_token: string): Observable<User> {
     return this.http.get<User>(`${environment.apiUrl}/auth/me`).pipe(
-      tap((user) => {
+      tap(user => {
         this._currentUser.set(user);
         this.setUser(user);
       }),
