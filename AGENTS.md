@@ -11,7 +11,7 @@ AI-powered code review platform with GitHub integration. Analyzes PRs and provid
 | Backend | Python 3.11+ / FastAPI |
 | Database | PostgreSQL 15+ (SQLAlchemy async) |
 | Cache/Queue | Redis 7+ |
-| AI | Google Gemini API |
+| AI | Groq (`groq.py`, active review LLM) + Google Gemini (legacy `gemini.py`) |
 | Frontend | Angular 17+ (standalone components, SCSS) |
 | CI/CD | GitHub Actions → AWS EKS (blue-green) |
 
@@ -25,7 +25,7 @@ codesage/
 │   │   ├── db/models/      # SQLAlchemy models (incl. watched_repos.py)
 │   │   ├── schemas/        # Pydantic schemas
 │   │   ├── security/       # JWT & auth (jwt.py, dependencies.py)
-│   │   ├── services/       # GitHub, GitHub App, Gemini clients + review_orchestrator.py
+│   │   ├── services/       # GitHub, GitHub App clients + groq.py (active LLM) / gemini.py (legacy) + review_orchestrator.py
 │   │   │   └── agents/     # Multi-agent review system (see "Multi-Agent Review Architecture")
 │   │   ├── workers/        # BullMQ review queue (main.py, review_queue.py, review_processor.py)
 │   │   ├── chunker.py      # Diff chunking for large PRs
@@ -145,11 +145,11 @@ docker-compose --profile database up -d
 AI reviews run through a multi-agent pipeline (current focus of the `multi-agent` branch):
 
 - **`app/services/review_orchestrator.py`** — `ReviewOrchestrator`: runs 5 specialist agents **in parallel** (`asyncio.gather` with `return_exceptions=True`), tolerates individual agent failures, then synthesizes a final review via `OrchestratorAgent`.
-- **`app/services/agents/base_agent.py`** — `BaseAgent`: abstract base handling Gemini invocation + tolerant JSON extraction (regex `{...}` match) from LLM output.
+- **`app/services/agents/base_agent.py`** — `BaseAgent`: abstract base handling LLM invocation + tolerant JSON extraction (regex `{...}` match) from LLM output.
 - **Specialist agents** (`agents/specialist_agents.py`): `SecurityAgent`, `ComplexityAgent`, `PerformanceAgent`, `StyleAgent`, `TestCoverageAgent` — each with its own temperature (`AGENT_*_TEMPERATURE` in config).
-- **`agents/orchestrator_agent.py`** — `OrchestratorAgent.synthesize()` merges valid agent results into a final `ReviewResult`.
+- **`agents/orchestrator_agent.py`** — `OrchestratorAgent.synthesize()`: deterministic Python merge of agent results (dedupe by file+line, strongest severity, exact statistics) + a summary-only LLM call (compact headlines) — sized for Groq's ~8000 TPM/request free tier.
 - **Schemas** (`agents/schemas.py`): `ReviewContext`, `AgentResult`, `AgentComment`, `ReviewResult`, `ReviewStatistics`.
-- Per-agent token usage is tracked via `GeminiClient.total_usage()` and attached to the final review.
+- Per-agent token usage is tracked via `GroqClient.total_usage()` and attached to the final review.
 
 ## CI/CD Pipeline
 
@@ -202,11 +202,11 @@ If you see "redirect_uri is not associated with this application":
 
 ## Key Environment Variables
 
-All settings live in `backend/app/config.py` (pydantic-settings, loaded from `backend/.env`). Required (no default): `SECRET_KEY` (min 32 chars), `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM), `GITHUB_WEBHOOK_SECRET`, `STATE_TOKEN_SECRET`, `GEMINI_API_KEY`.
+All settings live in `backend/app/config.py` (pydantic-settings, loaded from `backend/.env`). Required (no default): `SECRET_KEY` (min 32 chars), `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` (PEM), `GITHUB_WEBHOOK_SECRET`, `STATE_TOKEN_SECRET`, `GEMINI_API_KEY` (legacy client), `GROQ_API_KEY` (active review LLM).
 
 Notables with defaults:
 - `GITHUB_APP_SLUG` — used to build the GitHub App installation URL
-- `GEMINI_MODEL` (default `gemini-2.0-flash`), `GEMINI_MAX_TOKENS`, `GEMINI_TEMPERATURE`, `AGENT_*_TEMPERATURE` (per-specialist-agent temps)
+- `GROQ_MODEL` (default `openai/gpt-oss-120b` — active review LLM via `app/services/groq.py`), `LLM_DIFF_CHAR_CAP` (16000 — LLM prompt diff cap, Groq free tier ≈ 8000 TPM/request), legacy `GEMINI_MODEL`/`GEMINI_MAX_TOKENS`/`GEMINI_TEMPERATURE`, `AGENT_*_TEMPERATURE` (per-specialist-agent temps)
 - `BULLMQ_REVIEW_QUEUE` (`review-requests`), `BULLMQ_CONCURRENCY` (5)
 - `REDIS_URL` — **default is `redis://redis:6379/0` (Docker service name)**; for local non-Docker dev with the Docker Redis, use `redis://:redis_password@localhost:6379/0`
 - `DATABASE_URL` — **default is `postgresql+asyncpg://codesage:codesage@postgres:5432/codesage` (Docker service name)**; use `localhost:5432` outside Docker
@@ -307,9 +307,23 @@ Single review switch = `watched_repos`; all verified with an automated 18/18 API
 - **Local dev B0 status**: `users.github_installation_id = 163874087` (live installation — a newer one than `163858576` from the earlier session; written by the real callback flow). `github_installations` has a row (created via simulated `installation/created` webhook). Setup URL external prerequisite still applies for future re-installs.
 - **Verification suite** (temp scripts `verify_selection.py` / `audit_schema.py`): V0 status/listing, V1 selection round-trip (sync upsert/reconcile/legacy semantics), F install-created, D not-watched reason, A watched → `created_review` + worker pickup (`pending → processing`), C legacy-off single-switch + truthful badge, V3 enable/disable sync, V4 delete-sticks + later event gated, E repositories-removed → switch off, FINAL selection restored — **18/18 PASS**. All 5 frontend gates green (`format:check`, `lint`, `type-check`, `test:ci` 4/4, `build`); backend files compile; services running (uvicorn :8000, worker on `review-requests`, ng serve :4200).
 
+#### PR Code Review Workflow — Full Verification & Brief Implementation (this session)
+
+- **Migration 006** (`006_add_review_result_columns.py`, rev 005→006): `reviews.overall_severity`, `reviews.github_review_id` (indexed), `review_comments.suggestion` — applied (`alembic current` = `006 (head)`).
+- **Webhook response contract** (per brief): invalid signature → **401** (warn-logged with event + delivery); unknown event → `{"status":"skipped"}`; non-accepted action (incl. `closed` after its PR-state update) → `{"status":"skipped"}`; unwatched → `{"status":"ignored","reason":"repo not enabled"}` (no-linked-user vs not-selected detail now goes to logs only); queued → `{"status":"queued","review_id":"<uuid>"}`; duplicate `delivery_id` (IntegrityError) → skipped.
+- **Duplicate review guard (final semantics)**: skip only when a prior *processed* `WebhookEvent` exists for same repo + action + `pull_request.id` + head-sha (different delivery) **AND a Review row already exists for that PR** — the review-exists clause comes straight from the brief and prevents gate-miss events (ignored but `processed=true`, never queued) from blocking later accepted deliveries.
+- **Worker** (`review_processor.py`, rewritten): idempotency guard returns success + `skipped` unless status == pending (no BullMQ retry, no re-raise — DB row is source of truth); installation token from `get_installation_token()` only; `get_pull_request_files` paginates (`github.py`, per_page=100 loop); binary/no-patch files filtered; diff cap 100 000 chars + `[diff truncated — showing first 100k characters]`; empty-after-filter → completed with `"No reviewable changes found."` (no LLM call); language = extension frequency with `"unknown"` fallback; pipeline LLM → post → store → completed; `post_pr_review()` posts a single summary with `event="COMMENT"`, `commit_id` = stored `head_sha`, no inline comments; post 401/403/404/422 handled (404 → completed + note in `error_message`, 422 → failed with full body logged); full tracebacks logged, never re-raised. `_classify_error` is URL-aware (Gemini HTTP errors no longer mislabeled as GitHub). Job shape `{review_id}` unchanged.
+- **LLM layer** (HTTP call structure in `gemini.py` untouched): added `ReviewParseError` (carries raw response), markdown-fence stripping, safe defaults for summary/severity/comments/statistics, and GitHub-Markdown summary instructions in both `_build_review_prompt` and `orchestrator_agent.py` synthesis (the orchestrator's `summary` is what gets posted).
+- **GEMINI_MODEL retired**: Google returns `404 NOT_FOUND … models/gemini-2.0-flash is no longer available` (API key itself valid — `/v1beta/models` lists 50 models). Switched `backend/.env` + `config.py` default to **`gemini-2.5-flash`** (verified 200 OK). Config values only.
+- **Redis repair**: :6379 was dead (queue_review hung / BullMQ never got jobs). `C:\Redis\redis-server.exe` is Redis **3.2.100** — cannot read the repo's `dump.rdb` (RDB v9) *and* cannot execute BullMQ's Lua scripts (`Unknown Redis command called from Lua script`) → unusable for this stack. The working binary is **`C:\Users\Waelbhz\AppData\Local\Programs\redis\redis-server.exe` (5.0.14.1)**, started with cwd = repo root (loads `dump.rdb`; conf: port 6379, `dir ./`, no password; logs to untracked `server_log.txt` at repo root). BullMQ/Redis infra untouched.
+- **Services**: single uvicorn :8000 + single worker on `review-requests` + Redis 5.0.14.1. Note: `Start-Process -PassThru` returns a wrapper PID, not the real process — match/kill service processes **by command line**, never by the returned PID (this caused duplicate uvicorn/worker accumulation).
+- **Verification results**: selection suite **18/18** (expectations migrated to the new response contract); brief smoke **25/25** — 401 / skipped event / skipped action / ignored-unwatched / `opened`→queued + duplicate→skipped / pending→processing→completed (32 s) / `github_review_id` + Markdown summary + severity stored / GitHub review posted by `codesage-ai-bot[bot]` with `state=COMMENTED`, body byte-identical to stored summary, id match / selection restored; frontend gates all green (`format:check`, `lint` 0 errors, `type-check`, `test:ci` 4/4, `build`).
+- **Smoke fixture constraint**: GitHub App has `pull_requests: write` (PR creation + review posting OK) but only `contents: read` → branch/commit creation 403; testWAEL has a single branch. Fixture = existing open **PR #1 on `Wael-BenHariz/tp3` (branch `test-codesage`, 1 commit ahead)**; tp3 enabled for the run, then selection restored to testWAEL-only. `ReviewComment` rows are written only when the LLM returns `comments[]` (20-issue run → 20 rows; no-issue run → severity `info`, 0 rows) — by design. GitHub stores posted comment-reviews as `state=COMMENTED`, `event=null` (the POST-side enum is `COMMENT`).
+
 ## Known Gaps
 
 - Backend test suite is empty — `pytest` is installed but `backend/tests/` has no files
+- GitHub App `contents` permission is read-only — the App cannot create branches/commits (403 on `git/refs`); PR creation and review posting work (`pull_requests: write`). Raise it in the App settings only if commit-based test fixtures are ever needed.
 - Legacy `/repositories/github` + `/repositories/connect` still require `github_installations` rows (created only by `/repositories/installations/sync` or webhooks) — the signed-state install callback does not create them; post-install repo selection uses the `/github/*` endpoints instead
 - GitHub App *Setup URL* (external GitHub App setting, not versioned in this repo) must point at `/api/v1/auth/github/app/callback` — if missing or wrong, the install callback never fires
 - `frontend/Dockerfile.dev` does not exist but is referenced by the docker-compose `frontend` service

@@ -418,11 +418,23 @@ class GitHubService:
             List of changed files
         """
         token = await self._get_installation_token(installation_id)
-        return await self._get(
-            f"/repos/{owner}/{repo}/pulls/{pr_number}/files",
-            token,
-            {"per_page": per_page},
-        )
+
+        # Paginate: GitHub returns max 100 files per page.
+        files: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            batch = await self._get(
+                f"/repos/{owner}/{repo}/pulls/{pr_number}/files",
+                token,
+                {"per_page": per_page, "page": page},
+            )
+            if not isinstance(batch, list) or not batch:
+                break
+            files.extend(batch)
+            if len(batch) < per_page:
+                break
+            page += 1
+        return files
 
     async def get_pull_request_commits(
         self,
@@ -612,9 +624,10 @@ class GitHubService:
         else:
             return False
         
-        # Compute HMAC
+        # Compute HMAC — explicit UTF-8 to match GitHub's signing exactly
+        # (equivalent to: "sha256=" + hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest())
         mac = hmac.new(
-            self.webhook_secret.encode(),
+            self.webhook_secret.encode("utf-8"),
             payload,
             hashlib.sha256,
         )
@@ -634,7 +647,7 @@ class GitHubService:
             HMAC signature in format sha256=xxx
         """
         mac = hmac.new(
-            self.webhook_secret.encode(),
+            self.webhook_secret.encode("utf-8"),
             payload,
             hashlib.sha256,
         )

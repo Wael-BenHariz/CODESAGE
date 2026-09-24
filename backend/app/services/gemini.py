@@ -12,6 +12,17 @@ import httpx
 from app.config import settings
 
 
+class ReviewParseError(Exception):
+    """Raised when a Gemini review response cannot be parsed into JSON.
+
+    Carries the raw model output so callers can log it for diagnosis.
+    """
+
+    def __init__(self, message: str, raw_response: str = ""):
+        super().__init__(message)
+        self.raw_response = raw_response
+
+
 class GeminiClient:
     """Raw async Gemini API client shared by review services and agents."""
 
@@ -73,8 +84,22 @@ class GeminiClient:
             data = response.json()
             usage = data.get("usageMetadata", {})
 
+            # Tolerant extraction: empty candidates / parts (safety blocks,
+            # token exhaustion) must yield "" so callers can retry with a
+            # clear error instead of crashing on KeyError/IndexError.
+            candidates = data.get("candidates") or []
+            parts = (
+                candidates[0].get("content", {}).get("parts", [])
+                if candidates
+                else []
+            )
+            text = next(
+                (p.get("text", "") for p in parts if "text" in p),
+                "",
+            )
+
             result = {
-                "text": data["candidates"][0]["content"]["parts"][0]["text"],
+                "text": text,
                 "prompt_tokens": usage.get("promptTokenCount", 0),
                 "completion_tokens": usage.get("candidatesTokenCount", 0),
                 "total_tokens": usage.get("totalTokenCount", 0),
@@ -259,10 +284,14 @@ class GeminiService:
 {diff}
 
 ## Response Format
-Provide your review in JSON format:
+Provide your review in JSON format.
+
+The summary field will be posted as a GitHub Pull Request review comment.
+Format it with Markdown: use ## headers, bullet points, and code blocks
+where appropriate. Be concise and actionable.
 
 {{
-    "summary": "Overall assessment of the changes (2-4 sentences)",
+    "summary": "Overall assessment of the changes, formatted for GitHub Markdown (## headers, bullets, code blocks)",
     "overall_severity": "info|warning|error",
     "comments": [
         {{
@@ -282,7 +311,8 @@ Provide your review in JSON format:
     }}
 }}
 
-IMPORTANT: Return ONLY valid JSON, no additional text or markdown formatting."""
+IMPORTANT: Return ONLY valid JSON -- no markdown fences (```), no additional
+text before or after the JSON object."""
 
     def _build_file_review_prompt(
         self,
@@ -355,42 +385,60 @@ Provide a JSON summary:
 Return ONLY valid JSON."""
 
     def _parse_review_response(self, response: dict[str, Any]) -> dict[str, Any]:
-        """Parse the AI response into structured review data."""
-        
+        """Parse the AI response into structured review data.
+
+        Raises:
+            ReviewParseError: When the response is completely unparseable;
+                the raw model output is attached for logging.
+        """
+        raw_text = response.get("text", "") or ""
+        text = raw_text.strip()
+
+        # Strip markdown fences (```json ... ```) before parsing.
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+
+        # Extract JSON object (tolerates leading/trailing prose).
+        json_match = re.search(r"\{[\s\S]*\}", text)
+        raw_json = json_match.group() if json_match else text
+
         try:
-            text = response["text"]
-            
-            # Extract JSON from response (handle potential markdown code blocks)
-            json_match = re.search(r"\{[\s\S]*\}", text)
-            if json_match:
-                data = json.loads(json_match.group())
-            else:
-                data = json.loads(text)
-            
-            # Add usage statistics
-            data["usage"] = {
-                "prompt_tokens": response.get("prompt_tokens", 0),
-                "completion_tokens": response.get("completion_tokens", 0),
-                "total_tokens": response.get("total_tokens", 0),
-            }
-            
-            return data
-            
-        except (json.JSONDecodeError, KeyError) as e:
-            # Return error structure if parsing fails
-            return {
-                "summary": text[:500] if text else "Failed to generate review",
-                "overall_severity": "info",
-                "comments": [],
-                "statistics": {
-                    "files_reviewed": 0,
-                    "issues_found": 0,
-                    "by_severity": {},
-                    "by_category": {},
-                },
-                "error": str(e),
-                "raw_response": text,
-            }
+            data = json.loads(raw_json)
+        except json.JSONDecodeError as e:
+            raise ReviewParseError(
+                f"Failed to parse review response: {e}",
+                raw_response=raw_text,
+            ) from e
+
+        if not isinstance(data, dict):
+            raise ReviewParseError(
+                "Review response JSON is not an object",
+                raw_response=raw_text,
+            )
+
+        # Fill safe defaults -- never raise KeyError on missing optional fields.
+        data.setdefault("summary", "")
+        data.setdefault("overall_severity", "info")
+        data.setdefault("comments", [])
+        data.setdefault(
+            "statistics",
+            {
+                "files_reviewed": 0,
+                "issues_found": 0,
+                "by_severity": {},
+                "by_category": {},
+            },
+        )
+
+        # Add usage statistics
+        data["usage"] = {
+            "prompt_tokens": response.get("prompt_tokens", 0),
+            "completion_tokens": response.get("completion_tokens", 0),
+            "total_tokens": response.get("total_tokens", 0),
+        }
+
+        return data
 
     def _parse_file_comments(
         self,

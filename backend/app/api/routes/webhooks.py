@@ -4,11 +4,13 @@ GitHub webhook handling endpoints.
 """
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,6 +18,8 @@ from app.db import get_db
 from app.db.models import GitHubInstallation, PullRequest, Repository, Review, User, WatchedRepo, WebhookEvent
 from app.schemas.webhook import WebhookProcessResult
 from app.services.github import github_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -43,6 +47,11 @@ async def handle_github_webhook(
     
     # Verify signature
     if not github_service.verify_webhook_signature(body, signature):
+        logger.warning(
+            "Webhook rejected: invalid signature (event=%r, delivery=%r)",
+            event_type,
+            delivery_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature",
@@ -68,12 +77,10 @@ async def handle_github_webhook(
         return await _handle_installation_repos_event(payload, delivery_id, db)
     
     else:
-        # Acknowledge unknown events without processing
-        return {
-            "status": "acknowledged",
-            "event_type": event_type,
-            "message": "Event type not handled",
-        }
+        # Any event type outside the review workflow (and the GitHub App
+        # installation lifecycle handled above) is skipped cleanly.
+        logger.info("Skipping unhandled webhook event type %r (delivery=%r)", event_type, delivery_id)
+        return {"status": "skipped"}
 
 
 async def _handle_pull_request_event(
@@ -145,7 +152,14 @@ async def _handle_pull_request_event(
         processed=False,
     )
     db.add(webhook_event)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Duplicate delivery (delivery_id is unique): acknowledge without
+        # queueing a second review job for the same event.
+        await db.rollback()
+        logger.info("Skipping duplicate webhook delivery %r (event=pull_request)", delivery_id)
+        return {"status": "skipped"}
     await db.refresh(webhook_event)
     
     # Process based on action
@@ -222,27 +236,69 @@ async def _handle_pull_request_event(
             webhook_event.processed = True
             await db.commit()
             if not owners:
-                reason = "no user linked to this installation"
+                logger.info(
+                    "Ignoring %s: no user linked to installation %s",
+                    repo.full_name,
+                    installation_id,
+                )
             else:
-                reason = "repository not selected by installation owner"
-            return {
-                "status": "ignored",
-                "reason": reason,
-            }
-        
+                logger.info(
+                    "Ignoring %s: repository not selected by installation owner",
+                    repo.full_name,
+                )
+            return {"status": "ignored", "reason": "repo not enabled"}
+
+        # Duplicate event guard: never queue a second job for the same
+        # commit push on the same PR -- only when a prior event with the
+        # same pull_request id + head sha + action was processed AND a
+        # review already exists for this PR (ignored events never queued
+        # anything and must not block later accepted deliveries).
+        head_sha = pr_data.get("head", {}).get("sha", "")
+        pr_gh_id = pr_data.get("id")
+        duplicate = False
+        if head_sha and pr_gh_id:
+            prior_event = await db.scalar(
+                select(WebhookEvent.id)
+                .where(
+                    WebhookEvent.repository_id == repo.id,
+                    WebhookEvent.event_type == "pull_request",
+                    WebhookEvent.action == action,
+                    WebhookEvent.delivery_id != delivery_id,
+                    WebhookEvent.processed.is_(True),
+                    WebhookEvent.payload["pull_request"]["id"].astext == str(pr_gh_id),
+                    WebhookEvent.payload["pull_request"]["head"]["sha"].astext == head_sha,
+                )
+                .limit(1)
+            )
+            if prior_event:
+                existing_review = await db.scalar(
+                    select(Review.id).where(Review.pull_request_id == pr_record.id).limit(1)
+                )
+                duplicate = existing_review is not None
+            if duplicate:
+                webhook_event.processed = True
+                await db.commit()
+                logger.info(
+                    "Skipping duplicate review for %s@%s (action=%s)",
+                    repo.full_name,
+                    head_sha[:7],
+                    action,
+                )
+                return {"status": "skipped"}
+
         # Trigger review -- watched_repos.enabled is the single review switch
         # (legacy repositories.enabled is display-only and no longer gates).
         from app.workers.review_queue import queue_review
-            
-        # Check for pending reviews
+
+        # Skip while a review for this pull request is already queued/running.
         pending = await db.execute(
             select(Review)
             .where(Review.pull_request_id == pr_record.id)
             .where(Review.status.in_(["pending", "processing"]))
         )
-            
+
         if not pending.scalar_one_or_none():
-            # Create new review
+            # Create new review (status=pending) and queue the BullMQ job.
             review = Review(
                 pull_request_id=pr_record.id,
                 status="pending",
@@ -251,31 +307,22 @@ async def _handle_pull_request_event(
             db.add(review)
             await db.commit()
             await db.refresh(review)
-                
+
             # Queue review job
             await queue_review(str(review.id))
-                
+
             # Mark event as processed
             webhook_event.processed = True
             await db.commit()
-                
-            return WebhookProcessResult(
-                event_id=str(webhook_event.id),
-                processed=True,
-                action_taken="created_review",
-                review_id=str(review.id),
-            )
-        
+
+            return {"status": "queued", "review_id": str(review.id)}
+
         # Mark event as processed
         webhook_event.processed = True
         await db.commit()
-        
-        return WebhookProcessResult(
-            event_id=str(webhook_event.id),
-            processed=True,
-            action_taken=f"processed_{action}",
-        )
-    
+
+        return {"status": "skipped"}
+
     elif action == "closed":
         # Update PR state
         pr_result = await db.execute(
@@ -292,23 +339,16 @@ async def _handle_pull_request_event(
         
         webhook_event.processed = True
         await db.commit()
-        
-        return WebhookProcessResult(
-            event_id=str(webhook_event.id),
-            processed=True,
-            action_taken="closed_pr",
-        )
-    
+
+        # State bookkeeping only -- no review is triggered by "closed".
+        return {"status": "skipped"}
+
     else:
-        # Acknowledge other actions
+        # Any other pull_request action is skipped (no review).
         webhook_event.processed = True
         await db.commit()
-        
-        return WebhookProcessResult(
-            event_id=str(webhook_event.id),
-            processed=True,
-            action_taken=f"acknowledged_{action}",
-        )
+
+        return {"status": "skipped"}
 
 
 async def _handle_installation_event(

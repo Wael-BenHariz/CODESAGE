@@ -14,7 +14,7 @@ from app.services.agents import (
     StyleAgent,
     TestCoverageAgent,
 )
-from app.services.gemini import GeminiClient
+from app.services.groq import GroqClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class ReviewOrchestrator:
     """Run specialist agents in parallel, then synthesize their outputs."""
 
-    def __init__(self, client: GeminiClient):
+    def __init__(self, client: GroqClient):
         self.client = client
 
     async def run(self, context: ReviewContext) -> ReviewResult:
@@ -35,12 +35,23 @@ class ReviewOrchestrator:
             StyleAgent(self.client),
             TestCoverageAgent(self.client),
         ]
+
+        # One Gemini call in flight at a time: parallel calls burst past the
+        # free-tier per-minute quota (429) and overload the model (503).
+        # Agents still run via gather with fault tolerance — just staggered.
+        semaphore = asyncio.Semaphore(1)
+
+        async def _run_limited(agent):
+            async with semaphore:
+                return await agent.run(context)
+
         results = await asyncio.gather(
-            *(agent.run(context) for agent in agents),
+            *(_run_limited(agent) for agent in agents),
             return_exceptions=True,
         )
 
         valid_results: list[AgentResult] = []
+        failed_agents: list[str] = []
         for agent, result in zip(agents, results):
             if isinstance(result, AgentResult):
                 logger.info(
@@ -53,6 +64,7 @@ class ReviewOrchestrator:
                 )
                 valid_results.append(result)
             else:
+                failed_agents.append(agent.AGENT_NAME)
                 logger.warning(
                     "Review agent failed",
                     extra={"agent": agent.AGENT_NAME},
@@ -63,8 +75,15 @@ class ReviewOrchestrator:
 
         logger.info(
             "Synthesizing review agent outputs",
-            extra={"valid_agent_count": len(valid_results)},
+            extra={
+                "valid_agent_count": len(valid_results),
+                "failed_agents": failed_agents,
+            },
         )
-        review = await OrchestratorAgent(self.client).synthesize(context, valid_results)
+        review = await OrchestratorAgent(self.client).synthesize(
+            context,
+            valid_results,
+            failed_agents=failed_agents,
+        )
         review.usage = self.client.total_usage()
         return review

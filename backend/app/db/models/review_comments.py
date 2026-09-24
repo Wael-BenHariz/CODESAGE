@@ -105,6 +105,13 @@ class ReviewComment(Base):
         comment="Category: bug, security, performance, style, etc.",
     )
 
+    # Optional suggested fix for the commented issue
+    suggestion: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Optional suggested fix for the comment",
+    )
+
     # Resolution Status
     resolved: Mapped[bool] = mapped_column(
         Boolean,

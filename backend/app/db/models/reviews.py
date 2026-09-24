@@ -93,6 +93,21 @@ class Review(Base):
         comment="Number of tokens consumed",
     )
 
+    # Overall AI verdict (info | warning | error)
+    overall_severity: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="Overall review severity: info, warning, error",
+    )
+
+    # GitHub PR review reference (set after posting the review summary)
+    github_review_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        nullable=True,
+        index=True,
+        comment="GitHub pull request review ID",
+    )
+
     # Timing
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
