@@ -43,7 +43,7 @@ codesage/
 └── .github/workflows/      # CI/CD pipeline (ci-cd.yaml)
 ```
 
-**Note**: `infrastructure/` (K8s manifests, postgres init.sql, monitoring configs) is referenced by docker-compose and CI but does not exist in the repo yet.
+**Note**: `infrastructure/k8s/` (full k3s manifest tree + build-and-deploy script) and `infrastructure/webhook-proxy/` (path-filter proxy + ngrok tunnel, systemd units) now exist; `infrastructure/postgres/init.sql` and monitoring configs referenced by docker-compose/CI still do not.
 
 ## Developer Commands
 
@@ -320,6 +320,58 @@ Single review switch = `watched_repos`; all verified with an automated 18/18 API
 - **Verification results**: selection suite **18/18** (expectations migrated to the new response contract); brief smoke **25/25** — 401 / skipped event / skipped action / ignored-unwatched / `opened`→queued + duplicate→skipped / pending→processing→completed (32 s) / `github_review_id` + Markdown summary + severity stored / GitHub review posted by `codesage-ai-bot[bot]` with `state=COMMENTED`, body byte-identical to stored summary, id match / selection restored; frontend gates all green (`format:check`, `lint` 0 errors, `type-check`, `test:ci` 4/4, `build`).
 - **Smoke fixture constraint**: GitHub App has `pull_requests: write` (PR creation + review posting OK) but only `contents: read` → branch/commit creation 403; testWAEL has a single branch. Fixture = existing open **PR #1 on `Wael-BenHariz/tp3` (branch `test-codesage`, 1 commit ahead)**; tp3 enabled for the run, then selection restored to testWAEL-only. `ReviewComment` rows are written only when the LLM returns `comments[]` (20-issue run → 20 rows; no-issue run → severity `info`, 0 rows) — by design. GitHub stores posted comment-reviews as `state=COMMENTED`, `event=null` (the POST-side enum is `COMMENT`).
 
+#### Workstream A — SonarQube Static Analysis → 5-Agent LLM Refinement (this session)
+
+- LLM-as-analyzer replaced: new `app/services/sonarqube.py` runs **sonar-scanner via `asyncio.create_subprocess_exec` only** against a **unique per-review SonarQube project key**, polls `ce/activity`, fetches paginated issues, groups them per specialist (`group_issues_by_agent`), and **always deletes the project** (best-effort `finally`).
+- `ReviewContext` gained `sonar_issues` + `with_issues()` slicing and `sonar_scan_failed`; **diff still passed as before**. `ReviewResult` shape, `groq.py`, `base_agent.py`, and the BullMQ job shape are unchanged.
+- `specialist_agents.py` rewritten as SonarQube-refinement prompts via a shared `_SonarSpecialistAgent` base (per-agent DOMAIN + `AGENT_*_TEMPERATURE`); `review_orchestrator.run(context, sonar_groups)` slices issues per domain (semaphore kept); `OrchestratorAgent` synthesis reports the SonarQube source and a "Static analysis unavailable" note on fallback.
+- **Hard constraint**: SonarQube failure never fails a review — `scan()` wraps `httpx.HTTPError`/`OSError` into `SonarQubeError`; the worker catches it (incl. bare `Exception`) and falls back to empty groups with a completed review.
+- `github_app.fetch_file_content()` fetches full PR file contents with the **installation token** as scanner input.
+- Config: `SONARQUBE_URL`/`SONARQUBE_TOKEN` in `config.py`; migration **006** adds `reviews.overall_severity`, `reviews.github_review_id`, `review_comments.suggestion`.
+- Verified on host: system UP, project lifecycle + cleanup, real Java/Python scans → correct agent groups, all 10 grouping/priority cases, F1–F5 fallback tests, 21/21 pipeline smoke, queue→worker GitHub-boundary test.
+
+#### Workstream B — Kubernetes (k3s) + Multi-Stage Alpine Images (this session)
+
+- `infrastructure/k8s/`: namespace, MetalLB (pool `10.171.24.200-210`), ingress-nginx LoadBalancer → **`10.171.24.201`**, postgres, redis (password `redis_password`), backend/worker/frontend Deployments+Services, Secret `codesage-backend-secret`, base+overlay kustomizations, `APPLY_ORDER.md`, `scripts/build-and-deploy.sh` (Docker build → `k3s ctr images import` → rollout; worker image is **not** retagged over the backend image).
+- Images: `backend/Dockerfile` + `backend/Dockerfile.worker` — python:3.11-alpine multi-stage, `sonar-scanner` 5.0.1 + OpenJDK 17 on PATH in the final stage (bundled **glibc** JRE removed + `use_embedded_jre=false` because musl can't exec it; `ENV SONAR_SCANNER_VERSION` must be redeclared in the final stage — stage ENVs don't cross `COPY --from`); `frontend/Dockerfile` (node:20-alpine build → nginx, copies `dist/codesage-frontend/browser`, `/api` proxy in `frontend/nginx.conf`); `.dockerignore` files added for both.
+- Deployed & verified end-to-end: all pods Running; health via pod and via `http://10.171.24.201/api/v1/health`; SPA + deep-route fallback 200; **in-cluster SonarQube DNS** (`sonarqube-sonarqube.sonarqube.svc.cluster.local:9000`) UP from pods; `sonar-scanner --version` inside pods; in-cluster scan → 6 issues correctly grouped + project cleanup; DB from pod (alembic 006); BullMQ job queued from host → **pod worker** processed it → classified GitHub 401 boundary; frontend gates all green (`format:check`, `lint` 0 errors, `type-check`, `test:ci` 4/4 with `CHROME_BIN=/usr/bin/chromium`, `build`).
+- Frontend page served by the pod's nginx (production build), not `ng serve`.
+
+#### Full Live E2E — real GitHub + Groq + SonarQube through k3s (this session)
+
+- Real credentials wired into `backend/.env` + k8s Secret (GitHub OAuth id/secret, real App RSA key for App 3755554, `CODESAGEsecret` webhook secret, Groq/Gemini keys) and validated **from inside the backend pod**: App JWT → 200 with 2 installations, Groq `openai/gpt-oss-120b` completion → 200, Gemini → 200.
+- User configured the GitHub side: OAuth App callback, GitHub App authorization callback + Setup URL + Webhook URL/secret all pointing at `10.171.24.201` endpoints.
+- **14/14 checks**: bad HMAC → 401; signed `pull_request opened` webhook (built from the **real** PR object) → `http://10.171.24.201/api/v1/webhooks/github` → queued → pod worker → real installation token → real PR files (`Wael-BenHariz/tp3` PR #1, `cbd2c5d8`, +214) → in-cluster SonarQube scan (**19 issues**, project deleted, 204) → 5 Groq agents + synthesis (all 200) → review **posted on GitHub**: [`#pullrequestreview-5317652210`](https://github.com/Wael-BenHariz/tp3/pull/1#pullrequestreview-5317652210), author `codesage-ai-bot[bot]`, state `COMMENTED`, body byte-identical to stored summary; DB row `completed | error | 5317652210 | summary 2117 chars | 19 comments`.
+- Fresh k3s DB left with a realistic onboarding seed: user (`github_id=75458407`, `github_installation_id=164169573`) + `github_installations` row + watched tp3 (`repo_id=320397876`).
+
+#### Public Webhook Exposure — ngrok Tunnel + Path-Filter Proxy (2026-09-26)
+
+- **Live GitHub App webhook URL**: `https://jerica-holmic-nahla.ngrok-free.dev/api/v1/webhooks/github` (secret `CODESAGEsecret`). ngrok free tier; the domain is ngrok-assigned (reserving one fails on the free plan — `ERR_NGROK_206`) but verified stable across tunnel restarts.
+- Chain: github.com → ngrok agent → `127.0.0.1:8081` path-filter proxy (`infrastructure/webhook-proxy/proxy.py` — forwards **only** `POST /api/v1/webhooks/*`, everything else 404) → `http://10.171.24.201` ingress → backend pod.
+- Both hops are systemd units enabled at boot: `code-sage-webhook-proxy.service` + `code-sage-webhook-tunnel.service`. The committed config template `infrastructure/webhook-proxy/ngrok.yml` ships `REPLACE_ME` placeholders; the live config with the real authtoken is `~/.config/ngrok/ngrok.yml`, outside the repo.
+- Verified through the public URL: unknown path → 404, bad HMAC → 401, valid signed ping → 200 (full GitHub→ngrok→proxy→.201→backend chain).
+- Ingress is **hostless** (K8s rejects an IP inside `rules[].host`) so it matches the bare `10.171.24.201` Host header as well as `codesage.local` (`/etc/hosts` → .201).
+
+#### Post-Reboot Network Recovery + CoreDNS Stale-Upstream Fix (2026-09-26)
+
+- After the reboot only the USB adapter is up: **static IP `10.171.24.246/24`** (gw/DNS `10.171.24.212`) on `enp0s20f0u2` via NetworkManager; WiFi `wlp2s0` (whose old address `10.103.145.245` k3s had auto-detected as node IP → MetalLB speaker bind crash) stays down.
+- k3s node IP pinned **outside the repo**: `/etc/rancher/k3s/config.yaml` → `node-ip: 10.171.24.246`. Re-plugging the adapter needs no config changes — ingress (`.201`) and the tunnel URL are adapter-independent.
+- **Stale `.201` root cause**: `ingress-nginx-controller` Service had lost `spec.selector` (a client-side `kubectl apply` of `ingress-nginx-patch.yaml` — which had no selector — wiped it) → EndpointSlice frozen on a dead pod IP → kube-proxy DNAT → `No route to host` while all pods were Running. Fix: selector restored via `kubectl patch` **and** now present in `infrastructure/k8s/base/ingress/ingress-nginx-patch.yaml` with a comment on the three-way-merge trap. **Diagnostic rule**: pods Running + service unreachable → check `kubectl get svc -o jsonpath='{.spec.selector}'` *before* touching pods (recreating pods cannot fix a selector-less Service).
+- **OAuth `ConnectTimeout` (pods only)**: CoreDNS (`dnsPolicy: Default`, `forward . /etc/resolv.conf`) had the dead WiFi resolver baked into its old pod resolv.conf → external DNS `SERVFAIL` in every pod while the host resolved fine → httpx connect timeout during the GitHub code exchange (`OAuth flow failed: ConnectTimeout: `). Fix: recreate the CoreDNS pod so kubelet regenerates resolv.conf from the node's current resolver — `kubectl delete pod -n kube-system -l k8s-app=kube-dns`. Verified from backend + worker pods: github.com, api.github.com, api.groq.com, Gemini, in-cluster SonarQube all resolve <0.05 s.
+- Recovery verified green: `.201` health + SPA 200, `codesage.local` 200, ClusterIP `10.43.161.112` 200, NodePort `127.0.0.1:31189` 200, worker listening on `review-requests`, MetalLB announcing `.201`.
+
+#### tp3 Live Test — Review Posted on GitHub; App UI Showed Nothing (2026-09-26)
+
+User's manual test on `Wael-BenHariz/tp3` PR #1 (times UTC, reconstructed from `webhook_events` + worker logs + `watched_repos.updated_at`):
+
+1. **21:13:56 `closed`** → processed (action skipped after PR-state update); **21:14:22 `reopened`** → **not queued** — tp3 was still disabled in `watched_repos` → handler returned `ignored: repo not enabled` (marks the event processed).
+2. **21:17:31** — user enabled tp3 in the app UI (`watched_repos.updated_at`).
+3. **21:18:54 `closed`** + **21:19:03 `reopened`** → queued → review row `completed` (`overall_severity=error`, `github_review_id=5327492848`, summary 1457 chars, 6 `review_comments`).
+4. **21:21:07** review **posted on GitHub**: [`#pullrequestreview-5327492848`](https://github.com/Wael-BenHariz/tp3/pull/1#pullrequestreview-5327492848), author `codesage-ai-bot[bot]`, `state=COMMENTED`, body = stored summary.
+- Pipeline trace: installation-token file fetch (`src/code.py@cbd2c5d8`) → SonarQube project create/scan/poll → 5 specialists → synthesis → `POST .../pulls/1/reviews` → 200.
+- **"No comment posted" was two separate things**: (a) the first attempt correctly predates enabling tp3 (ignored by the watch gate), and (b) the frontend calls `GET /api/v1/repositories/Wael-BenHariz/tp3` → **404** (no by-full-name route exists), so the app UI shows no review history — the comment is on GitHub under the PR conversation. Inline `pull_request_review_comment`s are never posted by design; only the summary review body.
+- This run: 4/5 specialists succeeded — **`style` failed** (`unparseable LLM response after 2 attempts`: gpt-oss-120b answered with raw Python instead of JSON) so synthesis flagged the review partial; `security` recovered on attempt 2, `test_coverage` retried an HTTP 429.
+
 ## Known Gaps
 
 - Backend test suite is empty — `pytest` is installed but `backend/tests/` has no files
@@ -327,7 +379,15 @@ Single review switch = `watched_repos`; all verified with an automated 18/18 API
 - Legacy `/repositories/github` + `/repositories/connect` still require `github_installations` rows (created only by `/repositories/installations/sync` or webhooks) — the signed-state install callback does not create them; post-install repo selection uses the `/github/*` endpoints instead
 - GitHub App *Setup URL* (external GitHub App setting, not versioned in this repo) must point at `/api/v1/auth/github/app/callback` — if missing or wrong, the install callback never fires
 - `frontend/Dockerfile.dev` does not exist but is referenced by the docker-compose `frontend` service
-- `infrastructure/` directory (K8s manifests, `postgres/init.sql`, monitoring configs) is referenced by docker-compose and CI but doesn't exist — `docker-compose --profile database up` will fail on the missing `init.sql` mount
+- `infrastructure/postgres/init.sql` and monitoring configs referenced by docker-compose/CI still don't exist — `docker-compose --profile database up` will fail on the missing `init.sql` mount (`infrastructure/k8s/` for the k3s deployment does exist)
+- `infrastructure/k8s/base/backend/secret.yaml` is **filled with real credentials** (GitHub OAuth + App key, Groq/Gemini keys, SonarQube token, `10.171.24.201` CORS/callback URLs) and is now **gitignored** — the committed template is `secret.example.yaml` (`cp secret.example.yaml secret.yaml` to deploy). Never `git add -f` the filled file.
+- **Frontend repository detail calls a route that doesn't exist**: the app requests `GET /api/v1/repositories/Wael-BenHariz/tp3` → **404** (backend only exposes `GET /repositories`, `GET /{id}`, `GET /{id}/detail` by UUID) — so the UI shows no PR/review history even when reviews post to GitHub (this is why the tp3 test above *looked* comment-less).
+- **Credentials validated in-cluster (this session)**: GitHub App JWT auth → 200 with 2 installations (`164169573` → Wael-BenHariz, `133405090` → CODESAGE-AI-bot); Groq `openai/gpt-oss-120b` completion → 200 "OK" (reasoning model — give generous completion tokens); Gemini key → 200 (50 models). OAuth client id/secret not independently validated (needs the callback URL configured first).
+- **GitHub-side settings now configured by the user (this session)**: OAuth App callback = `http://10.171.24.201/api/v1/auth/github/callback`; GitHub App authorization callback + **Setup URL** = `.../auth/github/app/callback`; **Webhook URL** = `.../webhooks/github` with secret `CODESAGEsecret`. Remaining caveat: `10.171.24.201` is private — browser-side OAuth/Setup redirects work on the LAN, but **live webhook deliveries from github.com need a public tunnel** (cloudflared/ngrok); the E2E above delivered its webhook by direct POST to the ingress.
+- SonarQube runs in-cluster (namespace `sonarqube`, service DNS `sonarqube-sonarqube.sonarqube.svc.cluster.local:9000`); the k8s Secret uses that DNS name while host `backend/.env` uses the ClusterIP — cluster DNS does not resolve from the host
+- Repo-wide lint debt is pre-existing: ruff 321 / mypy 47 / black 48 files (touched files pass; unrelated to this session's changes)
+- **Specialists can fail on unparseable LLM output**: `openai/gpt-oss-120b` sometimes answers a refinement prompt with raw Python instead of a JSON object → `base_agent` extraction finds no `{...}` → agent fails after 2 retries → review posted as partial ("One of five specialist agents failed"). Observed on `style` (tp3 test); `security` recovered on attempt 2; `test_coverage` hit Groq HTTP 429 (retry succeeded). Possible hardening: a "reply with JSON only" re-ask, or treating unparseable output as zero issues instead of a failure.
+- **Backend API app-log lines are invisible**: `kubectl logs deploy/codesage-backend` only shows uvicorn access lines — `app.*` `logger.info` (e.g. webhook queued/ignored/skipped decisions) is dropped because the API process never configures a root handler (the worker does). Webhook outcomes currently have to be reconstructed from DB rows.
 - Docker Compose frontend service uses Next.js artifacts: `NEXT_PUBLIC_*` env vars and `.next/` volume, but frontend is Angular — copy-paste error in compose file
 - CI `test` job sets `JWT_SECRET` env var, but config expects `SECRET_KEY` — name mismatch
 - CI references `pytest-mock`/`httpx` test deps and `--cov=codesage` (package name doesn't match module layout `app.*`)

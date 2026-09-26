@@ -4,7 +4,6 @@ Handles all application settings using pydantic-settings.
 """
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,10 +13,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=True,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
 
     # Application
@@ -31,7 +27,9 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Security
-    SECRET_KEY: str = Field(..., description="JWT secret key - must be set in production")
+    SECRET_KEY: str = Field(
+        ..., description="JWT secret key - must be set in production"
+    )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
@@ -39,15 +37,14 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = Field(
         default="postgresql+asyncpg://codesage:codesage@postgres:5432/codesage",
-        description="Async PostgreSQL connection string"
+        description="Async PostgreSQL connection string",
     )
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
 
     # Redis
     REDIS_URL: str = Field(
-        default="redis://redis:6379/0",
-        description="Redis connection string for BullMQ"
+        default="redis://redis:6379/0", description="Redis connection string for BullMQ"
     )
 
     # GitHub OAuth
@@ -58,16 +55,31 @@ class Settings(BaseSettings):
 
     # GitHub App (for webhook integration)
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
-    GITHUB_APP_SLUG: str = Field(default="", description="GitHub App slug used for installation URL")
+    GITHUB_APP_SLUG: str = Field(
+        default="", description="GitHub App slug used for installation URL"
+    )
     GITHUB_APP_PRIVATE_KEY: str = Field(..., description="GitHub App private key (PEM)")
     GITHUB_WEBHOOK_SECRET: str = Field(..., description="GitHub webhook secret")
-    STATE_TOKEN_SECRET: str = Field(..., description="Secret used to sign GitHub App state tokens")
+    STATE_TOKEN_SECRET: str = Field(
+        ..., description="Secret used to sign GitHub App state tokens"
+    )
 
     # Google Gemini AI
-    GEMINI_API_KEY: str = Field(..., description="Google Gemini API key (legacy client)")
+    GEMINI_API_KEY: str = Field(
+        ..., description="Google Gemini API key (legacy client)"
+    )
     GEMINI_MODEL: str = "gemini-3.6-flash"
     GEMINI_MAX_TOKENS: int = 8192
     GEMINI_TEMPERATURE: float = 0.7
+
+    # SonarQube (static analysis engine)
+    # NOTE: the Helm release installs the service as sonarqube-sonarqube
+    # (release name + chart name) — the short form does not resolve in-cluster.
+    SONARQUBE_URL: str = "http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
+    SONARQUBE_TOKEN: str = ""
+    SONARQUBE_ANALYSIS_TIMEOUT: int = 120
+    SONARQUBE_POLL_INTERVAL: int = 3
+    SONARQUBE_PROJECT_PREFIX: str = "codesage-review"
 
     GROQ_API_KEY: str = Field(..., description="Groq API key (active review LLM)")
     GROQ_MODEL: str = "openai/gpt-oss-120b"

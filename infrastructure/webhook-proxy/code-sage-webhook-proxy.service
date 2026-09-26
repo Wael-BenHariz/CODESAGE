@@ -1,0 +1,14 @@
+[Unit]
+Description=CodeSage webhook path-filter proxy (127.0.0.1:8081 -> ingress 10.171.24.201)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/waelbhz/CODESAGE/infrastructure/webhook-proxy/proxy.py
+Restart=on-failure
+RestartSec=2
+User=waelbhz
+
+[Install]
+WantedBy=multi-user.target

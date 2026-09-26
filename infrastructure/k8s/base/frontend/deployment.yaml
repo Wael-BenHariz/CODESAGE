@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codesage-frontend
+  namespace: codesage
+  labels:
+    app: codesage-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: codesage-frontend
+  template:
+    metadata:
+      labels:
+        app: codesage-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: codesage-frontend:latest
+          imagePullPolicy: Never   # imported into k3s, not from a registry
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3

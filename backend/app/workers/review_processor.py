@@ -13,12 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.db.models import Review, ReviewComment, PullRequest, Repository
+from app.db.models import PullRequest, Repository, Review, ReviewComment
 from app.services.agents import ReviewContext
-from app.services.groq import GroqClient
 from app.services.github import github_service
-from app.services.github_app import get_installation_token
+from app.services.github_app import fetch_file_content, get_installation_token
+from app.services.groq import GroqClient
 from app.services.review_orchestrator import ReviewOrchestrator
+from app.services.sonarqube import SonarIssue, SonarQubeError, sonarqube_service
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +113,14 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
     Process a code review job.
 
     Pipeline: load rows -> idempotency guard -> processing -> diff fetch
-    (installation token, paginated, filtered, capped) -> LLM review ->
-    post summary review to GitHub -> store results -> completed.
+    (installation token, paginated, filtered, capped) -> full file contents
+    fetched for SonarQube -> SonarQube static analysis grouped per agent
+    domain -> parallel specialist refinement -> synthesis -> post summary
+    review to GitHub -> store results -> completed.
+
+    SonarQube failures never fail the review: they fall back to empty issue
+    groups (agents still run; the summary notes static analysis was
+    unavailable) and the error detail is stored in ``review.error_message``.
 
     Args:
         job_data: Job payload with review_id
@@ -128,9 +135,7 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         return {"success": False, "error": "Missing review_id"}
 
     # Get review record
-    result = await db.execute(
-        select(Review).where(Review.id == review_id)
-    )
+    result = await db.execute(select(Review).where(Review.id == review_id))
     review = result.scalar_one_or_none()
 
     if not review:
@@ -211,15 +216,73 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             )
         language = _detect_language(files)
 
-        # Run specialist review agents in parallel, then synthesize.
+        # SonarQube needs COMPLETE file contents, not just diff patches.
+        sonar_files: list[dict] = []
+        for f in reviewable_files:
+            try:
+                content = await fetch_file_content(
+                    full_name=repo.full_name,
+                    file_path=f["filename"],
+                    ref=pr.head_sha,
+                    token=token,
+                )
+            except Exception:
+                # Enrichment only: one bad fetch must not kill the review.
+                logger.warning(
+                    "Failed to fetch content of %s for review %s",
+                    f["filename"],
+                    review_id,
+                    exc_info=True,
+                )
+                continue
+            if content:
+                sonar_files.append({"filename": f["filename"], "content": content})
+
+        # Unique throwaway project key per review (Community Edition allows
+        # one branch per project — the project is always deleted after).
+        project_key = f"{settings.SONARQUBE_PROJECT_PREFIX}-{str(review.id)[:8]}"
+
+        # Run SonarQube scan and group issues per agent domain. Any failure
+        # falls back to empty groups — the review must never fail because
+        # static analysis is unavailable (brief A7.3).
+        sonar_groups: dict[str, list[SonarIssue]] = {}
+        sonar_error: str | None = None
+        if sonar_files:
+            try:
+                sonar_groups = await sonarqube_service.scan(
+                    project_key=project_key,
+                    files=sonar_files,
+                    language=language,
+                )
+            except SonarQubeError as e:
+                sonar_error = f"SonarQube scan failed: {e}"
+                logger.error("SonarQube scan failed for review %s: %s", review_id, e)
+            except Exception as e:
+                # Belt and braces: nothing SonarQube-shaped may fail a review.
+                sonar_error = f"SonarQube scan failed: {e!r}"
+                logger.exception(
+                    "Unexpected SonarQube scan failure for review %s",
+                    review_id,
+                )
+        else:
+            sonar_error = "SonarQube scan skipped: no fetchable file contents"
+            logger.warning(
+                "No full file contents fetched for review %s — skipping SonarQube scan",
+                review_id,
+            )
+
+        # Build context and run agents (diff still passed for context).
         context = ReviewContext(
             pr_title=pr.title,
             pr_body=pr.body,
             diff=diff_content,
             language=language,
+            sonar_scan_failed=sonar_error is not None,
         )
         orchestrator = ReviewOrchestrator(client=GroqClient())
-        review_result = (await orchestrator.run(context)).model_dump(exclude_none=True)
+        review_result = (await orchestrator.run(context, sonar_groups)).model_dump(
+            exclude_none=True
+        )
         summary = review_result.get("summary", "")
 
         # Post ONE summary review to GitHub (no inline comments), attached to
@@ -263,8 +326,11 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         if review_result.get("usage"):
             review.tokens_used = review_result["usage"].get("total_tokens", 0)
         review.github_review_id = github_review_id
-        if post_note:
-            review.error_message = post_note
+        # SonarQube failures are recorded but never fail the review: the
+        # review still completes with status=completed (brief A7.3).
+        completion_notes = [note for note in (sonar_error, post_note) if note]
+        if completion_notes:
+            review.error_message = "; ".join(completion_notes)
         review.completed_at = datetime.now(timezone.utc)
         review.status = "completed"
 
@@ -292,9 +358,11 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             "github_review_id": github_review_id,
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — never re-raise to BullMQ
         error_message = _classify_error(e)
-        logger.error("Review %s failed: %s\n%s", review_id, error_message, traceback.format_exc())
+        logger.error(
+            "Review %s failed: %s\n%s", review_id, error_message, traceback.format_exc()
+        )
         # Update review as failed (never re-raise: BullMQ must not retry
         # automatically; the DB row is the source of truth).
         review.status = "failed"

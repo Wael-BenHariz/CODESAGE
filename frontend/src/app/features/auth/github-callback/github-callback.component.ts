@@ -33,7 +33,8 @@ export class GithubCallbackComponent implements OnInit {
   }
 
   private processCallback(): void {
-    const verified = this.route.snapshot.queryParamMap.get('success') === 'true';
+    const params = this.route.snapshot.queryParamMap;
+    const verified = params.get('success') === 'true';
     this.isSuccess.set(verified);
 
     if (!verified) {
@@ -44,19 +45,38 @@ export class GithubCallbackComponent implements OnInit {
       return;
     }
 
-    // Hard rule: never call a protected endpoint unless a JWT exists in storage.
-    if (!this.auth.getToken()) {
-      // Session lost (e.g. storage cleared) — no protected API calls here.
-      this.state.set('success');
-      this.statusMessage.set('GitHub App installed successfully. Please log in to continue.');
-      setTimeout(() => {
-        this.router.navigate(['/login'], { queryParams: { message: 'app_installed' } });
-      }, 2000);
+    // Normal path: the session survived the full-page round-trip to GitHub.
+    if (this.auth.getToken()) {
+      this.finalizeInstallation();
       return;
     }
 
-    // JWT present in localStorage — the session survives the redirect, so
-    // verify the installation normally and continue to the dashboard.
+    // Storage lost across the GitHub redirect — the backend carries a fresh
+    // token pair in the URL (same pattern as /auth/callback) so a successful
+    // install never dumps the user on the login page.
+    const token = params.get('token');
+    if (token) {
+      this.statusMessage.set('Restoring session...');
+      this.auth.completeLogin(token, params.get('refresh_token') || '').subscribe({
+        next: () => this.finalizeInstallation(),
+        error: () => this.showLoginFallback()
+      });
+      return;
+    }
+
+    // No token anywhere — ask the user to log in.
+    this.showLoginFallback();
+  }
+
+  private showLoginFallback(): void {
+    this.state.set('success');
+    this.statusMessage.set('GitHub App installed successfully. Please log in to continue.');
+    setTimeout(() => {
+      this.router.navigate(['/login'], { queryParams: { message: 'app_installed' } });
+    }, 2000);
+  }
+
+  private finalizeInstallation(): void {
     this.state.set('processing');
     this.statusMessage.set('Finalizing GitHub App installation...');
 

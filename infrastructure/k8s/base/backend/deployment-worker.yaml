@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codesage-worker
+  namespace: codesage
+  labels:
+    app: codesage-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: codesage-worker
+  template:
+    metadata:
+      labels:
+        app: codesage-worker
+    spec:
+      containers:
+        - name: worker
+          image: codesage-backend:latest
+          imagePullPolicy: Never   # imported into k3s, not from a registry
+          command: ["python", "-m", "app.workers.main"]
+          envFrom:
+            - secretRef:
+                name: codesage-backend-secret   # same secret ref as the API
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi

@@ -1,0 +1,16 @@
+[Unit]
+Description=CodeSage webhook tunnel (ngrok -> 127.0.0.1:8081 path-filter proxy)
+After=network-online.target code-sage-webhook-proxy.service
+Wants=network-online.target
+Wants=code-sage-webhook-proxy.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ngrok start --config /home/waelbhz/.config/ngrok/ngrok.yml --all --log stdout --log-level info
+Restart=on-failure
+RestartSec=5
+User=waelbhz
+Environment=HOME=/home/waelbhz
+
+[Install]
+WantedBy=multi-user.target

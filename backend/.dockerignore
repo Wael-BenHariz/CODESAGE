@@ -1,0 +1,15 @@
+# Keep image builds lean and free of secrets
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# Secrets: the k8s deployment gets config via envFrom Secret,
+# docker-compose passes backend/.env via env_file — never bake it in.
+.env
+.env.*
+!.env.example

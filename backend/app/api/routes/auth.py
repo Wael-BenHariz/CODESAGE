@@ -76,9 +76,10 @@ async def github_login(
     """
     state = generate_state()
     
-    # Default redirect URL to frontend callback
+    # Default redirect URL to frontend callback — must come from FRONTEND_URL
+    # (the old hardcoded localhost:4200 broke logins behind the k8s ingress)
     if not redirect_url:
-        redirect_url = "http://localhost:4200/auth/callback"
+        redirect_url = f"{settings.FRONTEND_URL.rstrip('/')}/auth/callback"
     
     # Store state with redirect URL
     oauth_states[state] = {
@@ -150,8 +151,10 @@ async def github_callback(
         jwt_access = create_access_token(str(user.id))
         jwt_refresh = create_refresh_token(str(user.id))
         
-        # Redirect to frontend with JWT token
-        frontend_url = state_data.get("redirect_url", "http://localhost:4200/auth/callback")
+        # Redirect to frontend with JWT token (FRONTEND_URL-aware fallback)
+        frontend_url = state_data.get("redirect_url") or (
+            f"{settings.FRONTEND_URL.rstrip('/')}/auth/callback"
+        )
         redirect_url = f"{frontend_url}?token={jwt_access}&refresh_token={jwt_refresh}"
         logger.info(f"Redirecting to frontend: {frontend_url}")
         
@@ -342,7 +345,19 @@ async def github_app_callback(
     user.github_installation_id = installation_id
     await db.commit()
 
-    return RedirectResponse(url=f"{frontend_url}/github/callback?success=true")
+    # Carry a fresh token pair in the redirect. The full-page round-trip to
+    # GitHub can lose localStorage (privacy modes, storage clearing), which
+    # previously dumped the user on the login page despite a successful
+    # install. Same URL-token pattern the OAuth login redirect already uses.
+    jwt_access = create_access_token(str(user.id))
+    jwt_refresh = create_refresh_token(str(user.id))
+
+    return RedirectResponse(
+        url=(
+            f"{frontend_url}/github/callback"
+            f"?success=true&token={jwt_access}&refresh_token={jwt_refresh}"
+        )
+    )
 
 
 # ==================== Helper Functions ====================

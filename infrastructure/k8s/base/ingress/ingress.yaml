@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codesage-ingress
+  namespace: codesage
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+
+spec:
+  ingressClassName: nginx
+
+  # Deliberately hostless (no spec.rules[].host): a rule host must be a DNS
+  # name — Kubernetes rejects an IP — and GITHUB_CALLBACK_URL, FRONTEND_URL
+  # and the GitHub-side OAuth/Setup redirects all point at
+  # http://10.171.24.201. A hostless rule matches every Host header, so the
+  # bare IP, codesage.local, and any LAN alias all route correctly; with a
+  # host-restricted rule the IP-based GitHub redirects 404 at nginx's default
+  # backend before ever reaching the app.
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: codesage-backend
+                port:
+                  number: 8000
+
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: codesage-frontend
+                port:
+                  number: 80

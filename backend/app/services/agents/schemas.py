@@ -1,28 +1,45 @@
 """Schemas for multi-agent code review orchestration."""
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
+
+from app.services.sonarqube import SonarIssue
 
 
 class ReviewContext(BaseModel):
     """Shared pull request context passed to every review agent."""
 
     pr_title: str
-    pr_body: Optional[str] = None
+    pr_body: str | None = None
     diff: str
     language: str = "text"
+    # SonarQube findings for this agent's domain (the primary analysis input;
+    # the diff stays in the context for reference only).
+    sonar_issues: list[SonarIssue] = Field(default_factory=list)
+    # Set by the worker when the SonarQube scan failed so the summary can
+    # honestly say static analysis was unavailable (brief A7.3).
+    sonar_scan_failed: bool = False
+
+    def with_issues(self, issues: list[SonarIssue]) -> "ReviewContext":
+        """Copy of this context carrying one agent's slice of Sonar findings."""
+        return ReviewContext(
+            pr_title=self.pr_title,
+            pr_body=self.pr_body,
+            diff=self.diff,
+            language=self.language,
+            sonar_issues=issues,
+            sonar_scan_failed=self.sonar_scan_failed,
+        )
 
 
 class AgentComment(BaseModel):
     """Single specialist-agent finding."""
 
     file_path: str = ""
-    line_number: Optional[int] = None
+    line_number: int | None = None
     severity: str = "info"
     category: str = "general"
     body: str = ""
-    suggestion: Optional[str] = None
+    suggestion: str | None = None
 
 
 class AgentResult(BaseModel):
@@ -49,4 +66,4 @@ class ReviewResult(BaseModel):
     overall_severity: str = "info"
     comments: list[AgentComment] = Field(default_factory=list)
     statistics: ReviewStatistics = Field(default_factory=ReviewStatistics)
-    usage: Optional[dict[str, int]] = None
+    usage: dict[str, int] | None = None

@@ -1,0 +1,36 @@
+# Patch ingress-nginx Service to type LoadBalancer so MetalLB assigns an IP.
+# Includes spec.ports so `kubectl apply -f` of this partial manifest stays
+# valid (baremetal/deploy.yaml creates the Service as NodePort).
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  type: LoadBalancer
+  # MUST be kept: a client-side `kubectl apply` of this file computes a
+  # three-way merge against the last-applied config of upstream deploy.yaml —
+  # if `selector` is absent here, kubectl DELETEs it from the live Service.
+  # A selector-less Service is treated as manually managed, so the endpoint
+  # controllers freeze the EndpointSlice at whatever IP the pod had at that
+  # moment; after any pod reschedule (e.g. node reboot), kube-proxy DNATs to
+  # a dead IP and every request through .201 fails with "No route to host".
+  selector:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+      appProtocol: http
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+      appProtocol: https
+
+# MANUAL STEP REQUIRED FIRST:
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/baremetal/deploy.yaml
+# kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=90s

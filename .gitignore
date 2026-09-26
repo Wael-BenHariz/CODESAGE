@@ -74,6 +74,8 @@ kubeconfig
 *.key
 *.crt
 secrets.env
+# Filled backend k8s secret (real credentials) — commit only secret.example.yaml
+infrastructure/k8s/base/backend/secret.yaml
 
 # Temporary
 tmp/

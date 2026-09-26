@@ -1,0 +1,6 @@
+# Keep image builds lean
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+*.log
