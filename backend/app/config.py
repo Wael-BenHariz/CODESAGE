@@ -83,6 +83,17 @@ class Settings(BaseSettings):
 
     GROQ_API_KEY: str = Field(..., description="Groq API key (active review LLM)")
     GROQ_MODEL: str = "openai/gpt-oss-120b"
+
+    # Per-user LLM API keys are AES-Fernet encrypted at rest with this key.
+    # Required: startup fails fast with a clear error if missing/invalid
+    # (validate_default so an absent env var still runs the validator).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    LLM_ENCRYPTION_KEY: str = Field(
+        default="",
+        validate_default=True,
+        description="Fernet key used to encrypt per-user LLM API keys at rest",
+    )
+
     # Groq free tier TPM (~8000 tokens/request) leaves no room for the full
     # 100k-char fetch cap inside one prompt: cap the diff the LLM sees per
     # review so large PRs degrade to a partial review instead of a 413.
@@ -120,6 +131,34 @@ class Settings(BaseSettings):
         v = v.replace("\\n", "\n").strip()
         if not v.startswith("-----BEGIN"):
             raise ValueError("GITHUB_APP_PRIVATE_KEY must be a valid PEM key")
+        return v
+
+    @field_validator("LLM_ENCRYPTION_KEY")
+    @classmethod
+    def validate_llm_encryption_key(cls, v: str) -> str:
+        """Fail startup fast when the per-user key encryption key is unusable.
+
+        Constraint: a missing LLM_ENCRYPTION_KEY must abort boot with an
+        actionable message instead of surfacing later as encrypt/decrypt
+        failures on the settings endpoints.
+        """
+        if not v:
+            raise ValueError(
+                "LLM_ENCRYPTION_KEY is required but missing. Generate one with: "
+                'python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())" and add it to backend/.env'
+            )
+        from cryptography.fernet import Fernet  # deferred: keep import light
+
+        try:
+            Fernet(v.encode())
+        except Exception as exc:
+            raise ValueError(
+                "LLM_ENCRYPTION_KEY is not a valid Fernet key. Generate one with: "
+                'python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())" and replace the value in '
+                "backend/.env"
+            ) from exc
         return v
 
 
