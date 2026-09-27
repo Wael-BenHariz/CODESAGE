@@ -45,6 +45,9 @@ export class ApiService {
 
     if (error.error instanceof ErrorEvent) {
       message = error.error.message;
+    } else if (typeof error.error?.detail === 'string') {
+      // FastAPI HTTPException: { detail: "..." } — surface the real reason.
+      message = error.error.detail;
     } else {
       message = error.error?.message || `Error ${error.status}: ${error.statusText}`;
     }

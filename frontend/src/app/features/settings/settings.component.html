@@ -61,6 +61,114 @@
     </section>
 
     <section class="settings-section">
+      <h2>AI Model Settings</h2>
+      <div class="card llm-card">
+        @if (loading()) {
+          <p class="llm-loading">Loading settings...</p>
+        } @else if (loadError()) {
+          <div class="llm-banner error" role="alert">
+            <span>{{ loadError() }}</span>
+            <button class="btn btn-secondary" (click)="loadSettings()">Retry</button>
+          </div>
+        } @else {
+          @if (settings()?.isUsingDefault) {
+            <div class="llm-banner info">Using system default — Groq</div>
+          }
+          @if (settings()?.hasApiKey) {
+            <div class="llm-banner success">
+              Personal key configured — {{ settings()?.provider }} {{ settings()?.model }}
+            </div>
+          }
+
+          <div class="llm-grid">
+            <div class="field">
+              <label for="llm-provider">Provider</label>
+              <select
+                id="llm-provider"
+                [ngModel]="provider"
+                (ngModelChange)="onProviderChange($event)"
+              >
+                <option value="" disabled>Select provider</option>
+                @for (p of providers; track p.value) {
+                  <option [value]="p.value">{{ p.label }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="llm-model">Model</label>
+              <input
+                id="llm-model"
+                type="text"
+                [(ngModel)]="model"
+                [placeholder]="provider ? 'model name' : 'select a provider first'"
+              />
+            </div>
+
+            <div class="field">
+              <label for="llm-api-key">API Key</label>
+              <input
+                id="llm-api-key"
+                type="password"
+                [(ngModel)]="apiKey"
+                [placeholder]="hasSavedKey ? '••••••••' : 'Enter API key'"
+                autocomplete="new-password"
+              />
+              @if (hasSavedKey) {
+                <span class="field-hint">Leave blank to keep the current key.</span>
+              }
+            </div>
+
+            @if (isOllama) {
+              <div class="field">
+                <label for="llm-base-url">Base URL</label>
+                <input
+                  id="llm-base-url"
+                  type="text"
+                  [(ngModel)]="baseUrl"
+                  placeholder="http://localhost:11434"
+                />
+              </div>
+            }
+          </div>
+
+          @if (saveError()) {
+            <div class="llm-status error" role="alert">{{ saveError() }}</div>
+          }
+          @if (saveMessage()) {
+            <div class="llm-status success" role="status">{{ saveMessage() }}</div>
+          }
+          @if (testResult(); as result) {
+            <div
+              class="llm-status"
+              [class.error]="!result.ok"
+              [class.success]="result.ok"
+              role="status"
+            >
+              {{ result.text }}
+            </div>
+          }
+
+          <div class="llm-actions">
+            <button class="btn btn-primary" [disabled]="isSaving()" (click)="saveSettings()">
+              {{ isSaving() ? 'Saving...' : 'Save' }}
+            </button>
+            <button class="btn btn-secondary" [disabled]="testing()" (click)="testConnection()">
+              {{ testing() ? 'Testing...' : 'Test connection' }}
+            </button>
+            <button
+              class="btn btn-danger"
+              [disabled]="reverting() || settings()?.isUsingDefault"
+              (click)="resetToDefault()"
+            >
+              {{ reverting() ? 'Resetting...' : 'Reset to default' }}
+            </button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h2>Notifications</h2>
       <div class="card notifications-card">
         <div class="notification-item">
@@ -86,11 +194,5 @@
         </div>
       </div>
     </section>
-
-    <div class="actions">
-      <button class="btn btn-primary" [class.saving]="isSaving()" (click)="saveSettings()">
-        {{ isSaving() ? 'Saving...' : 'Save Changes' }}
-      </button>
-    </div>
   </div>
 </div>
