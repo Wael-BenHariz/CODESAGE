@@ -13,11 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.db.models import PullRequest, Repository, Review, ReviewComment
+from app.db.models import PullRequest, Repository, Review, ReviewComment, User
 from app.services.agents import ReviewContext
 from app.services.github import github_service
 from app.services.github_app import fetch_file_content, get_installation_token
-from app.services.groq import GroqClient
+from app.services.llm_client import resolve_llm_client
 from app.services.review_orchestrator import ReviewOrchestrator
 from app.services.sonarqube import SonarIssue, SonarQubeError, sonarqube_service
 
@@ -279,7 +279,32 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             language=language,
             sonar_scan_failed=sonar_error is not None,
         )
-        orchestrator = ReviewOrchestrator(client=GroqClient())
+
+        # Resolve the LLM client for the user who owns this installation:
+        # per-user provider/model/key when configured, system Groq otherwise
+        # (resolve_llm_client never raises — bad config degrades to default).
+        owner_result = await db.execute(
+            select(User)
+            .where(User.github_installation_id == installation.installation_id)
+            .order_by(User.created_at.asc())
+        )
+        llm_user = owner_result.scalars().first()
+
+        llm_client = resolve_llm_client(
+            provider=llm_user.llm_provider if llm_user else None,
+            model=llm_user.llm_model if llm_user else None,
+            api_key_encrypted=llm_user.llm_api_key if llm_user else None,
+            base_url=llm_user.llm_base_url if llm_user else None,
+        )
+        logger.info(
+            "Review %s using LLM provider=%s model=%s (user-configured=%s)",
+            review_id,
+            type(llm_client).__name__,
+            llm_client.model_name,
+            bool(llm_user and llm_user.llm_provider),
+        )
+
+        orchestrator = ReviewOrchestrator(client=llm_client)
         review_result = (await orchestrator.run(context, sonar_groups)).model_dump(
             exclude_none=True
         )
@@ -322,7 +347,7 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         # Store results in DB.
         review.summary = summary
         review.overall_severity = review_result.get("overall_severity", "info")
-        review.gemini_model = settings.GROQ_MODEL
+        review.gemini_model = llm_client.model_name
         if review_result.get("usage"):
             review.tokens_used = review_result["usage"].get("total_tokens", 0)
         review.github_review_id = github_review_id
