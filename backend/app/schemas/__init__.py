@@ -4,81 +4,90 @@ Request/Response models for API validation and serialization.
 """
 
 from app.schemas.auth import (
+    OAuthState,
     Token,
     TokenPayload,
-    OAuthState,
 )
-from app.schemas.user import (
-    UserBase,
-    UserCreate,
-    UserUpdate,
-    UserResponse,
-    UserListResponse,
-)
-from app.schemas.repository import (
-    RepositoryBase,
-    RepositoryCreate,
-    RepositoryUpdate,
-    RepositoryResponse,
-    RepositoryListResponse,
-    RepositorySettings,
+from app.schemas.llm_settings import (
+    LLMSettingsResponse,
+    LLMSettingsUpdate,
+    LLMTestResponse,
 )
 from app.schemas.pull_request import (
     PullRequestBase,
     PullRequestCreate,
-    PullRequestResponse,
     PullRequestListResponse,
+    PullRequestResponse,
     PullRequestWithReviews,
+)
+from app.schemas.repository import (
+    RepositoryBase,
+    RepositoryCreate,
+    RepositoryListResponse,
+    RepositoryResponse,
+    RepositorySettings,
+    RepositoryUpdate,
 )
 from app.schemas.review import (
     ReviewBase,
     ReviewCreate,
-    ReviewResponse,
-    ReviewWithComments,
-    ReviewStatus,
     ReviewListResponse,
+    ReviewResponse,
+    ReviewStatus,
+    ReviewWithComments,
+)
+from app.schemas.user import (
+    UserBase,
+    UserCreate,
+    UserListResponse,
+    UserResponse,
+    UserUpdate,
 )
 from app.schemas.webhook import (
-    WebhookEventBase,
-    WebhookEventResponse,
-    WebhookEventListResponse,
     GitHubWebhookPayload,
+    WebhookEventBase,
+    WebhookEventListResponse,
+    WebhookEventResponse,
 )
 
 __all__ = [
-    # Auth
-    "Token",
-    "TokenPayload",
+    "GitHubWebhookPayload",
+    # LLM Settings
+    "LLMSettingsResponse",
+    "LLMSettingsUpdate",
+    "LLMTestResponse",
     "OAuthState",
-    # User
-    "UserBase",
-    "UserCreate",
-    "UserUpdate",
-    "UserResponse",
-    "UserListResponse",
-    # Repository
-    "RepositoryBase",
-    "RepositoryCreate",
-    "RepositoryUpdate",
-    "RepositoryResponse",
-    "RepositoryListResponse",
-    "RepositorySettings",
     # Pull Request
     "PullRequestBase",
     "PullRequestCreate",
-    "PullRequestResponse",
     "PullRequestListResponse",
+    "PullRequestResponse",
     "PullRequestWithReviews",
+    # Repository
+    "RepositoryBase",
+    "RepositoryCreate",
+    "RepositoryListResponse",
+    "RepositoryResponse",
+    "RepositorySettings",
+    "RepositoryUpdate",
     # Review
     "ReviewBase",
     "ReviewCreate",
-    "ReviewResponse",
-    "ReviewWithComments",
-    "ReviewStatus",
     "ReviewListResponse",
+    "ReviewResponse",
+    "ReviewStatus",
+    "ReviewWithComments",
+    # Auth
+    "Token",
+    "TokenPayload",
+    # User
+    "UserBase",
+    "UserCreate",
+    "UserListResponse",
+    "UserResponse",
+    "UserUpdate",
     # Webhook
     "WebhookEventBase",
-    "WebhookEventResponse",
     "WebhookEventListResponse",
-    "GitHubWebhookPayload",
+    "WebhookEventResponse",
 ]
