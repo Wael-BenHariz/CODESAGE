@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy import BigInteger, DateTime, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,6 +75,33 @@ class User(Base):
         nullable=True,
         index=True,
         comment="GitHub App installation ID linked to the user",
+    )
+
+    # Per-user LLM settings — resolved by the worker at review job time.
+    # llm_api_key stores the AES-Fernet encrypted value (never plaintext);
+    # NULL anywhere = fall back to the system default Groq client.
+    llm_provider: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        nullable=True,
+        comment="LLM provider: groq | openai | anthropic | gemini | ollama",
+    )
+
+    llm_model: Mapped[Optional[str]] = mapped_column(
+        String(128),
+        nullable=True,
+        comment="Per-user model override",
+    )
+
+    llm_api_key: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Fernet-encrypted LLM API key",
+    )
+
+    llm_base_url: Mapped[Optional[str]] = mapped_column(
+        String(512),
+        nullable=True,
+        comment="Custom endpoint base URL (Ollama / OpenAI-compatible)",
     )
 
     # Timestamps
