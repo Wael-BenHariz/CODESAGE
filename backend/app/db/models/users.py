@@ -1,18 +1,17 @@
 """User model for GitHub OAuth users."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.oauth_tokens import OAuthToken
-    from app.db.models.watched_repos import WatchedRepo
     from app.db.models.reviews import Review
+    from app.db.models.watched_repos import WatchedRepo
 
 
 class User(Base):
@@ -52,25 +51,25 @@ class User(Base):
         comment="GitHub username",
     )
 
-    email: Mapped[Optional[str]] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(512),
         nullable=True,
         comment="User email address",
     )
 
-    name: Mapped[Optional[str]] = mapped_column(
+    name: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
         comment="User display name",
     )
 
-    avatar_url: Mapped[Optional[str]] = mapped_column(
+    avatar_url: Mapped[str | None] = mapped_column(
         String(1024),
         nullable=True,
         comment="GitHub avatar URL",
     )
 
-    github_installation_id: Mapped[Optional[int]] = mapped_column(
+    github_installation_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         index=True,
@@ -80,25 +79,25 @@ class User(Base):
     # Per-user LLM settings — resolved by the worker at review job time.
     # llm_api_key stores the AES-Fernet encrypted value (never plaintext);
     # NULL anywhere = fall back to the system default Groq client.
-    llm_provider: Mapped[Optional[str]] = mapped_column(
+    llm_provider: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,
         comment="LLM provider: groq | openai | anthropic | gemini | ollama",
     )
 
-    llm_model: Mapped[Optional[str]] = mapped_column(
+    llm_model: Mapped[str | None] = mapped_column(
         String(128),
         nullable=True,
         comment="Per-user model override",
     )
 
-    llm_api_key: Mapped[Optional[str]] = mapped_column(
+    llm_api_key: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Fernet-encrypted LLM API key",
     )
 
-    llm_base_url: Mapped[Optional[str]] = mapped_column(
+    llm_base_url: Mapped[str | None] = mapped_column(
         String(512),
         nullable=True,
         comment="Custom endpoint base URL (Ollama / OpenAI-compatible)",
