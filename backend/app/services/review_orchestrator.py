@@ -14,7 +14,7 @@ from app.services.agents import (
     StyleAgent,
     TestCoverageAgent,
 )
-from app.services.groq import GroqClient
+from app.services.llm_client import BaseLLMClient
 from app.services.sonarqube import SonarIssue
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class ReviewOrchestrator:
     """Run specialist agents in parallel, then synthesize their outputs."""
 
-    def __init__(self, client: GroqClient):
+    def __init__(self, client: BaseLLMClient):
         self.client = client
 
     async def run(
