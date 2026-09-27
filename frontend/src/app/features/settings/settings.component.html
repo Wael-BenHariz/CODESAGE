@@ -102,7 +102,13 @@
                 type="text"
                 [(ngModel)]="model"
                 [placeholder]="provider ? 'model name' : 'select a provider first'"
+                [attr.list]="provider ? 'llm-model-suggestions' : null"
               />
+              <datalist id="llm-model-suggestions">
+                @for (m of suggestions; track m) {
+                  <option [value]="m"></option>
+                }
+              </datalist>
             </div>
 
             <div class="field">

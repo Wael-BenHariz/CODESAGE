@@ -19,6 +19,20 @@ const DEFAULT_MODEL: Record<LLMProvider, string> = {
   ollama: 'llama3'
 };
 
+/** STEP 11: datalist suggestions shown while typing the model name. */
+const MODEL_SUGGESTIONS: Record<LLMProvider, string[]> = {
+  groq: [
+    'openai/gpt-oss-120b',
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'qwen/qwen3-32b'
+  ],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o3-mini'],
+  anthropic: ['claude-opus-4-5', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  ollama: ['llama3', 'mistral', 'codellama', 'qwen2.5-coder']
+};
+
 const PROVIDERS: { value: LLMProvider; label: string }[] = [
   { value: 'groq', label: 'Groq' },
   { value: 'openai', label: 'OpenAI' },
@@ -78,6 +92,10 @@ export class SettingsComponent implements OnInit {
 
   get isOllama(): boolean {
     return this.provider === 'ollama';
+  }
+
+  get suggestions(): string[] {
+    return this.provider ? MODEL_SUGGESTIONS[this.provider as LLMProvider] : [];
   }
 
   loadSettings(): void {
