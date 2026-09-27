@@ -21,12 +21,7 @@ const DEFAULT_MODEL: Record<LLMProvider, string> = {
 
 /** STEP 11: datalist suggestions shown while typing the model name. */
 const MODEL_SUGGESTIONS: Record<LLMProvider, string[]> = {
-  groq: [
-    'openai/gpt-oss-120b',
-    'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant',
-    'qwen/qwen3-32b'
-  ],
+  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'allam-2-7b'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o3-mini'],
   anthropic: ['claude-opus-4-5', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
   gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
