@@ -26,7 +26,7 @@ from app.services.agents.schemas import (
     ReviewResult,
     ReviewStatistics,
 )
-from app.services.groq import GroqClient
+from app.services.llm_client import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ class OrchestratorAgent(BaseAgent):
     TEMPERATURE = settings.AGENT_ORCHESTRATOR_TEMPERATURE
     MAX_TOKENS = settings.AGENT_ORCHESTRATOR_MAX_TOKENS
 
-    def __init__(self, groq_client: GroqClient):
-        super().__init__(groq_client)
+    def __init__(self, client: BaseLLMClient):
+        super().__init__(client)
 
     async def synthesize(
         self,
@@ -82,14 +82,14 @@ class OrchestratorAgent(BaseAgent):
                     "by_severity": {},
                     "by_category": {},
                 },
-                usage=self.groq_client.total_usage(),
+                usage=self.client.total_usage(),
             )
 
         # Deterministic merge: exact stats, verbatim bodies, strongest
         # finding wins per file+line — all independent of the LLM.
         merged = self._merge_comments(agent_results)
         statistics = self._compute_statistics(merged)
-        usage = self.groq_client.total_usage()
+        usage = self.client.total_usage()
 
         prompt = self._build_summary_prompt(
             context,

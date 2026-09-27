@@ -1,16 +1,17 @@
 """Base class for LLM-backed review agents."""
 
-from abc import ABC, abstractmethod
 import asyncio
 import json
 import logging
 import re
-from typing import Any, Iterator
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
 from app.services.agents.schemas import AgentResult, ReviewContext
-from app.services.groq import GroqClient
+from app.services.llm_client import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,8 @@ class BaseAgent(ABC):
     # last a minute or more — short retries just keep re-triggering them.
     RATE_LIMIT_BACKOFF = (15, 30, 60)
 
-    def __init__(self, groq_client: GroqClient):
-        self.groq_client = groq_client
+    def __init__(self, client: BaseLLMClient):
+        self.client = client
 
     async def run(self, context: ReviewContext) -> AgentResult:
         """Build the agent prompt, call Gemini once, and validate the result."""
@@ -82,14 +83,16 @@ class BaseAgent(ABC):
                     f"Agent {self.AGENT_NAME}: giving up after {http_attempts - 1} HTTP attempts: {last_error}"
                 )
             try:
-                raw = await self.groq_client.generate(
+                raw = await self.client.complete(
                     prompt,
                     temperature=self.TEMPERATURE,
                     max_tokens=max_tokens,
                 )
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code if exc.response is not None else None
-                retryable = status == 429 or (status is not None and 500 <= status <= 504)
+                retryable = status == 429 or (
+                    status is not None and 500 <= status <= 504
+                )
                 if status == 413 and len(prompt) // 4 < GROQ_TPM_TOKENS:
                     # Groq reports rolling-TPM overflow as 413 ("Limit 8000,
                     # Requested N" — N includes recent window usage, so it can
@@ -162,7 +165,9 @@ class BaseAgent(ABC):
             except json.JSONDecodeError:
                 continue
 
-        raise ValueError(f"no parseable JSON object found (response head: {text[:200]!r})")
+        raise ValueError(
+            f"no parseable JSON object found (response head: {text[:200]!r})"
+        )
 
     @staticmethod
     def _strip_code_fences(text: str) -> str:
