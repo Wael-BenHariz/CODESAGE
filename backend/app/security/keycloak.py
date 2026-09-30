@@ -88,16 +88,21 @@ def _select_key(jwks: dict[str, Any], token: str) -> dict[str, Any]:
 
 
 def _decode(token: str, jwks: dict[str, Any]) -> dict[str, Any]:
-    """Validate signature + issuer + expiry + token type (``typ``).
+    """Validate signature + expiry, then issuer allow-list, type, audience.
 
-    Audience is checked separately: Keycloak access tokens identify the
-    requesting client via ``azp`` (authorized party) and put ``account``-style
-    audiences in ``aud`` — the client-id audience only appears when the
+    The issuer check runs HERE, manually, after ``jwt.decode`` has verified
+    the signature: the allow-list is env-configurable
+    (``KEYCLOAK_ALLOWED_ISSUERS``) and exact-string matched — decoding with
+    ``verify_iss`` disabled keeps that policy in our code instead of
+    python-jose's single-value ``issuer`` parameter. Audience is also checked
+    separately: Keycloak access tokens identify the requesting client via
+    ``azp`` (authorized party) and put ``account``-style audiences in
+    ``aud`` — the client-id audience only appears when the
     ``access.token.audience`` attribute is set on the client.
     """
     options = {
         "verify_aud": False,  # aud handled explicitly below
-        "verify_iss": True,
+        "verify_iss": False,  # allow-list checked explicitly below, post-signature
         "verify_exp": True,
         "verify_iat": True,
         "verify_at_hash": False,
@@ -106,12 +111,17 @@ def _decode(token: str, jwks: dict[str, Any]) -> dict[str, Any]:
         token,
         _select_key(jwks, token),
         algorithms=["RS256"],
-        issuer=settings.KEYCLOAK_ISSUER,
         options=options,
         # NOTE: python-jose has no leeway param; expiry is checked exactly.
         # NTP-level skew between pods is handled by Keycloak's own iat/exp
         # sizing (300s access tokens), not by loosening validation here.
     )
+    # Signature/exp/iat are verified above — the claim set is now trustworthy.
+    # Issuer: exact string match against the configured allow-list (falls
+    # back to [KEYCLOAK_ISSUER] when the setting is empty, so behavior is
+    # unchanged out of the box).
+    if claims.get("iss") not in settings.KEYCLOAK_EFFECTIVE_ISSUERS:
+        raise JWTError("Token issuer is not in the allow-list")
     # Only access tokens may be presented at the API. Keycloak mints
     # typ "Bearer" on access tokens, "ID" on ID tokens and "Refresh" on
     # refresh tokens — an ID token is minted for the same SPA client and

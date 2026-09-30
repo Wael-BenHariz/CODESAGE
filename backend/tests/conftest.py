@@ -43,6 +43,9 @@ os.environ["DATABASE_URL"] = (
 os.environ["REDIS_URL"] = "redis://localhost:6379/15"
 os.environ["FRONTEND_URL"] = "http://localhost:4200"
 os.environ["API_V1_PREFIX"] = "/api/v1"
+# Docs are off in tests (the route-inventory test asserts no public docs
+# routes exist) — pin it regardless of the developer's local .env.
+os.environ["ENABLE_API_DOCS"] = "False"
 os.environ["OAUTH_STATE_TTL_SECONDS"] = "600"
 os.environ["AUTH_REFRESH_ROTATION"] = "true"
 # Keycloak (identity authority) — tests mint RS256 tokens with a throwaway

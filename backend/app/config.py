@@ -5,7 +5,7 @@ Handles all application settings using pydantic-settings.
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Server
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    # Serve the interactive API docs and the OpenAPI schema
+    # (/api/docs, /api/redoc, /api/openapi.json). Off by default so the API
+    # surface is not advertised; enable per environment (backend/.env).
+    ENABLE_API_DOCS: bool = False
 
     # Security
     SECRET_KEY: str = Field(
@@ -84,6 +88,17 @@ class Settings(BaseSettings):
     # Keycloak rarely rotates RS256 signing keys, but JWKS must be refetched
     # when it does — cache TTL (seconds) for the fetched JWKS document.
     KEYCLOAK_JWKS_CACHE_TTL: int = 3600
+    # Exact `iss` values accepted for access tokens (env: JSON array, e.g.
+    # '["http://10.171.24.201/auth/realms/codesage-realm"]'). Empty/unset
+    # falls back to [KEYCLOAK_ISSUER], which keeps pre-existing behavior.
+    # Multiple entries exist for IP/host migrations: list the old and new
+    # issuer during cutover so live tokens keep validating. Every entry must
+    # end with /realms/{KEYCLOAK_REALM} (enforced by validate_allowed_issuers
+    # at startup) — a cross-realm issuer can never pass.
+    KEYCLOAK_ALLOWED_ISSUERS: list[str] = Field(
+        default_factory=list,
+        description="JSON array of exact iss values accepted; empty = [KEYCLOAK_ISSUER]",
+    )
 
     @property
     def KEYCLOAK_JWKS_URI(self) -> str:
@@ -94,6 +109,11 @@ class Settings(BaseSettings):
     def KEYCLOAK_ISSUER(self) -> str:
         base = (self.KEYCLOAK_PUBLIC_URL or f"{self.FRONTEND_URL}/auth").rstrip("/")
         return f"{base}/realms/{self.KEYCLOAK_REALM}"
+
+    @property
+    def KEYCLOAK_EFFECTIVE_ISSUERS(self) -> list[str]:
+        """The allow-list actually enforced at token validation (never empty)."""
+        return list(self.KEYCLOAK_ALLOWED_ISSUERS) or [self.KEYCLOAK_ISSUER]
 
     # GitHub App (for webhook integration)
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")
@@ -202,6 +222,26 @@ class Settings(BaseSettings):
                 "backend/.env"
             ) from exc
         return v
+
+    @model_validator(mode="after")
+    def validate_allowed_issuers(self) -> "Settings":
+        """Reject an issuer allow-list entry that does not target KEYCLOAK_REALM.
+
+        Guards requirement: every accepted ``iss`` must be an issuer OF THIS
+        REALM (end with ``/realms/{KEYCLOAK_REALM}``) — otherwise a token from
+        a different realm on the same Keycloak could be allow-listed by
+        mistake. Runs on the effective list (empty setting falls back to
+        [KEYCLOAK_ISSUER], which conforms by construction).
+        """
+        suffix = f"/realms/{self.KEYCLOAK_REALM}"
+        for issuer in self.KEYCLOAK_EFFECTIVE_ISSUERS:
+            if not issuer.endswith(suffix):
+                raise ValueError(
+                    f"KEYCLOAK_ALLOWED_ISSUERS entry {issuer!r} is invalid: every "
+                    f"allowed issuer must end with {suffix!r} (the issuer of realm "
+                    f"{self.KEYCLOAK_REALM!r})"
+                )
+        return self
 
 
 @lru_cache
