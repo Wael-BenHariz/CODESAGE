@@ -29,6 +29,17 @@ spec:
                 port:
                   number: 8000
 
+          # Keycloak (identity provider) — served under /auth via
+          # --http-relative-path=/auth, so browser + backend both reach it at
+          # http://10.171.24.201/auth/realms/codesage-realm/...
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak-service
+                port:
+                  number: 8080
+
           - path: /
             pathType: Prefix
             backend:

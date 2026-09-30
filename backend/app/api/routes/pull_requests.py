@@ -19,6 +19,7 @@ from app.schemas.pull_request import (
 )
 from app.schemas.review import ReviewResponse
 from app.security.dependencies import get_current_user
+from app.security.roles import require_developer
 
 router = APIRouter()
 
@@ -137,7 +138,7 @@ async def get_pull_request(
 async def trigger_review(
     pull_request_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Trigger a code review for a pull request.

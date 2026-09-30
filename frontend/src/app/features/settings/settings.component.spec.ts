@@ -1,6 +1,7 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
+import { KeycloakService } from 'keycloak-angular';
 
 import { SettingsComponent } from './settings.component';
 import {
@@ -55,7 +56,15 @@ describe('SettingsComponent — AI model settings', () => {
 
     await TestBed.configureTestingModule({
       imports: [SettingsComponent],
-      providers: [provideHttpClient(), { provide: LlmSettingsService, useValue: svc }]
+      providers: [
+        provideHttpClient(),
+        { provide: LlmSettingsService, useValue: svc },
+        // AuthService (injected by the component) depends on KeycloakService.
+        {
+          provide: KeycloakService,
+          useValue: jasmine.createSpyObj<KeycloakService>('KeycloakService', ['isLoggedIn'])
+        }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SettingsComponent);

@@ -15,10 +15,14 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    """GitHub OAuth user account.
+    """User account (identity owned by Keycloak).
 
     Attributes:
-        github_id: GitHub user ID (unique)
+        keycloak_id: Keycloak subject (sub) — primary identity key.
+        role: Realm role synced from the JWT on every authenticated request
+            (SUPER_ADMIN | DEVELOPER | GUEST).
+        github_id: GitHub user ID from the GitHub IdP broker (optional —
+            password-only Keycloak users have none).
         login: GitHub username (unique)
         email: User's email address
         name: Display name (optional)
@@ -29,15 +33,31 @@ class User(Base):
     __table_args__ = (
         # Unique constraint for github_id
         # Unique constraint for login (username)
-        {"comment": "GitHub OAuth users with authentication tokens"},
+        {"comment": "Keycloak users with GitHub identity"},
     )
 
     # Primary key (inherited from Base)
     # id: UUID (inherited)
 
-    # GitHub Identity
-    github_id: Mapped[int] = mapped_column(
+    # Keycloak Identity
+    keycloak_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Keycloak subject (sub) claim",
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(32),
         nullable=False,
+        server_default="DEVELOPER",
+        comment="Realm role: SUPER_ADMIN | DEVELOPER | GUEST",
+    )
+
+    # GitHub Identity (from the GitHub IdP broker)
+    github_id: Mapped[int | None] = mapped_column(
+        nullable=True,
         unique=True,
         index=True,
         comment="GitHub user ID",

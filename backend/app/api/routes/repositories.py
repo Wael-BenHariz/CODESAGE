@@ -22,11 +22,14 @@ from app.schemas.repository import (
     RepositorySettings,
 )
 from app.security.dependencies import get_current_user
+from app.security.roles import require_developer
 from app.services.github import github_service
 
 router = APIRouter()
 
-installation_states: dict[str, int] = {}
+# Legacy install-state map: state -> the github_id that minted it (None for
+# Keycloak-only users with no GitHub identity).
+installation_states: dict[str, int | None] = {}
 
 
 class GitHubRepoInfo(BaseModel):
@@ -76,7 +79,7 @@ async def sync_github_app_installation(
     installation_id: int = Query(..., description="GitHub App installation ID"),
     state: Optional[str] = Query(None, description="Optional installation state returned by GitHub"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """Sync a real GitHub App installation and its accessible repositories."""
 
@@ -337,7 +340,7 @@ async def _set_repository_enabled(
 async def connect_repository(
     github_repo_id: int = Query(..., description="GitHub repository ID"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Connect a GitHub repository to CodeSage.
@@ -531,7 +534,7 @@ async def update_repository(
     repository_id: str,
     update_data: RepositoryUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Update repository configuration.
@@ -564,7 +567,7 @@ async def update_repository(
 async def enable_repository(
     repository_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """Grid toggle: enable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, True, db, current_user)
@@ -574,7 +577,7 @@ async def enable_repository(
 async def disable_repository(
     repository_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """Grid toggle: disable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, False, db, current_user)
@@ -584,7 +587,7 @@ async def disable_repository(
 async def delete_repository(
     repository_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Delete a repository from CodeSage.

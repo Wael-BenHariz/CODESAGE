@@ -28,6 +28,7 @@ from app.schemas.llm_settings import (
 )
 from app.security.dependencies import get_current_user
 from app.security.encryption import decrypt_api_key, encrypt_api_key
+from app.security.roles import require_developer
 from app.services.llm_client import resolve_llm_client
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ async def get_llm_settings(
 async def update_llm_settings(
     body: LLMSettingsUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_developer)],  # noqa: B008
 ):
     """Persist provider/model/key.
 
@@ -107,7 +108,7 @@ async def update_llm_settings(
 @router.delete("/llm")
 async def clear_llm_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_developer)],  # noqa: B008
 ):
     """Clear all LLM settings — revert to the system default Groq client."""
 
@@ -124,7 +125,7 @@ async def clear_llm_settings(
 @router.post("/llm/test", response_model=LLMTestResponse)
 async def test_llm_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_developer)],  # noqa: B008
 ):
     """Send a minimal prompt through the SAVED configuration.
 

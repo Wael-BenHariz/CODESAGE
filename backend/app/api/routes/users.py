@@ -18,6 +18,7 @@ from app.schemas.user import (
     CurrentUser,
 )
 from app.security.dependencies import get_current_user
+from app.security.roles import require_super_admin
 
 router = APIRouter()
 
@@ -44,7 +45,7 @@ async def get_my_profile(
 async def get_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_super_admin),
 ):
     """
     Get user by ID.
@@ -64,7 +65,7 @@ async def get_user(
 @router.get("", response_model=UserListResponse)
 async def list_users(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_super_admin),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by login or email"),

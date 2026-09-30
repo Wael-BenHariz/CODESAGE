@@ -45,26 +45,15 @@ export class GithubCallbackComponent implements OnInit {
       return;
     }
 
-    // Normal path: the session survived the full-page round-trip to GitHub.
-    if (this.auth.getToken()) {
+    // The Keycloak SSO session survives the full-page round-trip to GitHub:
+    // APP_INITIALIZER ran check-sso (silent iframe) while this page loaded,
+    // before ngOnInit. No tokens ever ride on this URL.
+    if (this.auth.isAuthenticated()) {
       this.finalizeInstallation();
       return;
     }
 
-    // Storage lost across the GitHub redirect — the backend carries a fresh
-    // token pair in the URL (same pattern as /auth/callback) so a successful
-    // install never dumps the user on the login page.
-    const token = params.get('token');
-    if (token) {
-      this.statusMessage.set('Restoring session...');
-      this.auth.completeLogin(token, params.get('refresh_token') || '').subscribe({
-        next: () => this.finalizeInstallation(),
-        error: () => this.showLoginFallback()
-      });
-      return;
-    }
-
-    // No token anywhere — ask the user to log in.
+    // No session — ask the user to log in.
     this.showLoginFallback();
   }
 

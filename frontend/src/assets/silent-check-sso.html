@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Silent Check SSO</title>
+  </head>
+  <body>
+    <!--
+      Loaded in a hidden iframe by keycloak-js (init option
+      silentCheckSsoRedirectUri) to detect an existing Keycloak SSO session
+      without a visible redirect. The authorization response lands in the
+      query string (code flow + PKCE); forward it to the parent app, which
+      then exchanges the code. On error the parent reloads normally —
+      check-sso simply completes as "not authenticated".
+    -->
+    <script>
+      parent.location.href = parent.location.origin + parent.location.search;
+    </script>
+  </body>
+</html>

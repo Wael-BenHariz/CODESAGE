@@ -1,17 +1,38 @@
 """
 Security Utilities Package
-JWT tokens, password hashing, and encryption helpers.
+Keycloak RS256 validation, role guards, and encryption helpers.
+
+The legacy HS256 ``TokenManager`` (jwt.py) was removed when Keycloak became
+the token authority — the backend only *validates* tokens now (keycloak.py).
 """
 
-from app.security.jwt import TokenManager, create_access_token, create_refresh_token, verify_token
-from app.security.dependencies import get_current_user, get_current_user_optional, require_admin
+from app.security.dependencies import (
+    get_current_user,
+    get_current_user_optional,
+    require_admin,
+)
+from app.security.keycloak import KeycloakTokenError, decode_keycloak_token
+from app.security.roles import (
+    ROLE_DEVELOPER,
+    ROLE_GUEST,
+    ROLE_SUPER_ADMIN,
+    derive_role,
+    require_developer,
+    require_role,
+    require_super_admin,
+)
 
 __all__ = [
-    "TokenManager",
-    "create_access_token",
-    "create_refresh_token",
-    "verify_token",
+    "ROLE_DEVELOPER",
+    "ROLE_GUEST",
+    "ROLE_SUPER_ADMIN",
+    "KeycloakTokenError",
+    "decode_keycloak_token",
+    "derive_role",
     "get_current_user",
     "get_current_user_optional",
     "require_admin",
+    "require_developer",
+    "require_role",
+    "require_super_admin",
 ]

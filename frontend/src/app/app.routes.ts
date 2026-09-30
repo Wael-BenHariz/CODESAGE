@@ -1,5 +1,10 @@
 import { Routes } from '@angular/router';
-import { authGuard } from './core/guards/auth.guard';
+import { RoleGuard } from './core/guards/role.guard';
+
+/** All authenticated roles — matches the backend's "reads: any role" rule. */
+const ANY_ROLE = ['DEVELOPER', 'GUEST', 'SUPER_ADMIN'];
+/** Roles allowed to mutate anything — matches require_developer. */
+const WRITE_ROLES = ['DEVELOPER', 'SUPER_ADMIN'];
 
 export const routes: Routes = [
   {
@@ -12,13 +17,8 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login/login.component').then(m => m.LoginComponent)
   },
   {
-    path: 'auth/callback',
-    loadComponent: () =>
-      import('./features/auth/callback/callback.component').then(m => m.CallbackComponent)
-  },
-  {
-    // No authGuard here: this route is GitHub's post-install redirect target and
-    // must render even when the session was lost on the full-page redirect.
+    // No guard here: this route is GitHub's post-install redirect target and
+    // must render even when the session is still being restored (check-sso).
     path: 'github/callback',
     loadComponent: () =>
       import('./features/auth/github-callback/github-callback.component').then(
@@ -29,7 +29,8 @@ export const routes: Routes = [
     path: 'dashboard',
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
-    canActivate: [authGuard]
+    canActivate: [RoleGuard],
+    data: { roles: WRITE_ROLES }
   },
   {
     path: 'repositories',
@@ -37,7 +38,8 @@ export const routes: Routes = [
       import('./features/repositories/repository-list/repository-list.component').then(
         m => m.RepositoryListComponent
       ),
-    canActivate: [authGuard]
+    canActivate: [RoleGuard],
+    data: { roles: ANY_ROLE }
   },
   {
     path: 'repositories/:owner/:repo',
@@ -45,13 +47,15 @@ export const routes: Routes = [
       import('./features/repositories/repository-detail/repository-detail.component').then(
         m => m.RepositoryDetailComponent
       ),
-    canActivate: [authGuard]
+    canActivate: [RoleGuard],
+    data: { roles: ANY_ROLE }
   },
   {
     path: 'repositories/:owner/:repo/pulls',
     loadComponent: () =>
       import('./features/pull-requests/pr-list/pr-list.component').then(m => m.PrListComponent),
-    canActivate: [authGuard]
+    canActivate: [RoleGuard],
+    data: { roles: ANY_ROLE }
   },
   {
     path: 'repositories/:owner/:repo/pulls/:number',
@@ -59,13 +63,15 @@ export const routes: Routes = [
       import('./features/pull-requests/pr-detail/pr-detail.component').then(
         m => m.PrDetailComponent
       ),
-    canActivate: [authGuard]
+    canActivate: [RoleGuard],
+    data: { roles: ANY_ROLE }
   },
   {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.component').then(m => m.SettingsComponent),
-    canActivate: [authGuard]
+    canActivate: [RoleGuard],
+    data: { roles: WRITE_ROLES }
   },
   {
     path: '**',

@@ -20,6 +20,7 @@ from app.schemas.review import (
     ReviewCommentResponse,
 )
 from app.security.dependencies import get_current_user
+from app.security.roles import require_developer
 
 router = APIRouter()
 
@@ -165,7 +166,7 @@ async def get_review_status(
 async def retry_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Retry a failed review.
@@ -216,7 +217,7 @@ async def retry_review(
 async def delete_review(
     review_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Delete a review and its comments.
@@ -239,7 +240,7 @@ async def resolve_comment(
     review_id: str,
     comment_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     """
     Mark a review comment as resolved.

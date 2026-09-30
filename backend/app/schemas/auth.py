@@ -4,7 +4,6 @@ Request/Response models for OAuth and JWT authentication.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +14,9 @@ class Token(BaseModel):
     access_token: str = Field(..., description="JWT access token")
     token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(..., description="Token expiration in seconds")
-    refresh_token: Optional[str] = Field(None, description="Refresh token for token renewal")
+    refresh_token: str | None = Field(
+        None, description="Refresh token for token renewal"
+    )
 
 
 class TokenPayload(BaseModel):
@@ -27,11 +28,29 @@ class TokenPayload(BaseModel):
     type: str = Field(default="access", description="Token type: access or refresh")
 
 
+class RefreshRequest(BaseModel):
+    """Refresh-token exchange request (JSON body only, no query params)."""
+
+    refresh_token: str = Field(
+        ..., min_length=1, description="JWT refresh token to exchange"
+    )
+
+
+class LogoutRequest(BaseModel):
+    """Optional logout body: a refresh token proves identity on its own."""
+
+    refresh_token: str | None = Field(
+        None, description="JWT refresh token identifying the user to log out"
+    )
+
+
 class OAuthState(BaseModel):
     """OAuth state parameter for CSRF protection."""
 
     state: str = Field(..., description="Random state string for CSRF protection")
-    redirect_url: Optional[str] = Field(None, description="URL to redirect after OAuth flow")
+    redirect_url: str | None = Field(
+        None, description="URL to redirect after OAuth flow"
+    )
 
 
 class OAuthCallback(BaseModel):
@@ -56,6 +75,6 @@ class GitHubUserInfo(BaseModel):
 
     id: int = Field(..., description="GitHub user ID")
     login: str = Field(..., description="GitHub username")
-    name: Optional[str] = Field(None, description="Display name")
-    email: Optional[str] = Field(None, description="Email address")
+    name: str | None = Field(None, description="Display name")
+    email: str | None = Field(None, description="Email address")
     avatar_url: str = Field(..., description="Avatar URL")

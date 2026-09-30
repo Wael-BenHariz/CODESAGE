@@ -76,6 +76,9 @@ kubeconfig
 secrets.env
 # Filled backend k8s secret (real credentials) — commit only secret.example.yaml
 infrastructure/k8s/base/backend/secret.yaml
+# Filled keycloak k8s secret (admin + client secrets) — commit only the template
+infrastructure/k8s/base/keycloak/keycloak-secret.yaml
+!infrastructure/k8s/base/keycloak/keycloak-secret.example.yaml
 
 # Temporary
 tmp/

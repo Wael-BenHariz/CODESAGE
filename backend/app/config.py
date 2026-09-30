@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
 
+    # TTL (seconds) for the single-use OAuth state stored in Redis during login.
+    OAUTH_STATE_TTL_SECONDS: int = 600
+    # Refresh-token rotation: when True, refresh JWTs carry a "jti" claim that
+    # must be present in the per-user Redis allow-list, and each refresh rotates
+    # it (stolen-token detection). Set to False to kill the switch: tokens are
+    # then re-issued plainly with no jti check.
+    AUTH_REFRESH_ROTATION: bool = True
+
     # Database
     DATABASE_URL: str = Field(
         default="postgresql+asyncpg://codesage:codesage@postgres:5432/codesage",
@@ -52,6 +60,40 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_SECRET: str = Field(..., description="GitHub OAuth App Client Secret")
     GITHUB_CALLBACK_URL: str = "http://localhost:8000/api/v1/auth/github/callback"
     FRONTEND_URL: str = "http://localhost:4200"
+
+    # Keycloak — the identity/token authority. GitHub OAuth is only reachable
+    # as a Keycloak social login provider (broker), never directly by the app.
+    KEYCLOAK_URL: str = Field(
+        default="http://keycloak-service.codesage.svc.cluster.local:8080/auth",
+        description=(
+            "Keycloak base URL (in-cluster service URL). Must include the "
+            "/auth context path — the server runs with --http-relative-path=/auth."
+        ),
+    )
+    KEYCLOAK_REALM: str = "codesage-realm"
+    KEYCLOAK_CLIENT_ID: str = "codesage-backend"
+    KEYCLOAK_CLIENT_SECRET: str = Field(
+        default="", description="Confidential client secret (service-to-service)"
+    )
+    KEYCLOAK_AUDIENCE: str = "codesage-angular"
+    # Externally reachable Keycloak base (what the browser uses). Tokens are
+    # minted by browser redirects through the ingress, so the `iss` claim is
+    # the public URL, not the in-cluster service URL. Defaults to
+    # {FRONTEND_URL}/auth when empty.
+    KEYCLOAK_PUBLIC_URL: str = ""
+    # Keycloak rarely rotates RS256 signing keys, but JWKS must be refetched
+    # when it does — cache TTL (seconds) for the fetched JWKS document.
+    KEYCLOAK_JWKS_CACHE_TTL: int = 3600
+
+    @property
+    def KEYCLOAK_JWKS_URI(self) -> str:
+        # Fetched server-side: use the in-cluster service URL.
+        return f"{self.KEYCLOAK_URL}/realms/{self.KEYCLOAK_REALM}/protocol/openid-connect/certs"
+
+    @property
+    def KEYCLOAK_ISSUER(self) -> str:
+        base = (self.KEYCLOAK_PUBLIC_URL or f"{self.FRONTEND_URL}/auth").rstrip("/")
+        return f"{base}/realms/{self.KEYCLOAK_REALM}"
 
     # GitHub App (for webhook integration)
     GITHUB_APP_ID: str = Field(..., description="GitHub App ID")

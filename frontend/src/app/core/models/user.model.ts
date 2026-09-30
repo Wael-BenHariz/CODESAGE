@@ -6,18 +6,10 @@ export interface User {
   avatarUrl: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  user: User;
-}
-
-export interface TokenPayload {
-  sub: string;
-  login: string;
-  exp: number;
-  iat: number;
+  /**
+   * Effective app role derived from the Keycloak JWT on every request
+   * (SUPER_ADMIN | DEVELOPER | GUEST). Optional because legacy cached
+   * profiles may not carry it yet.
+   */
+  role?: string;
 }

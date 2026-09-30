@@ -3,6 +3,7 @@ CodeSage Backend - Main Application
 FastAPI application entry point with middleware and route registration.
 """
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,9 @@ from fastapi.responses import JSONResponse
 from app.api import api_router
 from app.config import settings
 from app.db import close_db, init_db
+from app.redis import close_redis
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -27,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     yield
     # Shutdown
     await close_db()
+    await close_redis()
 
 
 # Create FastAPI application
@@ -95,7 +100,13 @@ async def general_exception_handler(
     exc: Exception,
 ) -> JSONResponse:
     """Handle uncaught exceptions."""
-    # Log the error (in production, use proper logging)
+    # Full traceback stays server-side; the response stays generic.
+    logger.error(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
