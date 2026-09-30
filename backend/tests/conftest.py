@@ -91,7 +91,7 @@ _KC_PRIVATE_PEM, KC_JWKS = _build_kc_key()
 
 def make_keycloak_token(
     sub: str = "kc-sub-test-user",
-    roles: tuple[str, ...] | list[str] = ("DEVELOPER",),
+    roles: tuple[str, ...] | list[str] | None = ("DEVELOPER",),
     *,
     issuer: str | None = None,
     azp: str = "codesage-angular",
@@ -99,7 +99,13 @@ def make_keycloak_token(
     exp_in: int = 300,
     **claims,
 ) -> str:
-    """Mint a valid RS256 Keycloak-shaped access token for tests."""
+    """Mint a valid RS256 Keycloak-shaped access token for tests.
+
+    Defaults to an access token (``typ: "Bearer"``) carrying realm roles.
+    Pass ``roles=None`` to omit ``realm_access`` entirely (a token minted
+    without the roles scope), and override any claim — including ``typ`` —
+    through ``**claims`` (applied last, so ``typ="ID"`` wins).
+    """
     import time as _time
 
     now = int(_time.time()) if iat is None else iat
@@ -107,11 +113,13 @@ def make_keycloak_token(
         "sub": sub,
         "iss": issuer if issuer is not None else settings.KEYCLOAK_ISSUER,
         "azp": azp,
+        "typ": "Bearer",
         "iat": now,
         "exp": now + exp_in,
         "preferred_username": claims.pop("preferred_username", "kc-user"),
-        "realm_access": {"roles": list(roles)},
     }
+    if roles is not None:
+        payload["realm_access"] = {"roles": list(roles)}
     payload.update(claims)
     return jose_jwt.encode(
         payload, _KC_PRIVATE_PEM, algorithm="RS256", headers={"kid": _KC_KID}

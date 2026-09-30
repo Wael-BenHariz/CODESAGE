@@ -88,7 +88,7 @@ def _select_key(jwks: dict[str, Any], token: str) -> dict[str, Any]:
 
 
 def _decode(token: str, jwks: dict[str, Any]) -> dict[str, Any]:
-    """Validate signature + issuer + expiry.
+    """Validate signature + issuer + expiry + token type (``typ``).
 
     Audience is checked separately: Keycloak access tokens identify the
     requesting client via ``azp`` (authorized party) and put ``account``-style
@@ -112,6 +112,14 @@ def _decode(token: str, jwks: dict[str, Any]) -> dict[str, Any]:
         # NTP-level skew between pods is handled by Keycloak's own iat/exp
         # sizing (300s access tokens), not by loosening validation here.
     )
+    # Only access tokens may be presented at the API. Keycloak mints
+    # typ "Bearer" on access tokens, "ID" on ID tokens and "Refresh" on
+    # refresh tokens — an ID token is minted for the same SPA client and
+    # would pass the azp check below, so the type is the discriminator that
+    # keeps it (and stolen refresh tokens) out of the Authorization header.
+    # JWTError here is re-raised as KeycloakTokenError by the caller.
+    if claims.get("typ") != "Bearer":
+        raise JWTError("Token typ is not Bearer")
     # The token must have been minted for OUR SPA client: azp == client id,
     # or an explicit aud entry when the realm sets access.token.audience.
     expected = settings.KEYCLOAK_AUDIENCE
@@ -131,7 +139,7 @@ async def decode_keycloak_token(token: str) -> dict[str, Any]:
     """Validate a Keycloak access token and return its claims.
 
     Raises:
-        KeycloakTokenError: invalid signature, issuer, audience, or expiry.
+        KeycloakTokenError: invalid signature, issuer, audience, type, or expiry.
 
     Flow: decode against the cached JWKS; on ``kid`` miss (key rotation)
     force one refetch and retry once before giving up.

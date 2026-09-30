@@ -19,10 +19,13 @@ describe('deriveRole', () => {
     expect(deriveRole(['guest'])).toBe('GUEST');
   });
 
-  it('returns DEVELOPER for an explicit role, for unknown roles, and by default', () => {
+  it('returns DEVELOPER for an explicit DEVELOPER, GUEST for anything unrecognized', () => {
     expect(deriveRole(['DEVELOPER'])).toBe('DEVELOPER');
-    expect(deriveRole(['some-other-realm-role'])).toBe('DEVELOPER');
-    expect(deriveRole([])).toBe('DEVELOPER');
+    // Fail-closed fallback (mirrors backend derive_role): unknown role names
+    // and an empty role list both land on the read-only GUEST role.
+    expect(deriveRole(['some-other-realm-role'])).toBe('GUEST');
+    expect(deriveRole(['default-roles-codesage-realm'])).toBe('GUEST');
+    expect(deriveRole([])).toBe('GUEST');
   });
 
   it('matches the backend derive_role contract case-insensitively', () => {
@@ -90,9 +93,11 @@ describe('RoleGuard', () => {
     expect(result).toEqual(router.parseUrl('/repositories'));
   });
 
-  it('mirrors the backend when the token carries no realm roles (default DEVELOPER)', async () => {
-    // Authenticated Keycloak session with an empty role list (invite-only
-    // realm default): backend derives DEVELOPER, so the write route opens.
+  it('mirrors the backend when the token carries no recognized roles (default GUEST)', async () => {
+    // Authenticated Keycloak session whose realm roles are only defaults
+    // (empty list here): backend derive_role falls back to GUEST, so the
+    // guard must bounce off the write route to the read-only home — exactly
+    // like an explicit GUEST, keeping both sides identical.
     keycloak = jasmine.createSpyObj<KeycloakService>('KeycloakService', [
       'isLoggedIn',
       'getUserRoles'
@@ -106,6 +111,8 @@ describe('RoleGuard', () => {
     guard = TestBed.inject(RoleGuard);
 
     const writeRoute = route({ roles: ['DEVELOPER', 'SUPER_ADMIN'] });
-    expect(await guard.canActivate(writeRoute, state('/dashboard'))).toBeTrue();
+    const result = await guard.canActivate(writeRoute, state('/dashboard'));
+
+    expect(result).toEqual(router.parseUrl('/repositories'));
   });
 });

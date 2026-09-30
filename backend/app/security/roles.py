@@ -24,9 +24,10 @@ def derive_role(token_roles: list[str]) -> str:
 
     GUEST outranks DEVELOPER so an explicit read-only downgrade in Keycloak
     wins even if the user also carries DEVELOPER (e.g. via a default role).
-    No recognized role → DEVELOPER: the realm is invite-only
-    (registrationAllowed=false), and GUEST is an *explicit* restriction, not
-    the anonymous default.
+    No recognized role → GUEST (fail-closed): a token whose realm roles are
+    only realm defaults (``default-roles-*``) gets read-only access until an
+    admin assigns DEVELOPER explicitly. A token with no role claim at all
+    never reaches this function — ``_claim_roles`` rejects it with a 401.
     """
     roles = {r.upper() for r in token_roles if isinstance(r, str)}
     if ROLE_SUPER_ADMIN in roles:
@@ -35,7 +36,7 @@ def derive_role(token_roles: list[str]) -> str:
         return ROLE_GUEST
     if ROLE_DEVELOPER in roles:
         return ROLE_DEVELOPER
-    return ROLE_DEVELOPER
+    return ROLE_GUEST
 
 
 def _forbidden() -> HTTPException:

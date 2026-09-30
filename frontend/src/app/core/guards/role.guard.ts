@@ -7,10 +7,13 @@ import { KeycloakAuthGuard, KeycloakService } from 'keycloak-angular';
  * route access.
  *
  * Mirrors the backend's `derive_role` (app/security/roles.py) exactly:
- * precedence SUPER_ADMIN > GUEST > DEVELOPER; no recognized role → DEVELOPER
- * (the realm is invite-only — GUEST is an explicit restriction, not the
- * anonymous default). Keeping both sides identical prevents a redirect loop
- * where the frontend allows a user the backend 403s, or vice versa.
+ * precedence SUPER_ADMIN > GUEST > DEVELOPER; no recognized role → GUEST
+ * (fail-closed: a session whose realm roles are only `default-roles-*` is
+ * read-only until an admin assigns DEVELOPER explicitly). A token with no
+ * role claim at all never gets this far — the backend rejects it with a 401
+ * before the guard's role list is ever consulted. Keeping both sides
+ * identical prevents a redirect loop where the frontend allows a user the
+ * backend 403s, or vice versa.
  */
 export function deriveRole(tokenRoles: readonly string[]): string {
   const roles = new Set(tokenRoles.map(role => String(role).toUpperCase()));
@@ -20,7 +23,10 @@ export function deriveRole(tokenRoles: readonly string[]): string {
   if (roles.has('GUEST')) {
     return 'GUEST';
   }
-  return 'DEVELOPER';
+  if (roles.has('DEVELOPER')) {
+    return 'DEVELOPER';
+  }
+  return 'GUEST';
 }
 
 /**

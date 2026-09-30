@@ -75,16 +75,33 @@ async def _is_revoked(user_id: str, payload: dict) -> bool:
 
 
 def _claim_roles(payload: dict) -> list[str]:
-    """Realm roles from a Keycloak access token (``realm_access.roles``)."""
+    """Realm roles from a Keycloak access token.
+
+    Sources: ``realm_access.roles`` (the ``roles`` client scope), else a flat
+    top-level ``roles`` list. A token carrying NEITHER claim was not minted
+    with the roles scope (e.g. an ID token replayed as a Bearer token) — it
+    must be rejected instead of falling through to the fallback role, which
+    would silently upgrade it.
+
+    Raises:
+        KeycloakTokenError: neither ``realm_access`` nor ``roles`` present.
+            Carries no token material.
+    """
     realm_access = payload.get("realm_access")
     if isinstance(realm_access, dict):
         roles = realm_access.get("roles", [])
         if isinstance(roles, list):
             return [str(r) for r in roles]
+        # Claim present but not a list — treat as an empty role set so the
+        # fallback applies; only *absent* claims are rejected below.
+        return []
     # Some setups flatten roles at the top level (client-scope mapper).
     flat = payload.get("roles")
     if isinstance(flat, list):
         return [str(r) for r in flat]
+    if realm_access is None and flat is None:
+        raise KeycloakTokenError("Token carries no role claim")
+    # Present but malformed shape — empty role set, fallback applies.
     return []
 
 
@@ -208,6 +225,11 @@ async def _authenticate(
 
     try:
         payload = await decode_keycloak_token(credentials.credentials)
+        # Reject role-less tokens here, before any user resolution: a token
+        # with neither realm_access nor a flat roles claim must 401, not
+        # inherit the fallback role (KeycloakTokenError → caller returns
+        # None → generic 401).
+        _claim_roles(payload)
     except KeycloakTokenError:
         logger.warning("Access token verification failed")
         return None
