@@ -13,8 +13,14 @@ data:
       "sslRequired": "external",
       "bruteForceProtected": true,
       "failureFactor": 5,
+      "permanentLockout": false,
+      "waitIncrementSeconds": 60,
+      "maxFailureWaitSeconds": 900,
+      "maxDeltaTimeSeconds": 3600,
+      "minimumQuickLoginRetrySeconds": 60,
       "accessTokenLifespan": 300,
       "refreshTokenMaxReuse": 0,
+      "ssoSessionIdleTimeout": 1800,
       "ssoSessionMaxLifespan": 36000,
       "roles": {
         "realm": [
@@ -558,16 +564,14 @@ data:
             "acr"
           ],
           "redirectUris": [
-            "http://10.171.24.201/*",
-            "http://localhost:4200/*"
+            "http://10.171.24.201/*"
           ],
           "webOrigins": [
-            "http://10.171.24.201",
-            "http://localhost:4200"
+            "http://10.171.24.201"
           ],
           "attributes": {
             "pkce.code.challenge.method": "S256",
-            "post.logout.redirect.uris": "http://10.171.24.201/*+http://localhost:4200/*"
+            "post.logout.redirect.uris": "http://10.171.24.201/*"
           }
         }
       ],
@@ -580,8 +584,8 @@ data:
           "credentials": [
             {
               "type": "password",
-              "value": "Admin123!@#",
-              "temporary": false
+              "value": "${KEYCLOAK_SUPERADMIN_PASSWORD}",
+              "temporary": true
             }
           ],
           "groups": [
