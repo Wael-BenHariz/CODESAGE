@@ -39,9 +39,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="AI-powered code review platform with GitHub integration",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url="/api/docs" if settings.ENABLE_API_DOCS else None,
+    redoc_url="/api/redoc" if settings.ENABLE_API_DOCS else None,
+    openapi_url="/api/openapi.json" if settings.ENABLE_API_DOCS else None,
     lifespan=lifespan,
 )
 

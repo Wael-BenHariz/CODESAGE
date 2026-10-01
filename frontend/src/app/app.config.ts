@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { routes } from './app.routes';
 import { environment } from '@env/environment';
+import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 
 /** Shape returned by GET /api/v1/auth/keycloak/config. */
 export interface KeycloakAppConfig {
@@ -65,6 +66,16 @@ export const appConfig: ApplicationConfig = {
       useFactory: initializeKeycloak,
       multi: true,
       deps: [HttpClient]
+    },
+    // 401 recovery: forced token refresh (updateToken(-1)) + one retry, then
+    // logout if recovery fails. MUST be provided BEFORE
+    // KeycloakBearerInterceptor — first-registered = outermost in Angular's
+    // reduceRight chain, so the retry re-enters the bearer interceptor below
+    // and gets the refreshed token re-attached (see auth.interceptor.ts).
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true
     },
     // Attaches the Keycloak bearer token to outgoing API calls (replaces the
     // retired custom auth interceptor; refresh is handled by keycloak-js).
