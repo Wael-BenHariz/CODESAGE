@@ -79,6 +79,8 @@ infrastructure/k8s/base/backend/secret.yaml
 # Filled keycloak k8s secret (admin + client secrets) — commit only the template
 infrastructure/k8s/base/keycloak/keycloak-secret.yaml
 !infrastructure/k8s/base/keycloak/keycloak-secret.example.yaml
+# Filled repo-tenant-service k8s secret (internal token + DB/Redis creds)
+infrastructure/k8s/base/repo-tenant-service/secret.yaml
 
 # Temporary
 tmp/

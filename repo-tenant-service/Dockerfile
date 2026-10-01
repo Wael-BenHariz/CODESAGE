@@ -1,20 +1,20 @@
-# Stage 1 — build (uses JDK, thrown away after)
-FROM eclipse-temurin:21-jdk-alpine AS builder
+# Stage 1 — build from source (self-contained: the host has no Java/Maven,
+# so build-and-deploy.sh must be able to `docker build` this directory
+# without a prior `mvn package`).
+FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
-COPY target/*.jar app.jar
 
-# Extract layers for better caching
-RUN java -Djarmode=layertools -jar app.jar extract
+# Dependency layer first — re-runs only when pom.xml changes.
+COPY pom.xml ./
+RUN mvn -B -q -DskipTests dependency:go-offline
 
-# Stage 2 — runtime (uses JRE only)
+COPY src ./src
+RUN mvn -B -q -DskipTests package
+
+# Stage 2 — runtime (JRE only)
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
 
-# Copy extracted layers (most stable layers first)
-COPY --from=builder /app/dependencies/ ./
-COPY --from=builder /app/spring-boot-loader/ ./
-COPY --from=builder /app/snapshot-dependencies/ ./
-COPY --from=builder /app/application/ ./
-
-ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
 EXPOSE 8085

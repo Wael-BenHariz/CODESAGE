@@ -1,0 +1,52 @@
+# Non-secret configuration for repo-tenant-service (one enabled repo = one
+# namespace). The `DEFAULT_*` keys are the values injected into every
+# provisioned namespace — enabling a repo must never fail because another
+# microservice is down, so these are the single source of truth whenever a
+# remote source (QUOTA_SERVICE_URL) is empty or unreachable.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: repo-tenant-config
+  namespace: codesage
+data:
+  SERVER_PORT: "8085"
+
+  # Shared Postgres — schema is owned by the backend's Alembic migration 009
+  # (repo_tenants); Hibernate runs with ddl-auto: none and never alters tables.
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "codesage"
+  DB_USERNAME: "codesage"
+  JPA_DDL_AUTO: "none"
+  JPA_SHOW_SQL: "false"
+
+  # Redis cache (RedisConfig has a lenient error handler: Redis down = no
+  # cache, never a failed request).
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+
+  # Keycloak JWT validation — in-cluster certs URL, plus the issuer
+  # allow-list (external MetalLB address AND in-cluster service DNS serve
+  # the same realm; tokens from either must validate).
+  JWT_JWK_SET_URI: "http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm/protocol/openid-connect/certs"
+  KEYCLOAK_ALLOWED_ISSUERS: "http://10.171.24.201/auth/realms/codesage-realm,http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm"
+
+  CORS_ALLOWED_ORIGINS: "http://localhost:4200,http://10.171.24.201,http://codesage.local"
+
+  # Optional remote source of per-repo quota overrides. CodeSage has no
+  # quota microservice — empty means "use the DEFAULT_* values below" and
+  # QuotaClient makes no network call at all.
+  QUOTA_SERVICE_URL: ""
+
+  # ── Safe defaults injected by this ConfigMap ────────────────────────────
+  DEFAULT_MAX_CPU: "500m"
+  DEFAULT_MAX_MEMORY: "512Mi"
+  DEFAULT_MAX_TOTAL_CPU: "10"
+  DEFAULT_MAX_TOTAL_MEMORY: "20Gi"
+  DEFAULT_MAX_FUNCTIONS: "10"
+  DEFAULT_MAX_PODS: "50"
+
+  # Cache TTLs (seconds), one per named cache
+  CACHE_TTL_REPO_QUOTA: "600"
+  CACHE_TTL_ACTIVE_REPO_NAMESPACES: "300"
+  CACHE_TTL_DEFAULT: "300"

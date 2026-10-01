@@ -2,6 +2,7 @@ package com.codesage.repo.common.exception;
 
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.time.Instant;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -56,11 +58,15 @@ public class GlobalExceptionHandler {
         );
     }
 
-    //  Fallback for unexpected errors (500)
+    //  Fallback for unexpected errors (500) — always log the stack, a 500
+    //  without a trace is undebuggable.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(
             Exception ex,
             HttpServletRequest request) {
+
+        log.error("Unhandled exception on {} {}", request.getMethod(),
+                request.getRequestURI(), ex);
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(

@@ -51,6 +51,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- Actuator: /actuator/health (k8s probes) + /actuator/prometheus -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- JPA / Database — shares the `codesage` Postgres database; the
              repo_tenants schema is owned by the backend's Alembic migration
              (009), so ddl-auto stays `none` in production. -->

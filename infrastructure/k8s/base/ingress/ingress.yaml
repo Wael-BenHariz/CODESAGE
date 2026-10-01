@@ -21,6 +21,18 @@ spec:
   rules:
     - http:
         paths:
+          # repo-tenant-service read API — MUST precede the generic /api
+          # rule (ingress-nginx also re-sorts by length, but keeping the
+          # order explicit documents the intent: /api/v1/repos/* is NOT
+          # served by the backend).
+          - path: /api/v1/repos
+            pathType: Prefix
+            backend:
+              service:
+                name: repo-tenant-service
+                port:
+                  number: 8085
+
           - path: /api
             pathType: Prefix
             backend:

@@ -72,6 +72,27 @@ bash infrastructure/k8s/scripts/build-and-deploy.sh
 kubectl apply -k infrastructure/k8s/base/backend/
 ```
 
+## Step 8b — repo-tenant-service (one enabled repo = one namespace):
+
+```bash
+# First deploy only:
+#   cp infrastructure/k8s/base/repo-tenant-service/secret.example.yaml \
+#      infrastructure/k8s/base/repo-tenant-service/secret.yaml
+# Fill INTERNAL_SERVICE_TOKEN — it MUST equal REPO_TENANT_INTERNAL_TOKEN in
+# base/backend/secret.yaml (X-Service-Token auth between the two services).
+kubectl apply -k infrastructure/k8s/base/repo-tenant-service/
+kubectl wait --namespace codesage --for=condition=ready pod --selector=app=repo-tenant-service --timeout=120s
+```
+
+> The backend calls it in-cluster at
+> `http://repo-tenant-service.codesage.svc.cluster.local:8085`. Those calls
+> are **best-effort** (3 s timeout, failures logged): saving watched-repos
+> never fails because this service is down. The ingress exposes its
+> read-only API under `/api/v1/repos` (Keycloak JWT); its
+> `/api/v1/repos/internal/*` endpoints are X-Service-Token only.
+> Quota defaults live in ConfigMap `repo-tenant-config` (`DEFAULT_*` keys)
+> — provisioning proceeds on them whenever a remote source is absent.
+
 ## Step 9 — Frontend:
 
 ```bash
@@ -100,6 +121,8 @@ kubectl rollout restart deployment/codesage-backend -n codesage
 > `secret.example.yaml` template is committed. The filled file holds real
 > credentials (GitHub OAuth + App key, Groq/Gemini/SonarQube tokens); never
 > `git add -f` it. Values live in `backend/.env` for local dev.
+> The same rule applies to `base/repo-tenant-service/secret.yaml`
+> (gitignored; committed template is `secret.example.yaml`).
 
 ## Post-deploy — SonarQube URL
 
