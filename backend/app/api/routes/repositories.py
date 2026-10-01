@@ -3,6 +3,7 @@ Repository Routes
 Repository management and configuration endpoints.
 """
 
+import logging
 import secrets
 from typing import Optional
 
@@ -23,7 +24,10 @@ from app.schemas.repository import (
 )
 from app.security.dependencies import get_current_user
 from app.security.roles import require_developer
+from app.services import repo_tenant
 from app.services.github import github_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -287,8 +291,13 @@ async def _set_watched_state(
     user_id,
     repo: Repository,
     enabled: bool,
-) -> None:
-    """Keep watched_repos (the review switch) in sync with enable/disable."""
+) -> str | None:
+    """Keep watched_repos (the review switch) in sync with enable/disable.
+
+    Returns the transition that just happened — ``"enabled"``,
+    ``"disabled"`` or ``None`` (nothing changed) — so callers can mirror it
+    to repo-tenant-service: one enabled repo = one namespace.
+    """
     result = await db.execute(
         select(WatchedRepo).where(
             WatchedRepo.user_id == user_id,
@@ -297,6 +306,8 @@ async def _set_watched_state(
     )
     record = result.scalar_one_or_none()
     if record:
+        if record.enabled == enabled:
+            return None
         record.enabled = enabled
     else:
         db.add(
@@ -307,12 +318,48 @@ async def _set_watched_state(
                 enabled=enabled,
             )
         )
+        if not enabled:
+            # Never-on -> off is not a transition: no namespace to tear down.
+            return None
+    return "enabled" if enabled else "disabled"
 
 
 async def _watched_state_map(db: AsyncSession, user_id) -> dict[int, bool]:
     """github_repo_id -> watched enabled for this user (absent = not watching)."""
     result = await db.execute(select(WatchedRepo).where(WatchedRepo.user_id == user_id))
     return {item.repo_id: item.enabled for item in result.scalars().all()}
+
+
+async def _mirror_repo_tenant(
+    transition: str | None,
+    *,
+    repo_id: int,
+    full_name: str,
+    owner_user_id,
+) -> None:
+    """Best-effort mirror of a watched-state transition to repo-tenant-service.
+
+    Same contract as the selection hook (github_repos.py): the toggle is
+    already committed and must never surface a 5xx because the microservice
+    is down — failures are logged and swallowed (the client itself never
+    raises; the guard below is belt-and-braces for tests/simulators).
+    """
+    if transition is None:
+        return
+    try:
+        if transition == "enabled":
+            await repo_tenant.enable_repo(
+                repo_id=repo_id, full_name=full_name, owner_user_id=owner_user_id
+            )
+        else:
+            await repo_tenant.disable_repo(repo_id)
+    except Exception:  # best-effort by design — the toggle must not fail
+        logger.warning(
+            "repo-tenant hook failed unexpectedly for %s (%s)",
+            full_name,
+            transition,
+            exc_info=True,
+        )
 
 
 async def _set_repository_enabled(
@@ -330,9 +377,15 @@ async def _set_repository_enabled(
             detail="Repository not found",
         )
     repo.enabled = enabled
-    await _set_watched_state(db, current_user.id, repo, enabled)
+    transition = await _set_watched_state(db, current_user.id, repo, enabled)
     await db.commit()
     await db.refresh(repo)
+    await _mirror_repo_tenant(
+        transition,
+        repo_id=repo.github_repo_id,
+        full_name=repo.full_name,
+        owner_user_id=current_user.id,
+    )
     return RepositoryResponse.model_validate(repo)
 
 
@@ -379,10 +432,16 @@ async def connect_repository(
 
     repo = await _upsert_repository(db, selected_installation, selected_repo)
     # Connecting implies intent to review: create the watched (review) row too.
-    await _set_watched_state(db, current_user.id, repo, True)
+    transition = await _set_watched_state(db, current_user.id, repo, True)
     await db.commit()
     await db.refresh(repo)
-    
+    await _mirror_repo_tenant(
+        transition,
+        repo_id=repo.github_repo_id,
+        full_name=repo.full_name,
+        owner_user_id=current_user.id,
+    )
+
     return RepositoryResponse.model_validate(repo)
 
 
@@ -551,15 +610,24 @@ async def update_repository(
         )
     
     # Update fields
+    transition: str | None = None
     if update_data.enabled is not None:
         repo.enabled = update_data.enabled
-        await _set_watched_state(db, current_user.id, repo, update_data.enabled)
+        transition = await _set_watched_state(
+            db, current_user.id, repo, update_data.enabled
+        )
     if update_data.default_branch is not None:
         repo.default_branch = update_data.default_branch
     
     await db.commit()
     await db.refresh(repo)
-    
+    await _mirror_repo_tenant(
+        transition,
+        repo_id=repo.github_repo_id,
+        full_name=repo.full_name,
+        owner_user_id=current_user.id,
+    )
+
     return RepositoryResponse.model_validate(repo)
 
 
@@ -612,9 +680,20 @@ async def delete_repository(
             WatchedRepo.repo_id == repo.github_repo_id,
         )
     )
+    had_enabled = False
     for record in watched_result.scalars().all():
+        if record.enabled:
+            # Removing an enabled repo tears its namespace down too.
+            had_enabled = True
         await db.delete(record)
 
-    # Delete repository (cascades to PRs and reviews)
+    # Delete repository (cascades to PRs and reviews). Capture identity
+    # first: the instance's attributes expire once the delete commits.
+    repo_id = repo.github_repo_id
+    full_name = repo.full_name
     await db.delete(repo)
     await db.commit()
+    if had_enabled:
+        await _mirror_repo_tenant(
+            "disabled", repo_id=repo_id, full_name=full_name, owner_user_id=None
+        )

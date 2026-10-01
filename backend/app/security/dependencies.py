@@ -26,7 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.models import User
+from app.db.models import GitHubInstallation, User
 from app.redis import REVOKED_AT_KEY, get_redis
 from app.security.keycloak import KeycloakTokenError, decode_keycloak_token
 
@@ -224,6 +224,44 @@ def _sync_profile_and_role(user: User, payload: dict) -> bool:
     return changed
 
 
+async def _adopt_github_installation(db: AsyncSession, user: User) -> None:
+    """Heal a missing ``users.github_installation_id`` from ``github_installations``.
+
+    The link is normally written by the signed-state install callback or the
+    ``installation`` webhook. When neither fired (e.g. the GitHub App Setup
+    URL is unset so the callback never arrives), adopt the newest
+    installation owned by this user's GitHub account so /github/status,
+    /github/repos and webhook owner-resolution keep resolving.
+
+    No-op when the link already exists or the row has no GitHub identity
+    (console-only users). The link is never *replaced* — only a NULL is
+    healed, so the webhook/callback value stays authoritative.
+    """
+    if user.github_installation_id is not None or user.github_id is None:
+        return
+    result = await db.execute(
+        select(GitHubInstallation)
+        .where(GitHubInstallation.account_id == user.github_id)
+        .order_by(GitHubInstallation.created_at.desc())
+        .limit(1)
+    )
+    installation = result.scalar_one_or_none()
+    if installation is None:
+        return
+    # Capture before commit(): commit expires every attribute in the session
+    # and a lazy re-read would raise MissingGreenlet in async context.
+    new_installation_id = installation.installation_id
+    user.github_installation_id = new_installation_id
+    await db.commit()
+    await db.refresh(user)
+    logger.info(
+        "Adopted GitHub installation %s for user %s (account %s)",
+        new_installation_id,
+        user.login,
+        user.github_id,
+    )
+
+
 async def _authenticate(
     credentials: HTTPAuthorizationCredentials | None,
     db: AsyncSession,
@@ -250,6 +288,9 @@ async def _authenticate(
     user = await _find_or_create_user(db, payload)
     if user is None:
         return None
+
+    # Self-heal the user<->installation link before any endpoint reads it.
+    await _adopt_github_installation(db, user)
 
     if await _is_revoked(str(user.id), payload):
         logger.info("Rejected revoked token for user %s", user.id)

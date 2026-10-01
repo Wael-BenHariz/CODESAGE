@@ -376,6 +376,18 @@ async def _handle_installation_event(
         for repo_data in payload.get("repositories", []):
             await _upsert_repository_record(db, record, repo_data)
 
+        # Link the installing account's owner immediately: the browser-side
+        # install callback may never arrive (GitHub App Setup URL unset or
+        # the redirect aborted), and without this link /github/status says
+        # "not installed", /github/repos 400s, and PR webhooks are ignored
+        # with "no user linked to installation".
+        if action == "created" and account.get("id"):
+            await db.execute(
+                update(User)
+                .where(User.github_id == account["id"])
+                .values(github_installation_id=installation_id)
+            )
+
         await db.commit()
         
         return {
