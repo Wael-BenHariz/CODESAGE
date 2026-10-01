@@ -9,6 +9,7 @@ from app.db.models.pull_requests import PullRequest
 from app.db.models.reviews import Review
 from app.db.models.review_comments import ReviewComment
 from app.db.models.webhook_events import WebhookEvent
+from app.db.models.scan_reports import ScanFindingRow, ScanReportRow
 
 __all__ = [
     "User",
@@ -20,4 +21,6 @@ __all__ = [
     "Review",
     "ReviewComment",
     "WebhookEvent",
+    "ScanReportRow",
+    "ScanFindingRow",
 ]
