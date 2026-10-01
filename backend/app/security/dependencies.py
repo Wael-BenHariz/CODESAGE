@@ -10,7 +10,10 @@ HS256 ``token_manager`` no longer authenticates API calls.
   * JIT-provisions the local user row on first login (find by keycloak_id,
     else adopt by github_id, else create),
   * syncs ``role`` from the JWT's ``realm_access.roles`` on **every** request
-    (the DB column is a mirror — guards never trust a stale value),
+    (the DB column is a mirror — guards never trust a stale value). When no
+    recognized realm role is present, a token carrying the GitHub identity
+    claims (``githubId``/``githubLogin``) derives DEVELOPER; everything else
+    falls back to GUEST (fail-closed),
   * keeps the P0 revocation cutoff (logout = reject tokens issued before it).
 """
 
@@ -116,6 +119,16 @@ def _int_claim(payload: dict, key: str) -> int | None:
         return None
 
 
+def _via_github(payload: dict) -> bool:
+    """True when the token carries GitHub identity claims.
+
+    The ``github-claims`` client scope only maps them from user attributes
+    that the GitHub IdP mappers populate at broker login — their presence in
+    the JWT means this session authenticated through GitHub.
+    """
+    return payload.get("githubId") is not None or bool(payload.get("githubLogin"))
+
+
 async def _find_or_create_user(db: AsyncSession, payload: dict) -> User | None:
     """Resolve (or JIT-provision) the local user for a validated token.
 
@@ -163,7 +176,7 @@ async def _find_or_create_user(db: AsyncSession, payload: dict) -> User | None:
         email=(str(payload["email"])[:512] if payload.get("email") else None),
         name=(str(name)[:255] if name else None),
         avatar_url=(str(payload["picture"])[:1024] if payload.get("picture") else None),
-        role=derive_role(_claim_roles(payload)),
+        role=derive_role(_claim_roles(payload), via_github=_via_github(payload)),
     )
     db.add(user)
     try:
@@ -194,7 +207,7 @@ def _sync_profile_and_role(user: User, payload: dict) -> bool:
 
     changed = False
 
-    role = derive_role(_claim_roles(payload))
+    role = derive_role(_claim_roles(payload), via_github=_via_github(payload))
     if user.role != role:
         logger.info("Role sync: user %s %s -> %s", user.id, user.role, role)
         user.role = role

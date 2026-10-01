@@ -17,16 +17,21 @@ ROLE_GUEST = "GUEST"
 VALID_ROLES = (ROLE_SUPER_ADMIN, ROLE_DEVELOPER, ROLE_GUEST)
 
 
-def derive_role(token_roles: list[str]) -> str:
+def derive_role(token_roles: list[str], *, via_github: bool = False) -> str:
     """Map Keycloak realm roles to the single app role for this request.
 
     Precedence: SUPER_ADMIN > GUEST > DEVELOPER.
 
     GUEST outranks DEVELOPER so an explicit read-only downgrade in Keycloak
     wins even if the user also carries DEVELOPER (e.g. via a default role).
-    No recognized role → GUEST (fail-closed): a token whose realm roles are
-    only realm defaults (``default-roles-*``) gets read-only access until an
-    admin assigns DEVELOPER explicitly. A token with no role claim at all
+
+    No recognized role → fallback: ``via_github=True`` (token carries the
+    GitHub identity claims ``githubId``/``githubLogin`` — a session that came
+    through the GitHub broker) derives DEVELOPER, so GitHub sign-ins get a
+    usable role without an admin assigning one in Keycloak. Anything else
+    falls back to GUEST (fail-closed): a non-GitHub token whose realm roles
+    are only realm defaults (``default-roles-*``) stays read-only until an
+    admin assigns a role explicitly. A token with no role claim at all
     never reaches this function — ``_claim_roles`` rejects it with a 401.
     """
     roles = {r.upper() for r in token_roles if isinstance(r, str)}
@@ -35,6 +40,8 @@ def derive_role(token_roles: list[str]) -> str:
     if ROLE_GUEST in roles:
         return ROLE_GUEST
     if ROLE_DEVELOPER in roles:
+        return ROLE_DEVELOPER
+    if via_github:
         return ROLE_DEVELOPER
     return ROLE_GUEST
 

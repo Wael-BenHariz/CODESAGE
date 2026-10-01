@@ -5,8 +5,11 @@
    audience and expiry are all valid.
 2. Role-claim rejection: a token with NEITHER ``realm_access`` NOR a flat
    ``roles`` claim is a 401, never the fallback role.
-3. Fail-closed fallback: ``realm_access`` present but no recognized role name
-   (e.g. only ``default-roles-*``) → GUEST, identically in
+3. Fallback role: ``realm_access`` present but no recognized role name
+   (e.g. only ``default-roles-*``) → GUEST for non-GitHub tokens
+   (fail-closed), but DEVELOPER when the token carries the GitHub identity
+   claims (``githubId``/``githubLogin`` — a GitHub-brokered session), with an
+   explicit GUEST/SUPER_ADMIN still outranking that fallback — identically in
    ``app.security.roles.derive_role`` and the frontend ``deriveRole``.
 4. The generic 401 body never leaks which check failed.
 """
@@ -108,11 +111,11 @@ async def test_access_token_with_flat_roles_claim_accepted(client):
     assert resp.json()["role"] == "DEVELOPER"
 
 
-# --- 3. fallback role (fail-closed GUEST) -----------------------------------
+# --- 3. fallback role (GUEST fail-closed; DEVELOPER via GitHub claims) ------
 
 
 async def test_default_roles_only_falls_back_to_guest(client):
-    """realm_access with only realm defaults → GUEST, not DEVELOPER."""
+    """realm_access with only realm defaults (no GitHub claims) → GUEST."""
     token = make_keycloak_token(
         sub="kc-sub-defaults",
         roles=("default-roles-codesage-realm", "offline_access", "uma_authorization"),
@@ -130,12 +133,60 @@ async def test_unrecognized_role_names_fall_back_to_guest(client):
     assert resp.json()["role"] == "GUEST"
 
 
+async def test_github_session_default_roles_falls_back_to_developer(client):
+    """GitHub-brokered token (githubId claim) with only default realm roles
+    → DEVELOPER: signing in through GitHub is the grant, no Keycloak role
+    assignment needed."""
+    token = make_keycloak_token(
+        sub="kc-sub-github-defaults",
+        roles=("default-roles-codesage-realm", "offline_access", "uma_authorization"),
+        githubId=75458407,
+        githubLogin="Wael-BenHariz",
+    )
+    resp = await _me(client, token)
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "DEVELOPER"
+
+
+async def test_github_login_claim_alone_is_enough(client):
+    """githubLogin without githubId still counts as a GitHub session."""
+    token = make_keycloak_token(
+        sub="kc-sub-github-login-only",
+        roles=("default-roles-codesage-realm",),
+        githubLogin="some-login",
+    )
+    resp = await _me(client, token)
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "DEVELOPER"
+
+
+async def test_explicit_guest_downgrade_still_beats_github_fallback(client):
+    """An explicit GUEST assignment outranks the GitHub-developer fallback —
+    admins keep their read-only downgrade lever."""
+    token = make_keycloak_token(
+        sub="kc-sub-github-guest",
+        roles=("default-roles-codesage-realm", "GUEST"),
+        githubId=75458407,
+    )
+    resp = await _me(client, token)
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "GUEST"
+
+
 async def test_fallback_role_matches_backend_contract():
-    """derive_role's fallback is GUEST — the guard the frontend mirrors."""
+    """derive_role's fallback: GUEST by default, DEVELOPER for GitHub
+    sessions — the guard the frontend mirrors."""
     from app.security.roles import derive_role
 
+    # Non-GitHub session (fail-closed GUEST).
     assert derive_role([]) == "GUEST"
     assert derive_role(["default-roles-codesage-realm"]) == "GUEST"
+    # GitHub-brokered session → DEVELOPER fallback.
+    assert derive_role([], via_github=True) == "DEVELOPER"
+    assert derive_role(["default-roles-codesage-realm"], via_github=True) == "DEVELOPER"
+    # Explicit roles always outrank the GitHub fallback.
+    assert derive_role(["GUEST"], via_github=True) == "GUEST"
+    assert derive_role(["SUPER_ADMIN"], via_github=True) == "SUPER_ADMIN"
 
 
 # --- 4. recognized roles unchanged ------------------------------------------

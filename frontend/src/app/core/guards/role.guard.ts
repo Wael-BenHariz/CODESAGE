@@ -7,15 +7,17 @@ import { KeycloakAuthGuard, KeycloakService } from 'keycloak-angular';
  * route access.
  *
  * Mirrors the backend's `derive_role` (app/security/roles.py) exactly:
- * precedence SUPER_ADMIN > GUEST > DEVELOPER; no recognized role → GUEST
- * (fail-closed: a session whose realm roles are only `default-roles-*` is
- * read-only until an admin assigns DEVELOPER explicitly). A token with no
+ * precedence SUPER_ADMIN > GUEST > DEVELOPER; no recognized role → DEVELOPER
+ * when the token carries the GitHub identity claims (`viaGitHub` — a session
+ * that authenticated through the GitHub broker), else GUEST (fail-closed: a
+ * non-GitHub session whose realm roles are only `default-roles-*` is
+ * read-only until an admin assigns a role explicitly). A token with no
  * role claim at all never gets this far — the backend rejects it with a 401
  * before the guard's role list is ever consulted. Keeping both sides
  * identical prevents a redirect loop where the frontend allows a user the
  * backend 403s, or vice versa.
  */
-export function deriveRole(tokenRoles: readonly string[]): string {
+export function deriveRole(tokenRoles: readonly string[], viaGitHub = false): string {
   const roles = new Set(tokenRoles.map(role => String(role).toUpperCase()));
   if (roles.has('SUPER_ADMIN')) {
     return 'SUPER_ADMIN';
@@ -26,7 +28,7 @@ export function deriveRole(tokenRoles: readonly string[]): string {
   if (roles.has('DEVELOPER')) {
     return 'DEVELOPER';
   }
-  return 'GUEST';
+  return viaGitHub ? 'DEVELOPER' : 'GUEST';
 }
 
 /**
@@ -49,7 +51,10 @@ export class RoleGuard extends KeycloakAuthGuard {
     }
 
     const required = (route.data?.['roles'] as string[] | undefined) ?? [];
-    if (required.length === 0 || required.includes(deriveRole(this.roles))) {
+    const parsed = this.keycloakAngular.getKeycloakInstance()?.tokenParsed;
+    const viaGitHub =
+      parsed != null && (parsed['githubId'] != null || parsed['githubLogin'] != null);
+    if (required.length === 0 || required.includes(deriveRole(this.roles, viaGitHub))) {
       return true;
     }
 
