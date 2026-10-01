@@ -3,6 +3,7 @@ Webhook Routes
 GitHub webhook handling endpoints.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from sqlalchemy.orm import selectinload
 from app.db import get_db
 from app.db.models import GitHubInstallation, PullRequest, Repository, Review, User, WatchedRepo, WebhookEvent
 from app.schemas.webhook import WebhookProcessResult
+from app.services import repo_tenant
 from app.services.github import github_service
 
 logger = logging.getLogger(__name__)
@@ -446,15 +448,33 @@ async def _handle_installation_repos_event(
     removed_ids = [repo.get("id") for repo in repos_removed if repo.get("id")]
     for repo in repos_removed:
         await _delete_repository_record(db, repo.get("id"))
+
+    # Which of the removed repos actually had the review switch on — those
+    # own a tenant/namespace in repo-tenant-service that must be torn down.
+    removed_watched: list[int] = []
     if removed_ids:
+        previously = await db.execute(
+            select(WatchedRepo.repo_id).where(
+                WatchedRepo.repo_id.in_(removed_ids),
+                WatchedRepo.enabled.is_(True),
+            )
+        )
+        removed_watched = list(previously.scalars().all())
         await db.execute(
             update(WatchedRepo)
             .where(WatchedRepo.repo_id.in_(removed_ids))
             .values(enabled=False)
         )
-    
+
     await db.commit()
-    
+
+    # Best-effort teardown (same swallow-all contract as the selection hook):
+    # an App uninstall must not leak per-repo namespaces.
+    if removed_watched:
+        await asyncio.gather(
+            *(repo_tenant.disable_repo(repo_id) for repo_id in removed_watched)
+        )
+
     return {
         "status": "success",
         "repos_added": len(repos_added),

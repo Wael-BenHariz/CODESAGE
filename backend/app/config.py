@@ -59,6 +59,17 @@ class Settings(BaseSettings):
         default="redis://redis:6379/0", description="Redis connection string for BullMQ"
     )
 
+    # Repo-tenant service — one enabled repo = one Kubernetes namespace.
+    # Every call from the selection/webhook flow is BEST-EFFORT: saving
+    # watched_repos must never depend on this service being up (failures
+    # are logged and swallowed). The internal token must match
+    # INTERNAL_SERVICE_TOKEN in the repo-tenant-service secret.
+    REPO_TENANT_SERVICE_URL: str = (
+        "http://repo-tenant-service.codesage.svc.cluster.local:8085"
+    )
+    REPO_TENANT_INTERNAL_TOKEN: str = "dev-token"
+    REPO_TENANT_TIMEOUT_SECONDS: float = 3.0
+
     # GitHub OAuth
     GITHUB_CLIENT_ID: str = Field(..., description="GitHub OAuth App Client ID")
     GITHUB_CLIENT_SECRET: str = Field(..., description="GitHub OAuth App Client Secret")
