@@ -12,6 +12,7 @@ AI-powered code review platform with GitHub integration. Analyzes PRs and provid
 | Database | PostgreSQL 15+ (SQLAlchemy async) |
 | Cache/Queue | Redis 7+ |
 | AI | Groq (`groq.py`, active review LLM) + Google Gemini (legacy `gemini.py`) |
+| Tenancy | Spring Boot 4.0.3 / Java 21 (`repo-tenant-service/` — one enabled repo = one k8s namespace) |
 | Frontend | Angular 17+ (standalone components, SCSS) |
 | CI/CD | GitHub Actions → AWS EKS (blue-green) |
 
@@ -39,6 +40,7 @@ codesage/
 │       ├── core/           # api/auth/github services, guards, interceptors, models (user, repository, pull-request)
 │       ├── features/       # Feature modules (landing, auth, dashboard, pull-requests, repositories, settings)
 │       └── shared/         # Reusable components
+├── repo-tenant-service/    # Spring Boot 4 service: repo enable -> k8s namespace/tenant (README inside)
 ├── docker-compose.yml      # Local dev (PostgreSQL, Redis, PgAdmin, monitoring)
 └── .github/workflows/      # CI/CD pipeline (ci-cd.yaml)
 ```
@@ -100,6 +102,18 @@ npm run format                 # Prettier write
 npm run format:check           # Prettier check (CI gate)
 ```
 
+### repo-tenant-service (no Java on host — run Maven in Docker)
+
+```bash
+# Tests (28)
+docker run --rm -v "$PWD":/workspace -v faas-m2:/root/.m2 \
+  -w /workspace/repo-tenant-service maven:3.9.6-eclipse-temurin-21 mvn test -B
+
+# Image (multi-stage — builds the jar inside, no mvn package on host)
+docker build -t codesage-repo-tenant-service:latest \
+  -f repo-tenant-service/Dockerfile ./repo-tenant-service
+```
+
 ### Docker (infrastructure only)
 
 ```bash
@@ -134,6 +148,7 @@ docker-compose --profile database up -d
 - **GitHub App repo selection**: `GET /api/v1/github/status` (installation state), `GET /api/v1/github/repos` (installation repos + enabled flags from `watched_repos`), `POST /api/v1/github/repos/selection` (persist enabled repos). Router mounted at `/github` prefix in `app/api/__init__.py`.
 - **GitHub App install flow**: the Install button must call `GET /api/v1/auth/github/app/install-url` and use the returned `{url}` as-is — its `state` is a JWT signed with `STATE_TOKEN_SECRET` (HS256, `sub`=user id, exp 600 s). GitHub redirects to the App **Setup URL** → `GET /api/v1/auth/github/app/callback?installation_id&setup_action&state` → writes `users.github_installation_id` → redirects to `{FRONTEND_URL}/github/callback?success=…` where `GithubCallbackComponent` re-checks `GET /github/status`. **Do not** use `GET /repositories/install-url` for this flow — it issues an unsigned random state and the callback will reject it (returns `?success=false`). The GitHub App *Setup URL* (external GitHub setting) must point at the callback endpoint.
 - **Watched repos**: `watched_repos` table (migration 003) stores which GitHub repos a user enabled for review processing — unique constraint on `(user_id, repo_id)`.
+- **Repo → tenant (namespace)**: `POST /github/repos/selection` and the `installation_repositories/removed` webhook diff `watched_repos` transitions and fire **best-effort** calls (`app/services/repo_tenant.py`, 3 s timeout, failures logged+swallowed — a save never 5xx's because the service is down) to the `repo-tenant-service` (`POST /api/v1/repos/internal/enable|disable`, `X-Service-Token` = `REPO_TENANT_INTERNAL_TOKEN`). One repo = one namespace; **disable deletes the namespace first, then the `repo_tenants` row** (row kept if the K8s delete fails — no orphaned namespaces). Quota defaults are injected from ConfigMap `repo-tenant-config` (`DEFAULT_*`) and `QUOTA_SERVICE_URL` is empty by default, so enabling never blocks on another microservice. Schema: `repo_tenants` via Alembic 009 (service runs `ddl-auto: none`). Ingress: `/api/v1/repos` → `repo-tenant-service:8085` (declared before the generic `/api` rule); JWT read API `/repos`, `/repos/{id}`, `/repos/{id}/status`; internal list `GET /internal/namespaces`.
 - **Webhook endpoint**: `POST /api/v1/webhooks/github` — verifies signatures using `GITHUB_WEBHOOK_SECRET`.
 - **CORS**: Comma-separated origins in `.env`. Default includes `http://localhost:4200` (Angular dev).
 - **Frontend entry**: `frontend/src/main.ts` → `app.component.ts` → `app.routes.ts`
@@ -199,6 +214,11 @@ If you see "redirect_uri is not associated with this application":
   1. `001_initial_schema.py` — users, oauth_tokens, github_installations, repositories, pull_requests, reviews, review_comments, webhook_events
   2. `002_add_github_installation_id_to_users.py` — `users.github_installation_id` (numeric GitHub App installation ID)
   3. `003_create_watched_repos.py` — `watched_repos` table (user repo-selection for reviews)
+  4. `004_add_updated_at_to_webhook_events.py` / `005_add_updated_at_to_review_comments.py` — `updated_at` + triggers (schema-drift fix)
+  5. `006_add_review_result_columns.py` — `reviews.overall_severity`, `reviews.github_review_id`, `review_comments.suggestion`
+  6. `007_add_llm_settings_to_users.py` — per-user LLM settings
+  7. `008_keycloak_identity_and_role.py` — `users.keycloak_id`, `users.role`
+  8. `009_create_repo_tenants.py` — `repo_tenants` (repo_id BIGINT UNIQUE, namespace_name VARCHAR(63) UNIQUE, owner_user_id FK → users ON DELETE SET NULL) — schema for `repo-tenant-service` (JPA `ddl-auto: none`)
 
 ## Key Environment Variables
 
@@ -395,9 +415,22 @@ Replaced the custom GitHub OAuth + HS256 JWT auth with **Keycloak 24.0.5 as iden
 
 **Verification (all green)**: admin bootstrap (master ROPC) ✓; realm import clean ✓; superadmin ROPC token `realm_access.roles=[SUPER_ADMIN]` → `GET /auth/me` 200 `role=SUPER_ADMIN` → `GET /users` 200 ✓; GUEST test user → `/auth/me` `role=GUEST` → `/users` **403**, `DELETE /settings/llm` **403** ✓; `/auth/me` no token → 401; `/auth/keycloak/config` → `{url: .../auth, realm: codesage-realm, clientId: codesage-angular}`; webhook bad HMAC → 401; **broker chain**: auth endpoint (PKCE enforced) → `/broker/github/login` → 302 `github.com/login/oauth/authorize?client_id=Ov23liodWJBNCDWEOFkr&redirect_uri=http://10.171.24.201/auth/realms/codesage-realm/broker/github/endpoint` (proves the exact GitHub callback URL); `kubectl kustomize base/` OK; backend health 200. Smoke helpers: `/tmp/opencode/kc_smoke.py` (+ gotcha: pass JSON bodies via `jdata=`, not `data=json.dumps(...)` — double-encoding → 400/415 confusion).
 
+#### repo-tenant-service — one enabled repo = one k8s namespace (branch `feat/repo-tenant-service`)
+
+New Spring Boot 4.0.3 / Java 21 microservice (`repo-tenant-service/`, package `com.codesage.repo`) ported from the faas reference (which was fully reverted first — 5 unpushed commits reset, clean at `4189449`), across 6 commits (`c6ea5e3` skeleton → `3835dc0` domain → `c3a6f7e` flow → `065860b` tests → `5b8fb7b` backend hook → `b557573` k8s deploy + smoke fixes → docs):
+
+- **API**: `POST /api/v1/repos/internal/enable|disable` + `GET /internal/namespaces` (`X-Service-Token`, permitAll + `InternalServiceFilter`); `GET /repos`, `/repos/{id}`, `/repos/{id}/status` (Keycloak JWT, multi-issuer allow-list). camelCase payloads. Enable = upsert + idempotent (retries a FAILED provisioning); disable = namespace delete **then** row delete (row kept on K8s failure), unknown repo → `status: ABSENT`.
+- **Shared `codesage` DB**: `repo_tenants` created by backend **Alembic 009**; service JPA `ddl-auto: none` (H2 create-drop only in tests). `owner_user_id` UUID FK → `users` ON DELETE SET NULL; `repo_id` BIGINT matches `watched_repos`.
+- **Defaults via ConfigMap** (the required fallback): `QUOTA_SERVICE_URL` empty by default ⇒ `QuotaClient` short-circuits with **no network call**; any URL set ⇒ catch-all fallback to `DEFAULT_*` (cpu/memory/totals/functions/pods) from ConfigMap `repo-tenant-config`. Redis has a lenient `CacheErrorHandler` (down = no cache, never a failed request).
+- **Backend hook** (transition-diff, fire-and-forget `asyncio.gather(return_exceptions=True)`): selection endpoint snapshots `previously_enabled` before mutating then fires enable/disable after commit; `installation_repositories/removed` webhook tears down namespaces of removed repos (row kept `enabled=False` for audit). `config.py`: `REPO_TENANT_SERVICE_URL` (in-cluster DNS default), `REPO_TENANT_INTERNAL_TOKEN`, `REPO_TENANT_TIMEOUT_SECONDS` (3.0).
+- **k8s** (`infrastructure/k8s/base/repo-tenant-service/`): Deployment (port 8085, `imagePullPolicy: Never`, probes `/actuator/health`), ClusterIP Service, ConfigMap, gitignored `secret.yaml` (`INTERNAL_SERVICE_TOKEN` = backend `REPO_TENANT_INTERNAL_TOKEN`), ServiceAccount + least-privilege ClusterRole/Binding (namespaces CRUD; resourcequotas+limitranges); wired into base kustomization, ingress `/api/v1/repos` rule before `/api`, `build-and-deploy.sh` builds/imports/rolls the image, APPLY_ORDER Step 8b.
+- **Two bugs found only by running the built image** (unit tests couldn't see either): `spring-boot-starter-actuator` was missing (inherited from faas — `/actuator/health` fell through to the static-resource handler and 500'd ⇒ probes would never pass) and `GlobalExceptionHandler`'s generic 500 handler swallowed exceptions without logging (now logs method+URI+stack).
+- **Verified**: `mvn test` 28/28 (Docker Maven, no Java on host); backend pytest 63/63 (8 new hook tests); `kubectl kustomize` renders 30 objects with correct scoping/path order/token; image smoke against live Postgres/Redis → health UP, prometheus 200, internal endpoint 200/401 with/without token; `alembic upgrade head` 006→009 on local DB.
+
+
+
 ## Known Gaps
 
-- Backend test suite is empty — `pytest` is installed but `backend/tests/` has no files
 - GitHub App `contents` permission is read-only — the App cannot create branches/commits (403 on `git/refs`); PR creation and review posting work (`pull_requests: write`). Raise it in the App settings only if commit-based test fixtures are ever needed.
 - Legacy `/repositories/github` + `/repositories/connect` still require `github_installations` rows (created only by `/repositories/installations/sync` or webhooks) — the signed-state install callback does not create them; post-install repo selection uses the `/github/*` endpoints instead
 - GitHub App *Setup URL* (external GitHub App setting, not versioned in this repo) must point at `/api/v1/auth/github/app/callback` — if missing or wrong, the install callback never fires
