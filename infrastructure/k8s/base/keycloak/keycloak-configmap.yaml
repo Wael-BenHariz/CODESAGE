@@ -17,7 +17,7 @@ data:
       "waitIncrementSeconds": 60,
       "maxFailureWaitSeconds": 900,
       "maxDeltaTimeSeconds": 3600,
-      "minimumQuickLoginRetrySeconds": 60,
+      "minimumQuickLoginWaitSeconds": 60,
       "accessTokenLifespan": 300,
       "refreshTokenMaxReuse": 0,
       "ssoSessionIdleTimeout": 1800,
