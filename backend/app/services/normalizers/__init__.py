@@ -14,6 +14,7 @@ from app.services.normalizers.schema import (
     ToolFailure,
     fingerprint,
 )
+from app.services.normalizers.sonarqube import normalize_sonar
 
 __all__ = [
     "NormalizedFinding",
@@ -22,4 +23,5 @@ __all__ = [
     "Tool",
     "ToolFailure",
     "fingerprint",
+    "normalize_sonar",
 ]
