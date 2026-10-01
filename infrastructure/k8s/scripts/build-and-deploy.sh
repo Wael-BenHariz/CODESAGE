@@ -29,7 +29,9 @@ if [ "$USE_DOCKER" -eq 0 ]; then
   BUILD_BACKEND=(sudo nerdctl build --namespace k8s.io -t codesage-backend:latest -f backend/Dockerfile ./backend)
   BUILD_WORKER=(sudo nerdctl build --namespace k8s.io -t codesage-worker:latest -f backend/Dockerfile.worker ./backend)
   BUILD_FRONTEND=(sudo nerdctl build --namespace k8s.io -t codesage-frontend:latest -f frontend/Dockerfile ./frontend)
-  BUILD_REPO_TENANT=(sudo nerdctl build --namespace k8s.io -t codesage-repo-tenant-service:latest -f repo-tenant-service/Dockerfile ./repo-tenant-service)
+  # Both tags are required: the Deployment runs
+  # 127.0.0.1:5000/codesage-repo-tenant-service:latest (pullPolicy Never).
+  BUILD_REPO_TENANT=(sudo nerdctl build --namespace k8s.io -t codesage-repo-tenant-service:latest -t 127.0.0.1:5000/codesage-repo-tenant-service:latest -f repo-tenant-service/Dockerfile ./repo-tenant-service)
 else
   BUILD_BACKEND=(docker build -t "$BACKEND_TAG" -f backend/Dockerfile ./backend)
   BUILD_WORKER=(docker build -t "$WORKER_TAG" -f backend/Dockerfile.worker ./backend)
@@ -62,6 +64,9 @@ echo "=== Building repo-tenant-service image ==="
 "${BUILD_REPO_TENANT[@]}"
 if [ "$USE_DOCKER" -eq 1 ]; then
   docker tag "$REPO_TENANT_TAG" codesage-repo-tenant-service:latest
+  # The Deployment runs 127.0.0.1:5000/codesage-repo-tenant-service:latest
+  # (pullPolicy Never) — keep that ref fresh on every build too.
+  docker tag "$REPO_TENANT_TAG" 127.0.0.1:5000/codesage-repo-tenant-service:latest
 fi
 
 if [ "$USE_DOCKER" -eq 1 ]; then
@@ -69,7 +74,7 @@ if [ "$USE_DOCKER" -eq 1 ]; then
   docker save codesage-backend:latest | sudo k3s ctr images import -
   docker save codesage-worker:latest | sudo k3s ctr images import -
   docker save codesage-frontend:latest | sudo k3s ctr images import -
-  docker save codesage-repo-tenant-service:latest | sudo k3s ctr images import -
+  docker save codesage-repo-tenant-service:latest 127.0.0.1:5000/codesage-repo-tenant-service:latest | sudo k3s ctr images import -
 fi
 
 echo "=== Rolling out deployments ==="

@@ -87,5 +87,12 @@ curl localhost:8085/actuator/health   # {"status":"UP"}
 See `infrastructure/k8s/APPLY_ORDER.md` **Step 8b** — first deploy copies
 `secret.example.yaml` → `secret.yaml` (gitignored) and the image is built,
 imported and rolled out by `infrastructure/k8s/scripts/build-and-deploy.sh`.
+
+The Deployment runs `127.0.0.1:5000/codesage-repo-tenant-service:latest`
+(`imagePullPolicy: Never`). kubelet would not resolve the unqualified
+`codesage-repo-tenant-service:latest` ref with `Never` on this node
+(`ErrImageNeverPull` despite the image being present in containerd), so the
+manifest is pinned to the registry-qualified ref. The build script tags **both**
+names and imports them, so rebuilds refresh whichever ref you switch to.
 The ingress exposes the read API under `/api/v1/repos` (before the generic
 `/api` rule).

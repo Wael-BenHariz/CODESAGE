@@ -18,7 +18,7 @@ spec:
       serviceAccountName: repo-tenant-service
       containers:
         - name: repo-tenant-service
-          image: codesage-repo-tenant-service:latest
+          image: 127.0.0.1:5000/codesage-repo-tenant-service:latest
           imagePullPolicy: Never # imported into k3s, not from a registry
           ports:
             - containerPort: 8085
