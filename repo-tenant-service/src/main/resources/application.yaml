@@ -1,0 +1,95 @@
+spring:
+  application:
+    name: repo-tenant-service
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis-service}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis_password}
+      timeout: ${REDIS_TIMEOUT:2000ms}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:2}
+
+  # Shares the `codesage` database with the backend — the repo_tenants table
+  # is created by the backend's Alembic migration 009, never by Hibernate
+  # (ddl-auto: none in production; tests override to create-drop on H2).
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres-service}:${DB_PORT:5432}/${DB_NAME:codesage}
+    username: ${DB_USERNAME:codesage}
+    password: ${DB_PASSWORD:codesage}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:none}
+    show-sql: ${JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm/protocol/openid-connect/certs}
+
+server:
+  port: ${SERVER_PORT:8085}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
+  endpoint:
+    prometheus:
+      enabled: true
+
+# Issuer allow-list — the same realm is reachable both through the MetalLB
+# external address and the in-cluster service DNS, so tokens minted either
+# way must validate. Comma-separated.
+keycloak:
+  allowed-issuers: ${KEYCLOAK_ALLOWED_ISSUERS:http://10.171.24.201/auth/realms/codesage-realm,http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm}
+
+# X-Service-Token for /api/v1/repos/internal/** (service-to-service calls
+# from the CodeSage backend). Must match REPO_TENANT_INTERNAL_TOKEN there.
+internal:
+  security:
+    token: ${INTERNAL_SERVICE_TOKEN:dev-token}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://10.171.24.201,http://codesage.local}
+
+# Optional remote source of per-repo quota overrides. CodeSage has no quota
+# microservice today, so this stays EMPTY → the `defaults` block below is the
+# single source of truth. If a URL is ever set, the call is best-effort:
+# unreachable service or empty body always falls back to the defaults —
+# enabling a repo never fails because another microservice is down.
+services:
+  quota:
+    url: ${QUOTA_SERVICE_URL:}
+
+# ── Safe defaults injected by the k8s ConfigMap (repo-tenant-config) ──────
+# WHY: enabling a repo must never fail because billing/quota (or any other
+#      microservice) is unreachable — provisioning always proceeds on these.
+defaults:
+  max-cpu-per-function: ${DEFAULT_MAX_CPU:500m}
+  max-memory-per-function: ${DEFAULT_MAX_MEMORY:512Mi}
+  max-total-cpu: ${DEFAULT_MAX_TOTAL_CPU:10}
+  max-total-memory: ${DEFAULT_MAX_TOTAL_MEMORY:20Gi}
+  max-functions: ${DEFAULT_MAX_FUNCTIONS:10}
+  max-pods: ${DEFAULT_MAX_PODS:50}
+
+# ── Cache TTLs — one env var per cache name, all overridable independently ──
+app:
+  cache:
+    ttl:
+      repo-quota-seconds: ${CACHE_TTL_REPO_QUOTA:600}                 # 10 min — quota lookup (remote call)
+      active-repo-namespaces-seconds: ${CACHE_TTL_ACTIVE_REPO_NAMESPACES:300}  # 5 min — full list of active namespaces
+      default-seconds: ${CACHE_TTL_DEFAULT:300}                       # fallback for any unlisted cache
