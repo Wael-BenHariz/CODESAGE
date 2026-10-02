@@ -1,5 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ingress-nginx-patch.yaml
+  # ingress-nginx-patch.yaml is intentionally NOT listed: kustomize's global
+  # `namespace: codesage` would override its `namespace: ingress-nginx` and
+  # every `apply -k base/` would create a dead duplicate of the controller
+  # Service in codesage (no matching pods -> frozen endpoints). The real
+  # Service is patched by APPLY_ORDER Step 2's direct
+  # `kubectl apply -f ingress-nginx-patch.yaml` (see the warning inside it).
   - ingress.yaml

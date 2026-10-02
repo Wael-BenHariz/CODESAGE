@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS rules
 
-ARG P_DEFAULT_SHA256=e586160cc24c7a61e3659b513e38f7e0dac85a7da00a50b21b4b75396825659f
+ARG P_DEFAULT_SHA256=3f7d40a75e96d29602385193fba95faaa87163b26f75d44e19b01154c0a5a75d
 ARG P_SECURITY_AUDIT_SHA256=b109a039df712f30c6d3e25e1e8358053fd0f1c91b92d0e8d2871cd141fe602f
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
