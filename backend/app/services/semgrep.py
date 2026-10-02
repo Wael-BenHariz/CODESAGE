@@ -19,7 +19,9 @@ so the service's clean 504 always arrives before the client aborts.
 """
 
 import asyncio
+import io
 import logging
+import tarfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -171,3 +173,39 @@ class SemgrepClient:
             if detail:
                 return str(detail)[:300]
         return response.text[:300]
+
+
+def build_scan_archive(files: list[dict], dest: Path) -> int:
+    """Pack ``[{"filename", "content"}]`` entries into a tar.gz at ``dest``.
+
+    The upload payload for ``POST /scan`` — mirrors SonarQube's
+    ``write_files_to_temp_dir`` guards: empty contents are skipped,
+    absolute paths are stripped of the leading slash, and path traversal
+    (``..`` segments) is rejected with a warning. Returns the number of
+    members written (0 = nothing scannable; callers must not upload).
+    """
+    written = 0
+    with tarfile.open(dest, "w:gz") as tar:
+        for file in files:
+            filename = str(file.get("filename") or "").strip().lstrip("/")
+            content = file.get("content")
+            if not filename or not content:
+                continue
+            if ".." in filename.split("/"):
+                logger.warning(
+                    "Skipping file with unsafe path in scan archive: %s",
+                    file.get("filename"),
+                )
+                continue
+
+            data = (
+                content.encode("utf-8", errors="replace")
+                if isinstance(content, str)
+                else bytes(content)
+            )
+            info = tarfile.TarInfo(name=filename)
+            info.size = len(data)
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+            written += 1
+    return written

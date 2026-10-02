@@ -6,6 +6,7 @@ only these models. Part of the Semgrep integration (plan:
 ``docs/SEMGREP_INTEGRATION_PLAN.md``).
 """
 
+from app.services.normalizers.merge import merge_findings
 from app.services.normalizers.schema import (
     NormalizedFinding,
     ScanReport,
@@ -24,6 +25,7 @@ __all__ = [
     "Tool",
     "ToolFailure",
     "fingerprint",
+    "merge_findings",
     "normalize_semgrep",
     "normalize_sonar",
 ]

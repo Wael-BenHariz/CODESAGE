@@ -72,6 +72,9 @@ class NormalizedFinding(BaseModel):
     cwe: list[str] = Field(default_factory=list)
     owasp: list[str] = Field(default_factory=list)
     references: list[str] = Field(default_factory=list)
+    # Other tools that found the SAME defect (cross-tool dedup, merge.py).
+    # ``tool`` stays the primary producer; this lists only the others.
+    also_detected_by: list[str] = Field(default_factory=list)
     fix_suggestion: str | None = None
     # Original tool payload, kept verbatim for debugging.
     raw: dict[str, Any] = Field(default_factory=dict)

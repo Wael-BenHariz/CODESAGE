@@ -19,7 +19,8 @@ from app.services.github import github_service
 from app.services.github_app import fetch_file_content, get_installation_token
 from app.services.llm_client import resolve_llm_client
 from app.services.review_orchestrator import ReviewOrchestrator
-from app.services.sonarqube import SonarIssue, SonarQubeError, sonarqube_service
+from app.services.scan_report_store import persist_scan_report
+from app.services.static_analysis import run_static_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -114,13 +115,15 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
 
     Pipeline: load rows -> idempotency guard -> processing -> diff fetch
     (installation token, paginated, filtered, capped) -> full file contents
-    fetched for SonarQube -> SonarQube static analysis grouped per agent
-    domain -> parallel specialist refinement -> synthesis -> post summary
-    review to GitHub -> store results -> completed.
+    fetched for the analyzers -> SonarQube + Semgrep static analysis IN
+    PARALLEL (normalized, merged, persisted as a scan_report) -> grouped
+    SonarQube issues refine the specialist agents -> synthesis -> post
+    summary review to GitHub -> store results -> completed.
 
-    SonarQube failures never fail the review: they fall back to empty issue
-    groups (agents still run; the summary notes static analysis was
-    unavailable) and the error detail is stored in ``review.error_message``.
+    Static analysis failures never fail the review: each tool is
+    fault-isolated (note + ``tools_failed`` entry), the scan report is
+    persisted best-effort, and both tools failing only empties the
+    findings while the review still completes.
 
     Args:
         job_data: Job payload with review_id
@@ -242,34 +245,33 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         # one branch per project — the project is always deleted after).
         project_key = f"{settings.SONARQUBE_PROJECT_PREFIX}-{str(review.id)[:8]}"
 
-        # Run SonarQube scan and group issues per agent domain. Any failure
-        # falls back to empty groups — the review must never fail because
-        # static analysis is unavailable (brief A7.3).
-        sonar_groups: dict[str, list[SonarIssue]] = {}
-        sonar_error: str | None = None
-        if sonar_files:
-            try:
-                sonar_groups = await sonarqube_service.scan(
-                    project_key=project_key,
-                    files=sonar_files,
-                    language=language,
-                )
-            except SonarQubeError as e:
-                sonar_error = f"SonarQube scan failed: {e}"
-                logger.error("SonarQube scan failed for review %s: %s", review_id, e)
-            except Exception as e:
-                # Belt and braces: nothing SonarQube-shaped may fail a review.
-                sonar_error = f"SonarQube scan failed: {e!r}"
-                logger.exception(
-                    "Unexpected SonarQube scan failure for review %s",
-                    review_id,
-                )
-        else:
-            sonar_error = "SonarQube scan skipped: no fetchable file contents"
+        # Static analysis: SonarQube + Semgrep run CONCURRENTLY over the
+        # same file workspace. Each tool is fault-isolated — a failure is
+        # recorded as a note + tools_failed entry, never as a review
+        # failure; the review only loses static analysis when BOTH fail
+        # (brief A7.3: "SonarQube failure => empty groups" generalized).
+        analysis = await run_static_analysis(
+            review_id=review_id,
+            project_key=project_key,
+            files=sonar_files,
+            language=language,
+        )
+        sonar_groups = analysis.sonar_groups
+        sonar_error = analysis.sonar_error
+        semgrep_error = analysis.semgrep_error
+
+        # Persist the unified scan report best-effort: a report insert
+        # failure must never fail a review — log it, roll back the
+        # partial insert, and continue the pipeline.
+        try:
+            await persist_scan_report(db, review.id, analysis.report)
+        except Exception:
             logger.warning(
-                "No full file contents fetched for review %s — skipping SonarQube scan",
+                "Failed to persist scan report for review %s",
                 review_id,
+                exc_info=True,
             )
+            await db.rollback()
 
         # Build context and run agents (diff still passed for context).
         context = ReviewContext(
@@ -351,9 +353,11 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         if review_result.get("usage"):
             review.tokens_used = review_result["usage"].get("total_tokens", 0)
         review.github_review_id = github_review_id
-        # SonarQube failures are recorded but never fail the review: the
-        # review still completes with status=completed (brief A7.3).
-        completion_notes = [note for note in (sonar_error, post_note) if note]
+        # SonarQube/Semgrep failures are recorded but never fail the
+        # review: it still completes with status=completed (brief A7.3).
+        completion_notes = [
+            note for note in (sonar_error, semgrep_error, post_note) if note
+        ]
         if completion_notes:
             review.error_message = "; ".join(completion_notes)
         review.completed_at = datetime.now(timezone.utc)

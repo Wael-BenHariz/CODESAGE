@@ -172,6 +172,13 @@ class ScanFindingRow(Base):
         comment="Reference URLs for the rule/finding",
     )
 
+    # Other tools that found the SAME defect (cross-tool dedup, merge.py).
+    also_detected_by: Mapped[list | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="Other tools that reported this defect (primary tool excluded)",
+    )
+
     fix_suggestion: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

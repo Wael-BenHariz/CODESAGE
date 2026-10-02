@@ -5,12 +5,17 @@ service. Retry behaviour is asserted by counting handler invocations.
 """
 
 import json
+import tarfile
 
 import httpx
 import pytest
 
 from app.config import settings
-from app.services.semgrep import SemgrepClient, SemgrepError
+from app.services.semgrep import (
+    SemgrepClient,
+    SemgrepError,
+    build_scan_archive,
+)
 
 _REPORT = {"version": "1.178.0", "results": [], "errors": []}
 
@@ -211,3 +216,53 @@ def test_detail_falls_back_to_text_for_non_json_errors():
     assert json.loads(SemgrepClient._detail(httpx.Response(400, json={"x": 1}))) == {
         "x": 1
     }
+
+
+# --- build_scan_archive -----------------------------------------------------
+
+
+def test_build_scan_archive_packs_files(tmp_path):
+    dest = tmp_path / "scan.tar.gz"
+    written = build_scan_archive(
+        [
+            {"filename": "src/a.py", "content": "x = 1\n"},
+            {"filename": "b.py", "content": "y = 2"},
+            {"filename": "", "content": "skip"},  # no name
+            {"filename": "empty.py", "content": ""},  # no content
+            {  # path traversal -> rejected
+                "filename": "evil/../../etc/passwd",
+                "content": "z",
+            },
+            {  # absolute path -> leading slash stripped, kept
+                "filename": "/abs/path.py",
+                "content": "w",
+            },
+        ],
+        dest,
+    )
+
+    assert written == 3
+    with tarfile.open(dest, "r:gz") as tar:
+        names = sorted(tar.getnames())
+        assert names == ["abs/path.py", "b.py", "src/a.py"]
+        payload = tar.extractfile("src/a.py").read()
+    assert payload == b"x = 1\n"
+
+
+def test_build_scan_archive_accepts_bytes(tmp_path):
+    dest = tmp_path / "scan.tar.gz"
+    written = build_scan_archive(
+        [{"filename": "img.bin", "content": b"\x00\x01"}], dest
+    )
+    assert written == 1
+    with tarfile.open(dest, "r:gz") as tar:
+        assert tar.extractfile("img.bin").read() == b"\x00\x01"
+
+
+def test_build_scan_archive_zero_when_nothing_scannable(tmp_path):
+    dest = tmp_path / "scan.tar.gz"
+    written = build_scan_archive([{"filename": "../escape.py", "content": "x"}], dest)
+    assert written == 0
+    # Archive exists but is empty — callers check the count, not the file.
+    with tarfile.open(dest, "r:gz") as tar:
+        assert tar.getnames() == []

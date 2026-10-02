@@ -36,6 +36,7 @@ from app.schemas.review import (
     ReviewStatus,
     ReviewWithComments,
 )
+from app.schemas.scan_report import ScanReportResponse
 from app.schemas.user import (
     UserBase,
     UserCreate,
@@ -77,6 +78,8 @@ __all__ = [
     "ReviewResponse",
     "ReviewStatus",
     "ReviewWithComments",
+    # Scan report (unified static analysis)
+    "ScanReportResponse",
     # Auth
     "Token",
     "TokenPayload",
