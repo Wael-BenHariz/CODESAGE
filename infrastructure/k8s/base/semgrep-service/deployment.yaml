@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: semgrep-service
-          image: 127.0.0.1:5000/codesage/semgrep-service:v0.2.0-semgrep
+          image: 127.0.0.1:5000/codesage/semgrep-service:v0.2.1-semgrep
           # IfNotPresent + the exact ref: works with the images pre-imported
           # into containerd, or with registries.yaml declaring 127.0.0.1:5000
           # as a plain-HTTP registry for kubelet (see plan section 2.4).

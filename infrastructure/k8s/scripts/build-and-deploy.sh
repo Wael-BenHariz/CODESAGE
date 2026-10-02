@@ -18,7 +18,7 @@ set -e
 #   - else, nerdctl present   -> builds directly into k3s containerd
 #                                (namespace k8s.io; requires buildkitd)
 
-TAG="${TAG:-v0.2.0-semgrep}"
+TAG="${TAG:-v0.2.1-semgrep}"
 BACKEND_IMG="127.0.0.1:5000/codesage/backend:${TAG}"
 WORKER_IMG="127.0.0.1:5000/codesage/worker:${TAG}"
 SEMGREP_IMG="127.0.0.1:5000/codesage/semgrep-service:${TAG}"
