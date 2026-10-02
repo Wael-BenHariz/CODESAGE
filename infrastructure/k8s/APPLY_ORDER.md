@@ -66,6 +66,22 @@ bash infrastructure/k8s/scripts/build-and-deploy.sh
 > Uses `nerdctl` (builds straight into k3s containerd) when available,
 > otherwise `docker build` + `k3s ctr images import`.
 
+## Step 7b — semgrep-service (before backend — owns ConfigMap `semgrep-config`):
+
+> The backend and worker deployments `envFrom` ConfigMap `semgrep-config`,
+> which lives in `base/semgrep-service/` — applying the backend first leaves
+> its pods stuck in `CreateContainerConfigError`. Requires the image from
+> Step 7 (`127.0.0.1:5000/codesage/semgrep-service:$TAG`, `IfNotPresent`).
+
+```bash
+kubectl apply -k infrastructure/k8s/base/semgrep-service/
+kubectl wait --namespace=codesage --for=condition=ready pod --selector=app=semgrep-service --timeout=120s
+kubectl -n codesage port-forward svc/semgrep-service 18080:8080 &  # optional
+curl localhost:18080/readyz   # {"status":"ready","rules":"/opt/semgrep-rules"}
+```
+
+See `docs/SEMGREP.md` (smoke test, troubleshooting).
+
 ## Step 8 — Backend + worker:
 
 ```bash
