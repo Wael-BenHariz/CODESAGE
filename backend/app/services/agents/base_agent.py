@@ -140,33 +140,52 @@ class BaseAgent(ABC):
     def _parse_response(self, raw: str) -> dict[str, Any]:
         """Parse Gemini output into a dict.
 
-        Tolerant pipeline:
+        Tolerant pipeline — order matters:
         1. Reject empty responses with a clear error (retryable).
-        2. Strip markdown code fences if present.
-        3. Fast path: the whole text is valid JSON.
-        4. Balanced-brace extraction (string-aware) so concatenated objects
-           parse individually — the old greedy regex ``\\{[\\s\\S]*\\}`` merged
+        2. Fast path: the whole response is already valid JSON. This MUST
+           run BEFORE any fence stripping: a valid JSON object containing a
+           markdown fence inside a string value (code samples in
+           ``suggestion`` fields) would be destroyed by
+           ``_strip_code_fences``, which returns only the fence's inner code
+           and throws the surrounding JSON away — observed in production as
+           two specialist agents failing on well-formed responses.
+        3. Strip markdown code fences when the whole response is wrapped in
+           one (```json ... ```) and parse that.
+        4. Balanced-brace extraction (string-aware) over the raw and the
+           stripped text so embedded or concatenated objects parse
+           individually — the old greedy regex ``\\{[\\s\\S]*\\}`` merged
            ``{...}{...}`` into one invalid blob.
         """
 
         if not raw or not raw.strip():
             raise ValueError("LLM returned an empty response")
 
-        text = self._strip_code_fences(raw)
-
         try:
-            return json.loads(text)
+            return json.loads(raw)
         except json.JSONDecodeError:
             pass
 
-        for candidate in self._iter_json_objects(text):
+        text = self._strip_code_fences(raw)
+        if text != raw:
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+
+        for candidate in self._iter_json_objects(raw):
             try:
                 return json.loads(candidate)
             except json.JSONDecodeError:
                 continue
+        if text != raw:
+            for candidate in self._iter_json_objects(text):
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    continue
 
         raise ValueError(
-            f"no parseable JSON object found (response head: {text[:200]!r})"
+            f"no parseable JSON object found (response head: {raw[:200]!r})"
         )
 
     @staticmethod
