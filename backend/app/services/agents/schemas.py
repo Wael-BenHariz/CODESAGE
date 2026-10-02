@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from app.services.sonarqube import SonarIssue
+from app.services.normalizers.schema import NormalizedFinding
 
 
 class ReviewContext(BaseModel):
@@ -12,22 +12,26 @@ class ReviewContext(BaseModel):
     pr_body: str | None = None
     diff: str
     language: str = "text"
-    # SonarQube findings for this agent's domain (the primary analysis input;
-    # the diff stays in the context for reference only).
-    sonar_issues: list[SonarIssue] = Field(default_factory=list)
-    # Set by the worker when the SonarQube scan failed so the summary can
-    # honestly say static analysis was unavailable (brief A7.3).
+    # Unified static-analysis findings (SonarQube + Semgrep, normalized and
+    # cross-tool merged, snippets enriched) — the specialists' input. Each
+    # agent only ever sees its domain slice via ``with_findings``; the diff
+    # stays in the context for reference only.
+    findings: list[NormalizedFinding] = Field(default_factory=list)
+    # Which analyzers failed, so the summary can be honest (brief A7.3):
+    # both => "static analysis unavailable", one => partial coverage note.
     sonar_scan_failed: bool = False
+    semgrep_scan_failed: bool = False
 
-    def with_issues(self, issues: list[SonarIssue]) -> "ReviewContext":
-        """Copy of this context carrying one agent's slice of Sonar findings."""
+    def with_findings(self, findings: list[NormalizedFinding]) -> "ReviewContext":
+        """Copy of this context carrying one agent's slice of findings."""
         return ReviewContext(
             pr_title=self.pr_title,
             pr_body=self.pr_body,
             diff=self.diff,
             language=self.language,
-            sonar_issues=issues,
+            findings=findings,
             sonar_scan_failed=self.sonar_scan_failed,
+            semgrep_scan_failed=self.semgrep_scan_failed,
         )
 
 

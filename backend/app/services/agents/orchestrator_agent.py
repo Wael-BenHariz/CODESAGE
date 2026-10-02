@@ -235,14 +235,20 @@ IMPORTANT — failed specialist agents: {", ".join(failed_agents)} ({len(failed_
         else:
             failure_note = ""
 
-        if context.sonar_scan_failed:
+        if context.sonar_scan_failed and context.semgrep_scan_failed:
             static_note = """
-IMPORTANT — static analysis was unavailable for this review: the SonarQube scan could not run (the specialist agents received no findings to refine). You MUST open the summary with a clear note such as "⚠️ Static analysis unavailable" and state that the review could not include SonarQube findings, so the absence of issues does not mean the code is clean."""
+IMPORTANT — static analysis was unavailable for this review: BOTH analyzers (SonarQube and Semgrep) failed, so the specialist agents received no findings to refine. You MUST open the summary with a clear note such as "⚠️ Static analysis unavailable" and state that the review could not include static-analysis findings, so the absence of issues does not mean the code is clean."""
+        elif context.sonar_scan_failed:
+            static_note = """
+IMPORTANT — the SonarQube scan failed for this review: the findings below come from Semgrep only. Mention in the summary that SonarQube coverage is missing, so the absence of issues in other categories does not mean the code is clean."""
+        elif context.semgrep_scan_failed:
+            static_note = """
+IMPORTANT — the Semgrep scan failed for this review: the findings below come from SonarQube only. Mention in the summary that Semgrep coverage is missing, so the absence of issues in other categories does not mean the code is clean."""
         else:
             static_note = ""
 
         return f"""You are synthesizing a GitHub PR code review.
-The findings below were detected by SonarQube (static analysis) and explained by specialist review agents; they have already been deduplicated and merged by the orchestrator (strongest severity kept per file+line, statistics computed exactly).
+The findings below were detected by static analysis (SonarQube and/or Semgrep — cross-tool duplicates are already merged) and explained by specialist review agents; they have already been deduplicated and merged by the orchestrator (strongest severity kept per file+line, statistics computed exactly).
 Your task: write the final review summary and choose the overall severity.
 Write:
 1. A concise executive summary (2-3 sentences)

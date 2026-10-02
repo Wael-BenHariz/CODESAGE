@@ -16,6 +16,7 @@ from app.services.normalizers.schema import (
     fingerprint,
 )
 from app.services.normalizers.semgrep import normalize_semgrep
+from app.services.normalizers.snippets import enrich_snippets
 from app.services.normalizers.sonarqube import normalize_sonar
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "Severity",
     "Tool",
     "ToolFailure",
+    "enrich_snippets",
     "fingerprint",
     "merge_findings",
     "normalize_semgrep",

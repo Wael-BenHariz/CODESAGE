@@ -256,7 +256,6 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             files=sonar_files,
             language=language,
         )
-        sonar_groups = analysis.sonar_groups
         sonar_error = analysis.sonar_error
         semgrep_error = analysis.semgrep_error
 
@@ -279,7 +278,9 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             pr_body=pr.body,
             diff=diff_content,
             language=language,
+            findings=analysis.report.findings,
             sonar_scan_failed=sonar_error is not None,
+            semgrep_scan_failed=semgrep_error is not None,
         )
 
         # Resolve the LLM client for the user who owns this installation:
@@ -307,9 +308,7 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         )
 
         orchestrator = ReviewOrchestrator(client=llm_client)
-        review_result = (await orchestrator.run(context, sonar_groups)).model_dump(
-            exclude_none=True
-        )
+        review_result = (await orchestrator.run(context)).model_dump(exclude_none=True)
         summary = review_result.get("summary", "")
 
         # Post ONE summary review to GitHub (no inline comments), attached to

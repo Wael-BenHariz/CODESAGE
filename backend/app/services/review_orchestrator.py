@@ -15,9 +15,59 @@ from app.services.agents import (
     TestCoverageAgent,
 )
 from app.services.llm_client import BaseLLMClient
-from app.services.sonarqube import SonarIssue
+from app.services.normalizers.schema import NormalizedFinding
+from app.services.sonarqube import SonarIssue, _classify_issue
 
 logger = logging.getLogger(__name__)
+
+# The five specialist domains, in agent-declaration order below.
+AGENT_DOMAINS = (
+    "security",
+    "complexity",
+    "performance",
+    "style",
+    "test_coverage",
+)
+
+
+def domain_for_finding(finding: NormalizedFinding) -> str:
+    """Route one unified finding to a specialist domain.
+
+    Security categories come first — both analyzers' vulnerabilities and
+    hotspots belong to the security agent regardless of payload shape.
+
+    SonarQube findings then reconstruct their original ``SonarIssue`` from
+    the raw payload (``normalize_sonar`` stores ``asdict(issue)``) and run
+    it through ``_classify_issue`` — the exact classifier the pipeline
+    used before findings were unified, so they land in the same agents as
+    they always did.
+
+    Semgrep has no such history: it routes by rule namespace — performance
+    rules to the performance agent, everything else to style (the same
+    catch-all the Sonar classifier uses for unclassified issues). Semgrep
+    expresses no complexity or test-coverage findings.
+    """
+    if finding.category in ("vulnerability", "security_hotspot"):
+        return "security"
+    if finding.tool == "sonarqube":
+        raw = finding.raw or {}
+        if raw.get("type") in ("BUG", "VULNERABILITY", "CODE_SMELL"):
+            return _classify_issue(
+                SonarIssue(
+                    key=str(raw.get("key", "")),
+                    rule=str(raw.get("rule", "")),
+                    severity=str(raw.get("severity", "INFO")),
+                    type=str(raw.get("type", "")),
+                    component=str(raw.get("component", "")),
+                    line=raw.get("line"),
+                    message=str(raw.get("message", "")),
+                    effort=raw.get("effort"),
+                    tags=list(raw.get("tags") or []),
+                )
+            )
+    if ".performance." in finding.rule_id:
+        return "performance"
+    return "style"
 
 
 class ReviewOrchestrator:
@@ -26,16 +76,12 @@ class ReviewOrchestrator:
     def __init__(self, client: BaseLLMClient):
         self.client = client
 
-    async def run(
-        self,
-        context: ReviewContext,
-        sonar_groups: dict[str, list[SonarIssue]],
-    ) -> ReviewResult:
+    async def run(self, context: ReviewContext) -> ReviewResult:
         """Execute specialist agents concurrently and synthesize a final review.
 
-        ``sonar_groups`` holds the pre-grouped SonarQube findings (keys from
-        ``sonarqube.group_issues_by_agent``); each agent only ever sees its
-        own domain's slice via ``context.with_issues(...)``.
+        Each agent only ever sees its own domain's slice of the unified
+        findings via ``context.with_findings(...)`` (routing by
+        ``domain_for_finding``).
         """
 
         agents = [
@@ -45,13 +91,6 @@ class ReviewOrchestrator:
             StyleAgent(self.client),
             TestCoverageAgent(self.client),
         ]
-        agent_domains = [
-            "security",
-            "complexity",
-            "performance",
-            "style",
-            "test_coverage",
-        ]
 
         # One LLM call in flight at a time: parallel calls burst past the
         # free-tier per-minute quota (429) and overload the model (503).
@@ -60,14 +99,17 @@ class ReviewOrchestrator:
 
         async def _run_limited(agent, domain):
             async with semaphore:
-                return await agent.run(
-                    context.with_issues(sonar_groups.get(domain, []))
-                )
+                slice_ = [
+                    finding
+                    for finding in context.findings
+                    if domain_for_finding(finding) == domain
+                ]
+                return await agent.run(context.with_findings(slice_))
 
         results = await asyncio.gather(
             *(
                 _run_limited(agent, domain)
-                for agent, domain in zip(agents, agent_domains)
+                for agent, domain in zip(agents, AGENT_DOMAINS)
             ),
             return_exceptions=True,
         )

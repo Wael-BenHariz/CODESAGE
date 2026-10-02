@@ -13,9 +13,11 @@ fault-isolated:
 - ``SEMGREP_ENABLED=false`` removes Semgrep from the run entirely —
   neither ``tools_run`` nor ``tools_failed`` (disabled != broken).
 
-SonarQube's grouped output is returned untouched for the specialist
-agents; the unified findings come back as a ready-to-persist
-``ScanReport`` (merge/dedup happens here).
+SonarQube's grouped output stays available on the result for
+observability. The unified findings — normalized, cross-tool merged, and
+snippet-enriched with ±10 lines of source from the workspace — come back
+as a ready-to-persist ``ScanReport``; those findings (not the raw groups)
+are what the specialist agents consume.
 """
 
 import asyncio
@@ -29,6 +31,7 @@ from app.config import settings
 from app.services.normalizers import (
     ScanReport,
     ToolFailure,
+    enrich_snippets,
     merge_findings,
     normalize_semgrep,
     normalize_sonar,
@@ -142,6 +145,9 @@ async def run_static_analysis(
         )
 
     report = _build_report(sonar, semgrep)
+    # Give every finding ±10 lines of real source (agents validate against
+    # it; the persisted scan report serves it too).
+    enrich_snippets(report.findings, files)
 
     if sonar.failed and semgrep.failed:
         logger.error(

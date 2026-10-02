@@ -154,8 +154,26 @@ async def test_findings_are_normalized_and_merged(sonar_stub, semgrep_stub):
     assert result.report.scan_id  # non-empty, unique per run
     assert result.sonar_error is None and result.semgrep_error is None
     assert result.both_failed is False
-    # Agents keep receiving SonarQube's own grouping (Step 6 input).
+    # Groups stay on the result for observability; the agents now consume
+    # report.findings instead (Step 6).
     assert result.sonar_groups == SONAR_GROUPS
+
+
+# --- snippet enrichment (Step 6) ----------------------------------------------
+
+
+async def test_snippets_enriched_from_workspace(sonar_stub, semgrep_stub):
+    files = [
+        {"filename": "src/a.py", "content": "\n".join(f"L{i}" for i in range(1, 31))}
+    ]
+    result = await _run(files=files)
+
+    (finding,) = result.report.findings
+    lines = finding.snippet.splitlines()
+    # Merged finding sits at line 10 -> ±10 lines, numbered from the file.
+    assert lines[0] == "1: L1"
+    assert lines[-1] == "20: L20"
+    assert len(lines) == 20
 
 
 async def test_scan_ids_are_unique_per_run(sonar_stub, semgrep_stub):
