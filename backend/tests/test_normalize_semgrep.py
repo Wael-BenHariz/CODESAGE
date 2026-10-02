@@ -49,6 +49,29 @@ def test_strip_config_prefix():
     assert strip_check_id_prefix("weird.") == "weird."
 
 
+def test_multi_segment_config_prefix_is_stripped():
+    # Live in-cluster check_ids carry the FULL --config path flattened to
+    # dots: /opt/semgrep-rules -> "opt.semgrep-rules." — TWO segments,
+    # which the old single-segment strip left half in place.
+    assert (
+        strip_check_id_prefix(
+            "opt.semgrep-rules.python.lang.security.audit.eval-detected"
+            ".eval-detected"
+        )
+        == "python.lang.security.audit.eval-detected.eval-detected"
+    )
+    assert (
+        strip_check_id_prefix(
+            "opt.semgrep-rules.dockerfile.security.last-user-is-root"
+            ".last-user-is-root"
+        )
+        == "dockerfile.security.last-user-is-root.last-user-is-root"
+    )
+    # No known namespace anywhere: returned unchanged (never stripped
+    # down to the last segment).
+    assert strip_check_id_prefix("myorg.custom.rule") == "myorg.custom.rule"
+
+
 # --- severity / category maps ----------------------------------------------
 
 
@@ -108,6 +131,72 @@ def test_rule_ids_are_prefix_free_namespaces():
 def test_paths_pass_through_untouched():
     assert _find("eval-detected").file_path == "vuln/app.py"
     assert _find("dict-modify-while-iterate").file_path == "src/utils.py"
+
+
+# --- path reconciliation against the workspace (live service) ---------------
+
+
+def _live_report(path: str) -> dict:
+    """One result shaped exactly like the deployed service returns it."""
+    return {
+        "results": [
+            {
+                "check_id": (
+                    "opt.semgrep-rules.python.lang.security.audit.eval-detected"
+                ),
+                "path": path,
+                "start": {"line": 14, "col": 1},
+                "end": {"line": 14, "col": 20},
+                "extra": {"message": "Detected eval().", "severity": "WARNING"},
+            }
+        ]
+    }
+
+
+def test_absolute_service_paths_are_reconciled_to_the_workspace():
+    # The service scans a per-request temp dir, so semgrep reports
+    # /tmp/semgrep-scan-<rand>/src/<archive member>. The archive members
+    # are the workspace filenames -> the path must land back on one.
+    (finding,) = normalize_semgrep(
+        _live_report("/tmp/semgrep-scan-x7y8/src/vuln/app.py"),
+        files=[{"filename": "vuln/app.py", "content": "x = 1\n"}],
+    )
+    assert finding.file_path == "vuln/app.py"
+    # Same run also carries the two-segment prefix — stripped too.
+    assert finding.rule_id == ("python.lang.security.audit.eval-detected")
+    assert finding.severity == "medium"  # WARNING
+
+
+def test_longest_workspace_suffix_wins():
+    # "app.py" is a suffix of "vuln/app.py" — the deeper name must win.
+    files = [{"filename": "app.py"}, {"filename": "vuln/app.py"}]
+    (finding,) = normalize_semgrep(
+        _live_report("/tmp/semgrep-scan-x7y8/src/vuln/app.py"), files=files
+    )
+    assert finding.file_path == "vuln/app.py"
+    # And a path that IS just app.py resolves to the shallow name.
+    (shallow,) = normalize_semgrep(
+        _live_report("/tmp/semgrep-scan-x7y8/src/app.py"), files=files
+    )
+    assert shallow.file_path == "app.py"
+
+
+def test_paths_pass_through_without_workspace_or_match():
+    # No workspace given: verbatim (pre-reconciliation behaviour).
+    (no_ws,) = normalize_semgrep(_live_report("/tmp/x/src/app.py"))
+    assert no_ws.file_path == "/tmp/x/src/app.py"
+    # Workspace given but no filename matches: untouched, not guessed.
+    (unmatched,) = normalize_semgrep(
+        _live_report("/tmp/x/src/other.py"), files=[{"filename": "app.py"}]
+    )
+    assert unmatched.file_path == "/tmp/x/src/other.py"
+    # Relative path already naming a workspace file: unchanged.
+    (relative,) = normalize_semgrep(
+        _live_report("vuln/app.py"), files=[{"filename": "vuln/app.py"}]
+    )
+    assert relative.file_path == "vuln/app.py"
+    # The raw payload keeps the ORIGINAL path for debugging.
+    assert relative.raw["path"] == "vuln/app.py"
 
 
 def test_line_ranges():

@@ -6,6 +6,7 @@ report assembly run for real.
 """
 
 import asyncio
+import copy
 import time
 from types import SimpleNamespace
 
@@ -89,8 +90,10 @@ def semgrep_stub(monkeypatch):
     """Replace the Semgrep client with a recording stub.
 
     Verifies the real tar.gz upload payload exists while called.
+    ``state.report`` is what the stub returns — tests may replace it to
+    simulate service output shapes (e.g. the live absolute paths).
     """
-    state = SimpleNamespace(calls=0, delay=0.0, outcome=None)
+    state = SimpleNamespace(calls=0, delay=0.0, outcome=None, report=SEMGREP_REPORT)
 
     class StubClient:
         async def async_scan(self, archive, **kwargs):
@@ -100,7 +103,7 @@ def semgrep_stub(monkeypatch):
             if state.outcome is not None:
                 raise state.outcome
             assert archive.exists() and archive.stat().st_size > 0
-            return SEMGREP_REPORT
+            return state.report
 
     monkeypatch.setattr(static_analysis, "SemgrepClient", StubClient)
     return state
@@ -180,6 +183,62 @@ async def test_scan_ids_are_unique_per_run(sonar_stub, semgrep_stub):
     first = await _run()
     second = await _run()
     assert first.report.scan_id != second.report.scan_id
+
+
+async def test_live_service_output_is_reconciled_before_merge(sonar_stub, semgrep_stub):
+    """Regression seen against the DEPLOYED service: semgrep reports
+    absolute per-request temp paths (``/tmp/semgrep-scan-…/src/src/a.py``)
+    and a two-segment check_id prefix (``opt.semgrep-rules.``). Without
+    reconciliation the path never matches the workspace, so the merge
+    never fires and snippets never enrich — silently.
+    """
+    live = copy.deepcopy(SEMGREP_REPORT)
+    live["results"][0]["path"] = "/tmp/semgrep-scan-x7y8/src/src/a.py"
+    live["results"][0]["check_id"] = "opt." + SEMGREP_REPORT["results"][0]["check_id"]
+    # Second live-shaped finding (different line + CWE): stays separate,
+    # so its semgrep-side rule id remains observable after the merge.
+    second = copy.deepcopy(SEMGREP_REPORT["results"][0])
+    second["path"] = live["results"][0]["path"]
+    second["check_id"] = (
+        "opt.semgrep-rules.python.lang.security.deserialization.pickle" ".avoid-pickle"
+    )
+    second["start"] = {"line": 20, "col": 1}
+    second["end"] = {"line": 20, "col": 20}
+    second["extra"]["message"] = "Detected pickle.loads()."
+    second["extra"]["metadata"] = {"cwe": ["CWE-502: Deserialization of data"]}
+    live["results"].append(second)
+    semgrep_stub.report = live
+
+    files = [
+        {"filename": "src/a.py", "content": "\n".join(f"L{i}" for i in range(1, 31))}
+    ]
+    result = await _run(files=files)
+
+    # Sonar issue + eval finding = ONE row despite the path dialect gap
+    # (same file + line + CWE-95); the pickle finding stays its own row.
+    assert len(result.report.findings) == 2
+    survivor = result.report.findings[0]
+    assert survivor.file_path == "src/a.py"  # reconciled, not the /tmp path
+    assert survivor.tool == "sonarqube"  # primary tool keeps its rule id
+    assert survivor.rule_id == "python:S4502"
+    assert survivor.also_detected_by == ["semgrep"]
+    # Snippet enrichment found the file through the reconciled path.
+    lines = survivor.snippet.splitlines()
+    assert lines[0] == "1: L1"
+    assert lines[-1] == "20: L20"
+    assert len(lines) == 20
+
+    pickle_finding = result.report.findings[1]
+    assert pickle_finding.tool == "semgrep"
+    assert pickle_finding.file_path == "src/a.py"
+    # Two-segment config prefix stripped all the way to the namespace.
+    assert pickle_finding.rule_id == (
+        "python.lang.security.deserialization.pickle.avoid-pickle"
+    )
+    assert pickle_finding.cwe == ["CWE-502"]
+    pickle_lines = pickle_finding.snippet.splitlines()
+    assert pickle_lines[0] == "10: L10"  # line 20 ±10 inside a 30-line file
+    assert pickle_lines[-1] == "30: L30"
 
 
 # --- fault isolation ---------------------------------------------------------

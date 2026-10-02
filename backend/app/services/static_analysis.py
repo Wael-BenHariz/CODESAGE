@@ -99,11 +99,21 @@ async def _run_semgrep(files: list[dict]) -> ToolOutcome:
     return ToolOutcome(report)
 
 
-def _build_report(sonar: ToolOutcome, semgrep: ToolOutcome) -> ScanReport:
-    """Normalize + merge both outcomes into the persistable report."""
+def _build_report(
+    sonar: ToolOutcome, semgrep: ToolOutcome, files: list[dict]
+) -> ScanReport:
+    """Normalize + merge both outcomes into the persistable report.
+
+    ``files`` is the workspace both tools scanned: semgrep's reported
+    paths are reconciled onto its filenames first so the merge (and the
+    snippet enrichment that follows) keys on the same names SonarQube
+    uses.
+    """
     sonar_flat = [issue for group in (sonar.value or {}).values() for issue in group]
     sonar_findings = normalize_sonar(sonar_flat, []) if sonar.value else []
-    semgrep_findings = normalize_semgrep(semgrep.value) if semgrep.value else []
+    semgrep_findings = (
+        normalize_semgrep(semgrep.value, files=files) if semgrep.value else []
+    )
     merged = merge_findings(sonar_findings, semgrep_findings)
 
     tools_run = []
@@ -144,7 +154,7 @@ async def run_static_analysis(
             _run_semgrep(files),
         )
 
-    report = _build_report(sonar, semgrep)
+    report = _build_report(sonar, semgrep, files)
     # Give every finding ±10 lines of real source (agents validate against
     # it; the persisted scan report serves it too).
     enrich_snippets(report.findings, files)

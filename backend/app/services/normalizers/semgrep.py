@@ -3,10 +3,18 @@
 Verified against real semgrep 1.178.0 output from the baked packs
 (p/default + p/security-audit):
 
-- ``check_id`` is prefixed with the config parent-dir name
-  (``semgrep-rules.<rule id>`` in the image, ``rules-packed.<rule id>``
-  locally) — stripped here so rule ids are the canonical
+- ``check_id`` is prefixed with the config PATH (``/`` flattened to
+  ``.``): ``opt.semgrep-rules.<rule id>`` from the image's
+  ``/opt/semgrep-rules`` (live verified), ``semgrep-rules.<rule id>`` /
+  ``rules-packed.<rule id>`` from shallower local rule dirs — stripped
+  here down to the first known namespace so rule ids are the canonical
   ``<namespace>.<path>`` form regardless of where the rules live.
+- ``path`` is reported the way semgrep saw it — absolute inside the
+  service's per-request temp dir
+  (``/tmp/semgrep-scan-…/src/src/app.py``). When the workspace is
+  passed in, paths are reconciled back onto its filenames
+  (``src/app.py``) because the merge key, snippet enrichment, and the
+  SonarQube side all speak workspace-relative names.
 - ``extra.severity``: ``ERROR | WARNING | INFO`` (no critical in OSS,
   ERROR is semgrep's strongest) → high / medium / info.
 - Category comes from ``extra.metadata.category`` (``"security"`` on the
@@ -82,15 +90,22 @@ TITLE_MAX = 160
 
 
 def strip_check_id_prefix(check_id: str) -> str:
-    """Drop the config-dir prefix semgrep prepends to every check_id.
+    """Drop the config-path prefix semgrep prepends to every check_id.
 
-    ``semgrep-rules.python.lang...`` -> ``python.lang...``; an id that
-    already starts with a known namespace is returned unchanged.
+    The prefix mirrors the ``--config`` path with ``/`` flattened to
+    ``.``, so it spans however many segments the path has:
+    ``semgrep-rules.python.lang...`` for a rules dir named
+    ``semgrep-rules``, ``opt.semgrep-rules.python.lang...`` for the
+    image's ``/opt/semgrep-rules`` (live verified). Segments are dropped
+    up to the first one that is a known namespace; an id with no known
+    namespace anywhere is returned unchanged rather than stripped to its
+    last segment.
     """
-    first, sep, rest = check_id.partition(".")
-    if not sep or not rest or first in RULE_NAMESPACES:
-        return check_id
-    return rest
+    segments = check_id.split(".")
+    for index, segment in enumerate(segments):
+        if segment in RULE_NAMESPACES:
+            return ".".join(segments[index:]) if index else check_id
+    return check_id
 
 
 def _title(message: str) -> str:
@@ -140,24 +155,67 @@ def _extract_references(metadata: Mapping[str, Any]) -> list[str]:
     return refs
 
 
-def normalize_semgrep(report: Mapping[str, Any]) -> list[NormalizedFinding]:
+def _workspace_filenames(files: Sequence[Mapping[str, Any]] | None) -> list[str]:
+    """Workspace filenames, longest first (so suffix matches prefer depth).
+
+    Leading slashes are stripped exactly like ``build_scan_archive``
+    does when packing the upload, so the names here are the archive
+    member names the service scanned.
+    """
+    names = [
+        str(file.get("filename") or "").strip().lstrip("/") for file in (files or [])
+    ]
+    return sorted((name for name in names if name), key=len, reverse=True)
+
+
+def _reconcile_path(path: str, filenames: Sequence[str]) -> str:
+    """Map a path semgrep reported back onto a workspace filename.
+
+    The service returns paths as semgrep saw them — absolute inside its
+    per-request temp dir (``/tmp/semgrep-scan-x7y8/src/src/app.py``) —
+    while SonarQube's component paths, the cross-tool merge key, and
+    snippet enrichment all work on the workspace's own names
+    (``src/app.py``). Because the uploaded archive's members ARE those
+    names, a workspace filename is always a ``/``-delimited suffix of
+    the reported path; the longest one wins when one name ends with
+    another (``src/app.py`` vs ``app.py``). Paths matching no workspace
+    file pass through untouched rather than being guessed at.
+    """
+    if not path or not filenames or path in filenames:
+        return path
+    for name in filenames:  # longest-first
+        if path.endswith("/" + name):
+            return name
+    return path
+
+
+def normalize_semgrep(
+    report: Mapping[str, Any],
+    files: Sequence[Mapping[str, Any]] | None = None,
+) -> list[NormalizedFinding]:
     """Map one semgrep JSON report (``{"results": [...]}``) to findings.
 
     Tolerant by design: missing/empty ``results`` yields ``[]``, and a
     malformed entry is skipped with a warning instead of failing the
     whole scan.
+
+    Pass ``files`` — the workspace the upload archive was built from —
+    to reconcile reported paths onto workspace filenames before they
+    become ``file_path`` (see ``_reconcile_path``). Omitted, paths pass
+    through verbatim.
     """
     results = report.get("results")
     if not isinstance(results, list):
         return []
 
+    filenames = _workspace_filenames(files)
     findings: list[NormalizedFinding] = []
     for raw in results:
         if not isinstance(raw, Mapping):
             logger.warning("semgrep: skipping non-object result: %r", raw)
             continue
         try:
-            findings.append(_normalize_one(raw))
+            findings.append(_normalize_one(raw, filenames))
         except Exception:  # one bad finding must not sink the scan
             logger.warning(
                 "semgrep: skipping malformed result: %r",
@@ -167,7 +225,9 @@ def normalize_semgrep(report: Mapping[str, Any]) -> list[NormalizedFinding]:
     return findings
 
 
-def _normalize_one(raw: Mapping[str, Any]) -> NormalizedFinding:
+def _normalize_one(
+    raw: Mapping[str, Any], filenames: Sequence[str]
+) -> NormalizedFinding:
     extra = raw.get("extra")
     extra = extra if isinstance(extra, Mapping) else {}
     metadata = extra.get("metadata")
@@ -201,7 +261,7 @@ def _normalize_one(raw: Mapping[str, Any]) -> NormalizedFinding:
         message=message,
         severity=severity,  # type: ignore[arg-type]
         category=_category(rule_id, metadata, cwe),  # type: ignore[arg-type]
-        file_path=str(raw.get("path") or ""),
+        file_path=_reconcile_path(str(raw.get("path") or ""), filenames),
         line_start=int(line_start) if line_start is not None else None,
         line_end=int(line_end) if line_end is not None else None,
         snippet=str(extra.get("lines")) if extra.get("lines") else None,
