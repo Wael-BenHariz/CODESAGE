@@ -1,0 +1,9 @@
+# Ruff config for the CodeSage semgrep scan service.
+# (Having an explicit config also pins the project root, so import
+# classification of `app.*` no longer depends on the invoking cwd.)
+
+[lint]
+# B008 flags function calls in argument defaults. FastAPI's
+# dependency-injection defaults — `File(...)`, `Query(...)` — are the
+# documented framework idiom, not bugs.
+ignore = ["B008"]
