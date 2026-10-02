@@ -31,6 +31,20 @@ SPECIALIST_SCHEMA = """Return ONLY valid JSON with this exact shape:
 }
 Do not include markdown, code fences, prose, or keys outside this schema."""
 
+# Prompt-budget cap for the Groq free tier (~8000 tokens per minute per
+# request). A catch-all domain (style) receiving BOTH analyzers' findings
+# plus enriched snippets pushed its prompt past 8000 tokens on its own,
+# which Groq rejects with a NON-retryable 413 ("Limit 8000, Requested ...");
+# the 413 handler only backs off when the prompt alone fits under the limit.
+# Rendering at most MAX_FINDINGS_PER_AGENT entries keeps every specialist
+# prompt comfortably under that ceiling.
+MAX_FINDINGS_PER_AGENT = 15
+
+# Unified severity, highest first (see normalizers.schema.Severity).
+# Findings are ordered by this BEFORE the cap, so the entries dropped are
+# always the lowest-severity ones and the agent is told how many.
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
 
 def _specialist_schema(agent_name: str) -> str:
     return SPECIALIST_SCHEMA.replace("__AGENT_NAME__", agent_name)
@@ -39,32 +53,45 @@ def _specialist_schema(agent_name: str) -> str:
 def format_findings(findings: list[NormalizedFinding]) -> str:
     """Render a domain's unified findings as compact Markdown.
 
+    Findings are ordered by unified severity (highest first) and capped at
+    ``MAX_FINDINGS_PER_AGENT`` to keep the prompt under the free tier's
+    per-request TPM ceiling; the agent is told how many lower-severity
+    entries were omitted.
+
     Each entry: unified severity, producing tool(s) — including cross-tool
-    agreement — rule id, file/line, CWE ids, the message, and the enriched
-    ±10-line numbered snippet when one exists (that excerpt is what makes
-    validation possible without re-scanning the code).
+    agreement — rule id, ``file:line``, CWE ids, the message, and the
+    enriched ±10-line numbered snippet when one exists (that excerpt is
+    what makes validation possible without re-scanning the code).
     """
     if not findings:
         return "No issues found in this category."
+    ordered = sorted(
+        findings, key=lambda f: _SEVERITY_RANK.get(f.severity, len(_SEVERITY_RANK))
+    )
+    kept = ordered[:MAX_FINDINGS_PER_AGENT]
     blocks = []
-    for finding in findings:
-        line_ref = f"line {finding.line_start}" if finding.line_start else "file level"
+    for finding in kept:
+        line_ref = f":{finding.line_start}" if finding.line_start else " (file level)"
         tools: str = finding.tool
         if finding.also_detected_by:
             tools += f"; also detected by {', '.join(finding.also_detected_by)}"
-        header = (
-            f"- [{finding.severity}] [{tools}] {finding.rule_id} at "
-            f"{finding.file_path} ({line_ref})"
-        )
+        header = f"- [{finding.severity}] [{tools}] {finding.rule_id} {finding.file_path}{line_ref}"
         if finding.cwe:
             header += f" ({', '.join(finding.cwe)})"
         message = finding.message.strip() or finding.title
-        entry = f"{header}\n  {message}"
+        entry = f"{header} — {message}"
         if finding.snippet:
             fenced = "\n".join(f"  {line}" for line in finding.snippet.splitlines())
             entry += f"\n  ```\n{fenced}\n  ```"
         blocks.append(entry)
-    return "\n".join(blocks)
+    result = "\n".join(blocks)
+    overflow = len(ordered) - len(kept)
+    if overflow:
+        result += (
+            f"\n_... {overflow} lower-severity findings omitted for brevity "
+            "(the highest-severity findings are listed above)._"
+        )
+    return result
 
 
 class _SpecialistAgent(BaseAgent):

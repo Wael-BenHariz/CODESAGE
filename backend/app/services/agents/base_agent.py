@@ -42,8 +42,20 @@ class BaseAgent(ABC):
         self.client = client
 
     async def run(self, context: ReviewContext) -> AgentResult:
-        """Build the agent prompt, call Gemini once, and validate the result."""
+        """Build the agent prompt, call the LLM once, and validate the result.
 
+        Specialists are finding-refiners: with no findings in their domain
+        there is nothing to validate, so the LLM call is skipped entirely
+        (returns an empty, confident result) and the free-tier TPM budget
+        is spent only on agents that have real work.
+        """
+
+        if not context.findings:
+            return AgentResult(
+                agent=self.AGENT_NAME,
+                confidence=1.0,
+                comments=[],
+            )
         prompt = self._build_prompt(context)
         data = await self._call_llm(prompt)
         data.setdefault("agent", self.AGENT_NAME)

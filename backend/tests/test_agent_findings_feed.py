@@ -21,8 +21,12 @@ from app.services.agents import (
     OrchestratorAgent,
     ReviewContext,
     SecurityAgent,
+    StyleAgent,
 )
-from app.services.agents.specialist_agents import format_findings
+from app.services.agents.specialist_agents import (
+    MAX_FINDINGS_PER_AGENT,
+    format_findings,
+)
 from app.services.llm_client import BaseLLMClient
 from app.services.normalizers.schema import NormalizedFinding
 from app.services.review_orchestrator import ReviewOrchestrator, domain_for_finding
@@ -221,6 +225,63 @@ def test_format_findings_empty_and_file_level():
     assert "Missing docstring" in out  # empty message falls back to title
 
 
+def test_format_findings_caps_prompt_budget_severity_first():
+    """TPM cap: at most MAX_FINDINGS_PER_AGENT entries, lowest cut first."""
+
+    findings = [
+        _sonar_finding(
+            rule=f"java:S{i}",
+            severity="low",
+            line=i,
+            message=f"low issue {i}",
+        )
+        for i in range(18)
+    ]
+    # Criticals appended LAST — naive truncation would drop them.
+    findings += [
+        _sonar_finding(
+            rule="java:CRITICAL-1",
+            severity="critical",
+            line=91,
+            message="first critical",
+        ),
+        _sonar_finding(
+            rule="java:CRITICAL-2",
+            severity="critical",
+            line=92,
+            message="second critical",
+        ),
+    ]
+
+    out = format_findings(findings)
+
+    assert out.count("- [") == MAX_FINDINGS_PER_AGENT
+    assert "java:CRITICAL-1" in out and "java:CRITICAL-2" in out
+    assert "low issue 17" not in out  # lowest severities are the ones cut
+    assert "5 lower-severity findings omitted" in out  # 20 rendered, 15 kept
+
+
+def test_format_findings_compact_location_tools_still_visible():
+    """Compact header: file:line instead of boilerplate, agreement kept."""
+
+    out = format_findings(
+        [
+            _sonar_finding(
+                file_path="src/A.java",
+                line=42,
+                severity="critical",
+                cwe=["CWE-89"],
+                also_detected_by=["semgrep"],
+                message="SQL injection",
+            )
+        ]
+    )
+    assert "src/A.java:42" in out
+    assert "[sonarqube; also detected by semgrep]" in out
+    assert "CWE-89" in out
+    assert "SQL injection" in out
+
+
 # --- orchestrator wiring (mocked LLM) -----------------------------------------
 
 
@@ -315,8 +376,14 @@ async def test_orchestrator_feeds_each_agent_only_its_domain_findings():
     synthesis_prompts = [
         p for p in fake.prompts if "You are synthesizing a GitHub PR" in p
     ]
-    assert len(specialist_prompts) == 5  # every specialist always runs
+    # test_coverage has no findings in this context -> the LLM call is
+    # skipped entirely (empty slice returns a confident empty result).
+    assert len(specialist_prompts) == 4
+    assert not any("## Findings (test coverage)" in p for p in fake.prompts)
     assert len(synthesis_prompts) == 1
+    # The skipped agent is a SUCCESS with zero comments, not a failure —
+    # synthesis must not report it among the failed specialists.
+    assert "failed specialist agents" not in synthesis_prompts[0]
 
     by_domain = {
         re.search(r"## Findings \(([^)]+)\)", p).group(1): p for p in specialist_prompts
@@ -341,7 +408,7 @@ async def test_orchestrator_feeds_each_agent_only_its_domain_findings():
     assert "python.style.import-order" in style
     assert "java:S2077" not in style
 
-    assert "No issues found in this category." in by_domain["test coverage"]
+    assert "test coverage" not in by_domain  # empty slice: no prompt at all
 
     # Output contract unchanged: merged comments + summary + severity.
     assert result.summary == "Synthesized summary."
@@ -353,6 +420,18 @@ async def test_orchestrator_feeds_each_agent_only_its_domain_findings():
         "style and maintainability.py",
     }  # test_coverage reported none
     assert isinstance(result.usage, dict)
+
+
+async def test_empty_slice_returns_without_calling_the_llm():
+    """Empty domain slice -> confident empty result, zero LLM calls."""
+
+    fake = FakeLLM()
+    result = await StyleAgent(fake).run(ReviewContext(pr_title="t", diff=""))
+
+    assert result.agent == "style"
+    assert result.confidence == 1.0
+    assert result.comments == []
+    assert fake.prompts == []  # no prompt was ever sent
 
 
 async def test_synthesis_is_honest_about_failed_analyzers():
