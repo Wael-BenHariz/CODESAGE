@@ -9,6 +9,7 @@ resources:
   - redis
   - backend
   - repo-tenant-service
+  - semgrep-service
   - frontend
   - ingress
   # metallb is intentionally NOT listed: it lives in metallb-system and is

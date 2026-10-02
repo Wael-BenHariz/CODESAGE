@@ -17,14 +17,17 @@ spec:
     spec:
       containers:
         - name: backend
-          image: codesage-backend:latest
-          imagePullPolicy: Never   # imported into k3s, not from a registry
+          image: 127.0.0.1:5000/codesage/backend:v0.2.0-semgrep
+          # Exact tag, pre-imported at this ref (or registries.yaml entry).
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
               name: http
           envFrom:
             - secretRef:
                 name: codesage-backend-secret
+            - configMapRef:
+                name: semgrep-config   # SEMGREP_* client settings
           resources:
             requests:
               cpu: 250m

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: semgrep-config
+  namespace: codesage
+  labels:
+    app: semgrep-config
+data:
+  # -- client side (envFrom into the backend API and the review worker) --
+  # Master switch: false removes Semgrep from every scan (SonarQube only).
+  SEMGREP_ENABLED: "true"
+  # In-cluster DNS, same namespace.
+  SEMGREP_SERVICE_URL: "http://semgrep-service:8080"
+  # Client HTTP budget for one POST /scan; also the service's default
+  # per-request subprocess timeout (shared key, both sides default 60).
+  SEMGREP_TIMEOUT_SECONDS: "60"
+  # Client pre-flight cap for the tar.gz upload (5 MiB).
+  SEMGREP_MAX_UPLOAD_BYTES: "5242880"
+  # -- service side (envFrom into the semgrep-service pod) --
+  # Concurrent scan processes (bounds temp-disk use too).
+  MAX_CONCURRENT_SCANS: "2"
+  # Request size limit enforced by POST /scan (same 5 MiB as the client).
+  MAX_UPLOAD_BYTES: "5242880"
