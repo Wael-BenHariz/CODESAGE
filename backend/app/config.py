@@ -154,6 +154,20 @@ class Settings(BaseSettings):
     SONARQUBE_POLL_INTERVAL: int = 3
     SONARQUBE_PROJECT_PREFIX: str = "codesage-review"
 
+    # Semgrep — standalone scan service (OSS rules, no account/token).
+    # The worker uploads a tar.gz of the SAME files SonarQube scans to
+    # POST /scan. SEMGREP_ENABLED=false restores the sonar-only behaviour
+    # (a failed/disabled Semgrep never fails a review — partial-failure
+    # tolerance lives in the worker, Step 5).
+    SEMGREP_ENABLED: bool = True
+    SEMGREP_SERVICE_URL: str = "http://semgrep-service:8080"
+    # Scan budget per /scan call (sent as the request's timeout param).
+    # The HTTP wait is budget + 40 s so the SERVICE's own hard kill
+    # (budget + 30 s) reports a clean 504 before the client gives up.
+    SEMGREP_TIMEOUT_SECONDS: int = 60
+    # Client-side pre-flight cap; must mirror the service's upload limit.
+    SEMGREP_MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024
+
     GROQ_API_KEY: str = Field(..., description="Groq API key (active review LLM)")
     GROQ_MODEL: str = "openai/gpt-oss-120b"
 
