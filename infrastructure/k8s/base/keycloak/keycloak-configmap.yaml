@@ -25,25 +25,51 @@ data:
       "roles": {
         "realm": [
           {
-            "name": "SUPER_ADMIN",
-            "description": "Full platform access, can manage all users and tenants"
+            "name": "PLATFORM_ADMIN",
+            "description": "Full platform access: platform settings, user administration, reads across all orgs (v0.3.0 — replaces SUPER_ADMIN)"
+          },
+          {
+            "name": "ORG_ADMIN",
+            "description": "Administers one organization: org settings, invitations, member roles"
+          },
+          {
+            "name": "REVIEWER",
+            "description": "Validates review findings (confirm / false positive / severity override) in their orgs"
           },
           {
             "name": "DEVELOPER",
-            "description": "Can install GitHub App, manage repos, view own reviews"
+            "description": "Can install GitHub App, manage repos, view own reviews, staged-post controls"
+          },
+          {
+            "name": "SUPER_ADMIN",
+            "description": "LEGACY — compat map to PLATFORM_ADMIN, removed in v0.4.0"
           },
           {
             "name": "GUEST",
-            "description": "Read-only access to reviews they are invited to view"
+            "description": "LEGACY — compat map to NONE (read-only); members are NOT migrated automatically, manual assignment"
           }
         ]
       },
       "groups": [
         {
-          "name": "super-admins",
-          "path": "/super-admins",
+          "name": "platform-admins",
+          "path": "/platform-admins",
           "realmRoles": [
-            "SUPER_ADMIN"
+            "PLATFORM_ADMIN"
+          ]
+        },
+        {
+          "name": "org-admins",
+          "path": "/org-admins",
+          "realmRoles": [
+            "ORG_ADMIN"
+          ]
+        },
+        {
+          "name": "reviewers",
+          "path": "/reviewers",
+          "realmRoles": [
+            "REVIEWER"
           ]
         },
         {
@@ -51,6 +77,13 @@ data:
           "path": "/developers",
           "realmRoles": [
             "DEVELOPER"
+          ]
+        },
+        {
+          "name": "super-admins",
+          "path": "/super-admins",
+          "realmRoles": [
+            "SUPER_ADMIN"
           ]
         },
         {

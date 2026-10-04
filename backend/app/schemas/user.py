@@ -38,7 +38,10 @@ class UserResponse(BaseModel):
     id: str = Field(..., description="User UUID")
     keycloak_id: str | None = Field(None, description="Keycloak subject (sub)")
     role: str = Field(
-        "DEVELOPER", description="Realm role: SUPER_ADMIN | DEVELOPER | GUEST"
+        "NONE",
+        description=(
+            "Realm role: PLATFORM_ADMIN | ORG_ADMIN | REVIEWER | DEVELOPER | NONE"
+        ),
     )
     github_id: int | None = Field(None, description="GitHub user ID")
     login: str = Field(..., description="GitHub username")

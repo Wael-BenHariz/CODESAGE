@@ -10,10 +10,12 @@ HS256 ``token_manager`` no longer authenticates API calls.
   * JIT-provisions the local user row on first login (find by keycloak_id,
     else adopt by github_id, else create),
   * syncs ``role`` from the JWT's ``realm_access.roles`` on **every** request
-    (the DB column is a mirror — guards never trust a stale value). When no
-    recognized realm role is present, a token carrying the GitHub identity
-    claims (``githubId``/``githubLogin``) derives DEVELOPER; everything else
-    falls back to GUEST (fail-closed),
+    (the DB column is a mirror — guards never trust a stale value), through
+    the four-role model in ``app.security.roles``: unrecognized or missing
+    claims derive the read-only sentinel NONE (fail-closed); a token carrying
+    the GitHub identity claims (``githubId``/``githubLogin``) with **no**
+    recognized/legacy role claim at all still derives DEVELOPER — the
+    TEMPORARY (F1) broker fallback, logged with a structured warning each use,
   * keeps the P0 revocation cutoff (logout = reject tokens issued before it).
 """
 
@@ -176,7 +178,11 @@ async def _find_or_create_user(db: AsyncSession, payload: dict) -> User | None:
         email=(str(payload["email"])[:512] if payload.get("email") else None),
         name=(str(name)[:255] if name else None),
         avatar_url=(str(payload["picture"])[:1024] if payload.get("picture") else None),
-        role=derive_role(_claim_roles(payload), via_github=_via_github(payload)),
+        role=derive_role(
+            _claim_roles(payload),
+            via_github=_via_github(payload),
+            subject=sub,
+        ),
     )
     db.add(user)
     try:
@@ -207,7 +213,11 @@ def _sync_profile_and_role(user: User, payload: dict) -> bool:
 
     changed = False
 
-    role = derive_role(_claim_roles(payload), via_github=_via_github(payload))
+    role = derive_role(
+        _claim_roles(payload),
+        via_github=_via_github(payload),
+        subject=str(user.id),
+    )
     if user.role != role:
         logger.info("Role sync: user %s %s -> %s", user.id, user.role, role)
         user.role = role
@@ -337,8 +347,12 @@ async def get_current_user_optional(
 async def require_admin(
     current_user: User = Depends(get_current_user),  # noqa: B008
 ) -> User:
-    """Require SUPER_ADMIN (kept for backward-compat imports)."""
-    if current_user.role != "SUPER_ADMIN":
+    """Require PLATFORM_ADMIN (kept for backward-compat imports).
+
+    Literal instead of ``ROLE_PLATFORM_ADMIN``: ``roles.py`` imports this
+    module, so importing it here would create a cycle.
+    """
+    if current_user.role != "PLATFORM_ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions",

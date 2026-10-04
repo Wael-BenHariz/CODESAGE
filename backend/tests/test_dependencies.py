@@ -139,17 +139,21 @@ async def test_unknown_user_is_jit_provisioned(client, db):
 
 
 async def test_role_synced_from_jwt_every_request(client, user, db):
-    """Same row, different token roles → role follows the JWT, not the DB."""
+    """Same row, different token roles → role follows the JWT, not the DB.
+
+    Token roles go through the one-release compat map: GUEST derives NONE,
+    SUPER_ADMIN derives PLATFORM_ADMIN (see app.security.roles).
+    """
     from sqlalchemy import select
 
     from app.db.models import User
 
-    guest_token = make_keycloak_token(sub="kc-sub-test-user", roles=("GUEST",))
+    readonly_token = make_keycloak_token(sub="kc-sub-test-user", roles=("GUEST",))
     resp = await client.get(
-        f"{API}/auth/me", headers={"Authorization": f"Bearer {guest_token}"}
+        f"{API}/auth/me", headers={"Authorization": f"Bearer {readonly_token}"}
     )
     assert resp.status_code == 200
-    assert resp.json()["role"] == "GUEST"
+    assert resp.json()["role"] == "NONE"
 
     # populate_existing: bypass this session's identity map (it still holds
     # the pre-request row) and re-read what the API persisted.
@@ -160,7 +164,7 @@ async def test_role_synced_from_jwt_every_request(client, user, db):
             .execution_options(populate_existing=True)
         )
     ).scalar_one()
-    assert fresh.role == "GUEST"
+    assert fresh.role == "NONE"
 
     admin_token = make_keycloak_token(
         sub="kc-sub-test-user", roles=("SUPER_ADMIN", "GUEST")
@@ -168,7 +172,8 @@ async def test_role_synced_from_jwt_every_request(client, user, db):
     resp = await client.get(
         f"{API}/auth/me", headers={"Authorization": f"Bearer {admin_token}"}
     )
-    assert resp.json()["role"] == "SUPER_ADMIN"
+    # SUPER_ADMIN outranks the legacy GUEST downgrade (compat map).
+    assert resp.json()["role"] == "PLATFORM_ADMIN"
 
 
 async def test_valid_token_for_deleted_user_rejected(client, user, db):

@@ -20,7 +20,9 @@ class User(Base):
     Attributes:
         keycloak_id: Keycloak subject (sub) — primary identity key.
         role: Realm role synced from the JWT on every authenticated request
-            (SUPER_ADMIN | DEVELOPER | GUEST).
+            (PLATFORM_ADMIN | ORG_ADMIN | REVIEWER | DEVELOPER | NONE —
+            legacy SUPER_ADMIN/GUEST claims map through the one-release
+            compat map in ``app.security.roles``).
         github_id: GitHub user ID from the GitHub IdP broker (optional —
             password-only Keycloak users have none).
         login: GitHub username (unique)
@@ -51,8 +53,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        server_default="DEVELOPER",
-        comment="Realm role: SUPER_ADMIN | DEVELOPER | GUEST",
+        # Fail-closed: a row inserted without an explicit role is read-only.
+        server_default="NONE",
+        comment="Realm role: PLATFORM_ADMIN | ORG_ADMIN | REVIEWER | DEVELOPER | NONE",
     )
 
     # GitHub Identity (from the GitHub IdP broker)

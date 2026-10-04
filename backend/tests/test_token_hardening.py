@@ -6,10 +6,12 @@
 2. Role-claim rejection: a token with NEITHER ``realm_access`` NOR a flat
    ``roles`` claim is a 401, never the fallback role.
 3. Fallback role: ``realm_access`` present but no recognized role name
-   (e.g. only ``default-roles-*``) → GUEST for non-GitHub tokens
+   (e.g. only ``default-roles-*``) → ``NONE`` for non-GitHub tokens
    (fail-closed), but DEVELOPER when the token carries the GitHub identity
-   claims (``githubId``/``githubLogin`` — a GitHub-brokered session), with an
-   explicit GUEST/SUPER_ADMIN still outranking that fallback — identically in
+   claims (``githubId``/``githubLogin`` — a GitHub-brokered session; the
+   temporary F1 fallback, kept with constraints — any recognized or legacy
+   claim, incl. ``GUEST``, stops it), with explicit ``GUEST``/``SUPER_ADMIN``
+   claims still outranking that fallback — identically in
    ``app.security.roles.derive_role`` and the frontend ``deriveRole``.
 4. The generic 401 body never leaks which check failed.
 """
@@ -111,32 +113,33 @@ async def test_access_token_with_flat_roles_claim_accepted(client):
     assert resp.json()["role"] == "DEVELOPER"
 
 
-# --- 3. fallback role (GUEST fail-closed; DEVELOPER via GitHub claims) ------
+# --- 3. fallback role (NONE fail-closed; DEVELOPER via GitHub claims — F1) ----
 
 
-async def test_default_roles_only_falls_back_to_guest(client):
-    """realm_access with only realm defaults (no GitHub claims) → GUEST."""
+async def test_default_roles_only_falls_back_to_none(client):
+    """realm_access with only realm defaults (no GitHub claims) → NONE."""
     token = make_keycloak_token(
         sub="kc-sub-defaults",
         roles=("default-roles-codesage-realm", "offline_access", "uma_authorization"),
     )
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "GUEST"
+    assert resp.json()["role"] == "NONE"
 
 
-async def test_unrecognized_role_names_fall_back_to_guest(client):
-    """Realm roles that aren't one of the three → GUEST (fail-closed)."""
+async def test_unrecognized_role_names_fall_back_to_none(client):
+    """Realm roles that aren't recognized or legacy → NONE (fail-closed)."""
     token = make_keycloak_token(sub="kc-sub-unknown", roles=("some-other-role",))
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "GUEST"
+    assert resp.json()["role"] == "NONE"
 
 
 async def test_github_session_default_roles_falls_back_to_developer(client):
     """GitHub-brokered token (githubId claim) with only default realm roles
     → DEVELOPER: signing in through GitHub is the grant, no Keycloak role
-    assignment needed."""
+    assignment needed. (Temporary F1 fallback — kept, constrained: it only
+    fires when NO recognized/legacy claim is present, and logs a warning.)"""
     token = make_keycloak_token(
         sub="kc-sub-github-defaults",
         roles=("default-roles-codesage-realm", "offline_access", "uma_authorization"),
@@ -162,7 +165,8 @@ async def test_github_login_claim_alone_is_enough(client):
 
 async def test_explicit_guest_downgrade_still_beats_github_fallback(client):
     """An explicit GUEST assignment outranks the GitHub-developer fallback —
-    admins keep their read-only downgrade lever."""
+    admins keep their read-only downgrade lever (GUEST → NONE via the compat
+    map; the fallback never fires when a legacy claim is present)."""
     token = make_keycloak_token(
         sub="kc-sub-github-guest",
         roles=("default-roles-codesage-realm", "GUEST"),
@@ -170,33 +174,34 @@ async def test_explicit_guest_downgrade_still_beats_github_fallback(client):
     )
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "GUEST"
+    assert resp.json()["role"] == "NONE"
 
 
 async def test_fallback_role_matches_backend_contract():
-    """derive_role's fallback: GUEST by default, DEVELOPER for GitHub
-    sessions — the guard the frontend mirrors."""
+    """derive_role's fallback: NONE by default, DEVELOPER for GitHub
+    sessions with no recognized/legacy claim (F1) — the guard the frontend
+    mirrors."""
     from app.security.roles import derive_role
 
-    # Non-GitHub session (fail-closed GUEST).
-    assert derive_role([]) == "GUEST"
-    assert derive_role(["default-roles-codesage-realm"]) == "GUEST"
-    # GitHub-brokered session → DEVELOPER fallback.
+    # Non-GitHub session (fail-closed NONE).
+    assert derive_role([]) == "NONE"
+    assert derive_role(["default-roles-codesage-realm"]) == "NONE"
+    # GitHub-brokered session → DEVELOPER fallback (temporary, F1).
     assert derive_role([], via_github=True) == "DEVELOPER"
     assert derive_role(["default-roles-codesage-realm"], via_github=True) == "DEVELOPER"
     # Explicit roles always outrank the GitHub fallback.
-    assert derive_role(["GUEST"], via_github=True) == "GUEST"
-    assert derive_role(["SUPER_ADMIN"], via_github=True) == "SUPER_ADMIN"
+    assert derive_role(["GUEST"], via_github=True) == "NONE"
+    assert derive_role(["SUPER_ADMIN"], via_github=True) == "PLATFORM_ADMIN"
 
 
-# --- 4. recognized roles unchanged ------------------------------------------
+# --- 4. recognized roles (compat map: legacy names derive new values) --------
 
 
-async def test_super_admin_token_unchanged(client):
+async def test_super_admin_token_maps_to_platform_admin(client):
     token = make_keycloak_token(sub="kc-sub-test-user", roles=("SUPER_ADMIN",))
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "SUPER_ADMIN"
+    assert resp.json()["role"] == "PLATFORM_ADMIN"
 
 
 async def test_developer_token_unchanged(client):
@@ -206,19 +211,20 @@ async def test_developer_token_unchanged(client):
     assert resp.json()["role"] == "DEVELOPER"
 
 
-async def test_guest_token_unchanged(client):
+async def test_guest_token_maps_to_none(client):
     token = make_keycloak_token(sub="kc-sub-test-user", roles=("GUEST",))
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "GUEST"
+    assert resp.json()["role"] == "NONE"
 
 
-async def test_guest_outranks_developer_still(client):
-    """Precedence SUPER_ADMIN > GUEST > DEVELOPER is untouched by the change."""
+async def test_legacy_guest_outranks_developer_still(client):
+    """Precedence PLATFORM_ADMIN > (legacy) GUEST > DEVELOPER is untouched —
+    a GUEST claim maps to NONE and still outranks DEVELOPER."""
     token = make_keycloak_token(sub="kc-sub-test-user", roles=("DEVELOPER", "GUEST"))
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "GUEST"
+    assert resp.json()["role"] == "NONE"
 
 
 # --- 5. existing rejection paths, re-pinned with typ present ----------------
