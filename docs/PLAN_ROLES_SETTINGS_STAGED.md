@@ -4,8 +4,8 @@ Branch: `feat/roles-org-settings-staged-reviews` (from `feat/semgrep-integration
 which contains the finished Semgrep work — release `v0.2.1-semgrep`, HEAD `9cd4b85`;
 **not merged into `main`**).
 
-Status: **Step 0 (recon) done; §5 decisions resolved, §6 flags open (non-blocking —
-confirm before/during Step 1). Ready for Step 1.**
+Status: **Step 0 (recon) done; §5 decisions AND §6 flags F1–F4 all resolved (see §6).
+Ready for Step 1 (implementation).**
 
 ---
 
@@ -125,8 +125,12 @@ DEVELOPER). `NONE` has **no ladder position**.
    read-only, membership cannot rescue it (test: *NONE gets 403 on every write endpoint*).
 2. Membership: caller must have an `org_members` row for the resource's org —
    otherwise **404** (test: *no org_members row → 404 regardless of role*).
-   **`PLATFORM_ADMIN` bypasses membership** (flag F2) — required by Step 3's
-   "ORG_ADMIN of that org **or PLATFORM_ADMIN**".
+   **`PLATFORM_ADMIN` bypasses membership on read and settings endpoints only**
+   (flag F2, resolved) — required by Step 3's "ORG_ADMIN of that org **or
+   PLATFORM_ADMIN**". **Mutating review actions are exempt from the bypass**:
+   dismiss, restore, summary edit, post, and validate require PLATFORM_ADMIN to
+   *also* be an org member, so a platform admin cannot post to a customer's
+   GitHub PR by accident (F2 carve-out — implemented with Step 7/9, tested there).
 3. Effective role = `max(global JWT role, org_members.role)`; if below the endpoint's
    required role → **403** (test: *DEVELOPER gets 403 on validate*).
 
@@ -135,17 +139,26 @@ Reading order consequence: cross-org (step 2 fails) yields 404 **before** any ro
 stated tests. Existing non-org endpoints keep today's guards unchanged
 (`require_developer` excludes `NONE` automatically — 403 parity with old GUEST).
 
-**`derive_role` per Q4 (strict reading — flag F1):**
+**`derive_role` per Q4 (flag F1 resolved — broker fallback KEPT, constrained):**
 - Map claims through the one-release compat map: `SUPER_ADMIN → PLATFORM_ADMIN`,
   `GUEST → NONE`, `DEVELOPER → DEVELOPER`, new names pass through; then ladder;
   a mapped `NONE` present in the claim set **wins over `DEVELOPER`** (preserves today's
   "explicit GUEST downgrade outranks DEVELOPER").
-- Unrecognized or empty role claims → `NONE`. **Never default to `DEVELOPER`** —
-  the `via_github` DEVELOPER fallback is removed (parameter and `_via_github` helper
-  dropped; frontend `deriveRole(roles, viaGitHub)` mirrors it). **Flag F1: this makes
-  every GitHub-broker user with no realm role read-only — confirm.**
+- Unrecognized or empty role claims → `NONE` (never default to `DEVELOPER`).
+- **Temporary broker fallback (F1)**: only when the claim set contains **no recognized
+  or legacy role claim at all** (e.g. only `default-roles-*`) **and** the token carries
+  GitHub identity claims (`via_github`) → `DEVELOPER` — the pre-existing behavior
+  (commit `183ffd9`) is kept for brokered sessions. The fallback never fires when any
+  recognized/legacy claim is present: `via_github` + `GUEST` → `NONE`; non-GitHub +
+  no role → `NONE`. Each use logs a **structured warning** (subject id + derived role,
+  no secrets) so unassigned users are visible. Marked `# TEMPORARY (F1)` in code;
+  removal follow-up in §6 once every realm user has a group.
 - A token with **no** role claim at all still 401s in `_claim_roles` (unchanged hardening).
 - Compat map + old realm roles/groups removed after one release (follow-up, v0.4.0).
+- Precedence (incl. new roles): `PLATFORM_ADMIN > NONE > ORG_ADMIN > REVIEWER >
+  DEVELOPER` — an explicit legacy read-only claim beats new-role grants (fail-closed,
+  mirrors today's `SUPER_ADMIN > GUEST > DEVELOPER` with `NONE` where `GUEST` sat).
+  Tests pin this order.
 
 ---
 
@@ -186,13 +199,17 @@ stated tests. Existing non-org endpoints keep today's guards unchanged
      list of users with **no recognized realm role** (they would derive `NONE`), so
      each can be assigned manually;
   4. never delete old groups (removal after the GUEST list is empty = manual follow-up).
-- Tests: ladder precedence, compat map (incl. `GUEST` beating `DEVELOPER`),
-  unrecognized → `NONE`, guard test per role (`NONE` 403 on a write route),
+- Tests: ladder precedence (incl. `NONE` above `ORG_ADMIN`/`REVIEWER`), compat map
+  (incl. `GUEST` beating `DEVELOPER`), unrecognized → `NONE`, **broker-fallback
+  contract (F1)**: `via_github` + no recognized/legacy claim → `DEVELOPER` +
+  structured warning logged; `via_github` + `GUEST` → `NONE`; non-GitHub + no role
+  → `NONE`; guard test per role (`NONE` 403 on write routes — more than one),
   `test_route_inventory` still green.
 
 ### Step 2 — Roles, frontend
 
-- `deriveRole()` mirrors §2 exactly (compat map, `NONE`, no `viaGitHub` fallback);
+- `deriveRole()` mirrors §2 exactly (compat map, `NONE`, **keeps the constrained
+  `viaGitHub` fallback — F1**);
   `ANY_ROLE = [DEVELOPER, REVIEWER, ORG_ADMIN, PLATFORM_ADMIN, NONE]`,
   `WRITE_ROLES = [DEVELOPER, REVIEWER, ORG_ADMIN, PLATFORM_ADMIN]`,
   new `ADMIN_ROLES = [ORG_ADMIN, PLATFORM_ADMIN]` for settings/admin entries.
@@ -355,12 +372,17 @@ stated tests. Existing non-org endpoints keep today's guards unchanged
     github_review_id=…`; second concurrent/double click → **409**. GitHub failure →
     `posted_at` stays null, **502** with a retryable detail message (stored, not
     hidden). Stores `github_review_id`.
-- **Rule-5 retrofit of existing review-bearing routes (flag F3)**: org membership
+- **Rule-5 retrofit of existing review-bearing routes (flag F3, accepted with
+  pre-checks)**: org membership
   (404) added to `GET /reviews` (list filtered to caller's orgs; PLATFORM_ADMIN sees
   all), `GET /reviews/{id}`, `/status`, `/scan-report`, `retry`, `DELETE`,
   `comments/{id}/resolve`, `GET /pull-requests/{id}`, `/reviews`, and
   `POST /pull-requests/{id}/review`. Without this, "cross-org access denied" cannot
   hold for review data (the panel in 7b reads `GET /reviews/{id}`).
+  **Pre-checks before the retrofit (F3)**: (a) confirm the 013 seeding covers every
+  user who can see reviews today — *show the list of users with reviews but no
+  `org_members` row* (they would lose access); (b) confirm the frontend handles a
+  404 on these routes without a broken page (error state, not a blank/loop).
 - Tests per endpoint: cross-org 404 (user of org B vs org A's review/comment),
   DEVELOPER-vs-REVIEWER gates, **double post → 409** (two concurrent posts),
   GitHub failure → retryable, non-staged post rejected, summary-after-post rejected.
@@ -566,7 +588,8 @@ nothing renumbered)*
   hostile-string test.
 - **Q4**: internal read-only sentinel `NONE` (no ladder position, not stored, not a
   group); `derive_role` → `NONE` for unrecognized/missing claims, **never default to
-  DEVELOPER**; compat map `SUPER_ADMIN→PLATFORM_ADMIN`, `GUEST→NONE` (read-only),
+  DEVELOPER** (except the constrained temporary broker fallback — F1, §6);
+  compat map `SUPER_ADMIN→PLATFORM_ADMIN`, `GUEST→NONE` (read-only),
   `DEVELOPER→DEVELOPER`, removed after one release; Keycloak script does **not** move
   GUEST members — prints them for manual assignment, old GUEST group removed only
   after the list is empty; no-org-row → 404 regardless of role (except PLATFORM_ADMIN,
@@ -574,21 +597,30 @@ nothing renumbered)*
 
 ---
 
-## 6. Flags — interpretations needing your confirmation (non-blocking)
+## 6. Flags — resolved (F1–F4), with follow-ups
 
-- **F1 — `via_github` DEVELOPER fallback removed.** Q4's "Never default to DEVELOPER"
-  read literally removes the broker fallback (commit `183ffd9` feature): a
-  GitHub-brokered user with **no realm role** derives `NONE` (read-only) until an
-  admin assigns a group. The realm has no default role/group, so this affects every
-  unassigned GitHub user. The migration script will print them (F4). *Say the word and
-  I keep the fallback for brokered sessions only (one branch + mirrored frontend test).*
-- **F2 — PLATFORM_ADMIN bypasses org membership.** "404 regardless of role for
-  no-membership" cannot include PLATFORM_ADMIN, or Step 3's "…or PLATFORM_ADMIN"
-  breaks. Implemented as: PLATFORM_ADMIN skips membership but everything else still
-  404s cross-org for DEVELOPER/REVIEWER/ORG_ADMIN.
-- **F3 — Rule-5 retrofit onto existing review-bearing routes** (list in §3 table) —
-  rule 5 says "every new endpoint", but without this a cross-org user still reads
-  org A's reviews through today's `GET /reviews/{id}` and the Step 7b panel. Included
-  in Step 7 unless you object; existing tests get org fixtures.
-- **F4 — script also lists users with NO recognized realm role** (they would derive
-  `NONE` under F1), alongside the GUEST list, so nobody is silently locked out.
+- **F1 — RESOLVED: broker DEVELOPER fallback KEPT, constrained.**
+  `via_github` sessions with **no recognized or legacy realm role** still derive
+  `DEVELOPER` (existing behavior, commit `183ffd9`). Everything else unrecognized or
+  missing → `NONE`. Legacy `GUEST` claim → `NONE` **even when brokered** — the fallback
+  applies only when there is **no** recognized/legacy claim at all (a stray
+  `default-roles-*` name does not count as a claim). Each fallback use logs a
+  structured warning (subject id + derived role, no secrets) and the code carries a
+  `# TEMPORARY (F1)` marker.
+  **Follow-up: remove the fallback (and its frontend mirror) once every realm user has
+  a group** — the script's no-realm-role list (F4) is the worklist.
+- **F2 — RESOLVED: PLATFORM_ADMIN bypasses the org-membership 404 for READ and
+  SETTINGS endpoints only.** For **mutating review actions** (dismiss, restore, summary
+  edit, post, validate) PLATFORM_ADMIN must **also** be an `org_members` row holder —
+  a platform admin cannot post to a customer's GitHub PR by accident. Implemented with
+  Step 7/9 guards, documented in §2 step 2, tested per endpoint (platform admin
+  non-member → 404 on mutations; → allowed on reads/settings).
+- **F3 — ACCEPTED (with pre-checks).** Retrofit the org 404 onto the review-bearing
+  routes listed in §3 in Step 7. Before doing it: (a) show the list of users who have
+  reviews but no `org_members` row after seeding (they would lose access) and confirm
+  the seeding covers everyone who legitimately can see reviews today; (b) verify the
+  frontend turns a 404 on these routes into a graceful error state (no broken page).
+- **F4 — ACCEPTED as specified.** `--dry-run` and the real run of
+  `scripts/keycloak_migrate_roles.sh` both print the `GUEST` users **and** the users
+  with **no recognized realm role** (they derive `NONE` / hit the F1 fallback).
+  Nothing is moved automatically.
