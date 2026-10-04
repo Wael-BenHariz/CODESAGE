@@ -6,6 +6,7 @@ import {
   RouterStateSnapshot
 } from '@angular/router';
 import { KeycloakService } from 'keycloak-angular';
+import { of, throwError } from 'rxjs';
 
 import {
   ADMIN_ROLES,
@@ -13,8 +14,10 @@ import {
   RoleGuard,
   WRITE_ROLES,
   deriveRole,
+  isAdminRoute,
   navVisibility
 } from './role.guard';
+import { OrgSettingsService } from '../services/org-settings.service';
 import { routes } from '../../app.routes';
 
 describe('role lists', () => {
@@ -42,10 +45,20 @@ describe('role lists', () => {
     const byPath = (path: string) => routes.find(route => route.path === path);
     expect(byPath('dashboard')?.data?.['roles']).toBe(WRITE_ROLES);
     expect(byPath('settings')?.data?.['roles']).toBe(WRITE_ROLES);
+    expect(byPath('settings/org')?.data?.['roles']).toBe(ADMIN_ROLES);
     expect(byPath('repositories')?.data?.['roles']).toBe(ANY_ROLE);
     expect(byPath('repositories/:owner/:repo')?.data?.['roles']).toBe(ANY_ROLE);
     expect(byPath('repositories/:owner/:repo/pulls')?.data?.['roles']).toBe(ANY_ROLE);
     expect(byPath('repositories/:owner/:repo/pulls/:number')?.data?.['roles']).toBe(ANY_ROLE);
+  });
+
+  it('recognizes exactly the ADMIN_ROLES list as elevation-eligible', () => {
+    expect(isAdminRoute(ADMIN_ROLES)).toBeTrue();
+    expect(isAdminRoute([...ADMIN_ROLES])).toBeTrue();
+    expect(isAdminRoute(WRITE_ROLES)).toBeFalse();
+    expect(isAdminRoute(ANY_ROLE)).toBeFalse();
+    expect(isAdminRoute(['ORG_ADMIN'])).toBeFalse();
+    expect(isAdminRoute([])).toBeFalse();
   });
 });
 
@@ -146,6 +159,7 @@ describe('RoleGuard', () => {
   let guard: RoleGuard;
   let router: Router;
   let keycloak: jasmine.SpyObj<KeycloakService>;
+  let orgSvc: jasmine.SpyObj<OrgSettingsService>;
 
   const state = (url: string) => ({ url }) as RouterStateSnapshot;
 
@@ -169,9 +183,15 @@ describe('RoleGuard', () => {
     keycloak.getKeycloakInstance.and.returnValue({
       tokenParsed
     } as unknown as ReturnType<KeycloakService['getKeycloakInstance']>);
+    orgSvc = jasmine.createSpyObj<OrgSettingsService>('OrgSettingsService', ['listOrgs']);
+    orgSvc.listOrgs.and.returnValue(of([]));
 
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: KeycloakService, useValue: keycloak }]
+      providers: [
+        provideRouter([]),
+        { provide: KeycloakService, useValue: keycloak },
+        { provide: OrgSettingsService, useValue: orgSvc }
+      ]
     });
     router = TestBed.inject(Router);
     guard = TestBed.inject(RoleGuard);
@@ -272,5 +292,58 @@ describe('RoleGuard', () => {
     const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
 
     expect(result).toEqual(router.parseUrl('/repositories'));
+  });
+
+  // --- org-membership elevation (plan §2: effective = max(JWT, org_members)) --
+
+  it('elevates an org_members ORG_ADMIN row onto admin routes', async () => {
+    // The Q1 seeding shape: DEVELOPER claim, but the org's only linked
+    // user holds ORG_ADMIN in org_members — the backend PUT guard
+    // computes the same effective role, so the page must be reachable.
+    configure(['DEVELOPER']);
+    orgSvc.listOrgs.and.returnValue(
+      of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
+    );
+
+    expect(
+      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+    ).toBeTrue();
+  });
+
+  it('does not elevate a plain DEVELOPER membership', async () => {
+    configure(['DEVELOPER']);
+    orgSvc.listOrgs.and.returnValue(
+      of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'DEVELOPER' }])
+    );
+
+    const result = await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'));
+    expect(result).toEqual(router.parseUrl('/repositories'));
+  });
+
+  it('fails closed when the org lookup errors on an admin route', async () => {
+    configure(['DEVELOPER']);
+    orgSvc.listOrgs.and.returnValue(throwError(() => new Error('network down')));
+
+    const result = await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'));
+    expect(result).toEqual(router.parseUrl('/repositories'));
+  });
+
+  it('consults memberships only for admin routes (deny path of WRITE_ROLES)', async () => {
+    configure(['NONE']);
+    orgSvc.listOrgs.and.returnValue(
+      of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
+    );
+
+    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(orgSvc.listOrgs).not.toHaveBeenCalled();
+  });
+
+  it('skips the membership lookup when the JWT role already qualifies', async () => {
+    configure(['ORG_ADMIN']);
+    expect(
+      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+    ).toBeTrue();
+    expect(orgSvc.listOrgs).not.toHaveBeenCalled();
   });
 });

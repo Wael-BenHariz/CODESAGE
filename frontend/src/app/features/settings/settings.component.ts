@@ -1,12 +1,14 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import {
   LLMSettings,
   LLMSettingsUpdate,
   LlmSettingsService
 } from '../../core/services/llm-settings.service';
+import { OrgSettingsService, canManageSettings } from '../../core/services/org-settings.service';
 
 type LLMProvider = 'groq' | 'openai' | 'anthropic' | 'gemini' | 'ollama';
 
@@ -48,15 +50,20 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss'
 })
 export class SettingsComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly llm = inject(LlmSettingsService);
+  private readonly orgSettings = inject(OrgSettingsService);
 
   user = this.auth.currentUser;
+
+  /** Show the org-settings link when the caller can edit at least one org
+   *  (effective role ≥ ORG_ADMIN — plan §2; the route guard re-checks). */
+  canManageOrgSettings = signal(false);
 
   readonly providers = PROVIDERS;
 
@@ -79,6 +86,20 @@ export class SettingsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadSettings();
+    this.checkOrgAdminAccess();
+  }
+
+  /** Fail-closed: no org list (or no qualifying membership) = no link. */
+  private checkOrgAdminAccess(): void {
+    const role = this.auth.currentUser()?.role ?? null;
+    if (role === 'PLATFORM_ADMIN') {
+      this.canManageOrgSettings.set(true);
+      return;
+    }
+    this.orgSettings.listOrgs().subscribe({
+      next: orgs => this.canManageOrgSettings.set(orgs.some(o => canManageSettings(role, o.role))),
+      error: () => this.canManageOrgSettings.set(false)
+    });
   }
 
   get hasSavedKey(): boolean {

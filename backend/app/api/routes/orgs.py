@@ -1,5 +1,8 @@
 """Organization routes — settings (Step 3; invitations arrive in Step 11).
 
+GET /orgs — the caller's org context (Step 5): members see their own
+``org_members`` rows, PLATFORM_ADMIN sees every org (F2). Pure read.
+
 GET/PUT /orgs/{org_id}/settings — guard: member + effective role
 ≥ ORG_ADMIN (capability model in ``app.security.org_access``; cross-org →
 404, DEVELOPER member → 403, NONE write → 403, PLATFORM_ADMIN ok per F2).
@@ -15,10 +18,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.db.models import OrgSetting
+from app.db.models import Org, OrgMember, OrgSetting, User
+from app.schemas.org import OrgSummary
 from app.schemas.org_settings import (
     EffectiveValues,
     NumericCeilings,
@@ -26,8 +31,9 @@ from app.schemas.org_settings import (
     OverriddenFlags,
     SettingsValues,
 )
+from app.security.dependencies import get_current_user
 from app.security.org_access import OrgAccess, require_org_role
-from app.security.roles import ROLE_ORG_ADMIN
+from app.security.roles import ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN
 from app.services import org_settings as settings_service
 
 logger = logging.getLogger(__name__)
@@ -41,6 +47,63 @@ _UNPROCESSABLE_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 # membership without an org row (flag F2 carve-out, reads and settings).
 _settings_reader = require_org_role(ROLE_ORG_ADMIN, write=False)
 _settings_writer = require_org_role(ROLE_ORG_ADMIN, write=True)
+
+
+@router.get("", response_model=list[OrgSummary])
+async def list_my_orgs(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Organizations the caller may act in — the UI's org context (Step 5).
+
+    Members see their own ``org_members`` rows; PLATFORM_ADMIN sees every
+    org (F2 read/settings bypass) with ``role`` only where they also hold
+    a membership row. Pure read → ``get_current_user`` (any role, NONE
+    included — a NONE user simply has no memberships).
+    """
+    if current_user.role == ROLE_PLATFORM_ADMIN:
+        # F2: platform admins may open settings on any org — list them all,
+        # enriching with the caller's own membership role when one exists.
+        membership_rows = (
+            await db.execute(
+                select(OrgMember.org_id, OrgMember.role).where(
+                    OrgMember.user_id == current_user.id
+                )
+            )
+        ).all()
+        memberships = {row.org_id: row.role for row in membership_rows}
+        org_rows = (
+            await db.execute(
+                select(Org.id, Org.name, Org.account_type).order_by(Org.name)
+            )
+        ).all()
+        return [
+            OrgSummary(
+                id=row.id,
+                name=row.name,
+                account_type=row.account_type,
+                role=memberships.get(row.id),
+            )
+            for row in org_rows
+        ]
+
+    rows = (
+        await db.execute(
+            select(Org.id, Org.name, Org.account_type, OrgMember.role)
+            .join(OrgMember, OrgMember.org_id == Org.id)
+            .where(OrgMember.user_id == current_user.id)
+            .order_by(Org.name)
+        )
+    ).all()
+    return [
+        OrgSummary(
+            id=row.id,
+            name=row.name,
+            account_type=row.account_type,
+            role=row.role,
+        )
+        for row in rows
+    ]
 
 
 async def _response(

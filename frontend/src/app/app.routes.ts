@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { ANY_ROLE, RoleGuard, WRITE_ROLES } from './core/guards/role.guard';
+import { ADMIN_ROLES, ANY_ROLE, RoleGuard, WRITE_ROLES } from './core/guards/role.guard';
 
 export const routes: Routes = [
   {
@@ -67,6 +67,18 @@ export const routes: Routes = [
       import('./features/settings/settings.component').then(m => m.SettingsComponent),
     canActivate: [RoleGuard],
     data: { roles: WRITE_ROLES }
+  },
+  {
+    // Org + platform settings (Step 5). ADMIN_ROLES on the JWT, or — same
+    // effective role per plan §2 — an org_members ORG_ADMIN row (the guard
+    // elevates; the backend re-checks authoritatively).
+    path: 'settings/org',
+    loadComponent: () =>
+      import('./features/settings/org-settings/org-settings.component').then(
+        m => m.OrgSettingsComponent
+      ),
+    canActivate: [RoleGuard],
+    data: { roles: ADMIN_ROLES }
   },
   {
     path: '**',

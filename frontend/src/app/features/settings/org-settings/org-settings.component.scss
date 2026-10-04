@@ -1,0 +1,365 @@
+/* Org + platform settings page — mirrors the settings page design language
+   (dark theme, JetBrains Mono labels, #00e87b accent). */
+
+.settings-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.page-header {
+  margin-bottom: 32px;
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #e5e5e5;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+}
+
+.page-subtitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #666666;
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+
+.settings-section {
+  margin-bottom: 32px;
+
+  h2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e5e5e5;
+    margin: 0 0 4px;
+  }
+}
+
+.section-subtitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #666666;
+  margin: 0 0 16px;
+}
+
+.card {
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.state-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #666666;
+  margin: 0;
+}
+
+.org-picker {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1e1e1e;
+
+  .field {
+    flex: 1;
+    min-width: 240px;
+  }
+}
+
+.role-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #00e87b;
+  background: rgba(0, 232, 123, 0.06);
+  border: 1px solid rgba(0, 232, 123, 0.25);
+  border-radius: 4px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #666666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  input,
+  select {
+    font-family: 'JetBrains Mono', monospace;
+    padding: 10px 12px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #e5e5e5;
+
+    &:focus {
+      outline: none;
+      border-color: #00e87b;
+    }
+
+    &:disabled {
+      background: #141414;
+      color: #666666;
+      cursor: not-allowed;
+    }
+
+    &::placeholder {
+      color: #444444;
+    }
+  }
+}
+
+.setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #1e1e1e;
+
+  &:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  &.invalid input,
+  &.invalid select {
+    border-color: rgba(255, 68, 68, 0.6);
+  }
+
+  input[type='number'],
+  input[type='text'],
+  select {
+    font-family: 'JetBrains Mono', monospace;
+    padding: 10px 12px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #e5e5e5;
+    max-width: 320px;
+
+    &:focus {
+      outline: none;
+      border-color: #00e87b;
+    }
+
+    &:disabled {
+      background: #141414;
+      color: #666666;
+      cursor: not-allowed;
+    }
+
+    &::placeholder {
+      color: #444444;
+    }
+  }
+}
+
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+
+  label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #666666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+.ceiling-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #00e87b;
+}
+
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.check-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #a0a0a0;
+  cursor: pointer;
+
+  input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: #00e87b;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+}
+
+.field-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-hint,
+.inherit-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #666666;
+}
+
+.inherit-hint {
+  color: #444444;
+}
+
+.override-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #00e87b;
+  border: 1px solid rgba(0, 232, 123, 0.3);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+.btn-link {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #ff4444;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover:not(:disabled) {
+    color: #ff6666;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.field-error {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #ff4444;
+}
+
+.banner {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  color: #a0a0a0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  &.info {
+    background: rgba(0, 232, 123, 0.06);
+    border-color: rgba(0, 232, 123, 0.25);
+    color: #00e87b;
+  }
+
+  &.success {
+    background: rgba(0, 232, 123, 0.06);
+    border-color: rgba(0, 232, 123, 0.25);
+    color: #00e87b;
+  }
+
+  &.error {
+    background: rgba(255, 68, 68, 0.08);
+    border-color: rgba(255, 68, 68, 0.3);
+    color: #ff4444;
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.1s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background: #00e87b;
+  color: #0a0a0a;
+  border-color: #00e87b;
+
+  &:hover:not(:disabled) {
+    background: #00cc6d;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.btn-secondary {
+  background: #1a1a1a;
+  color: #a0a0a0;
+  border-color: #2a2a2a;
+
+  &:hover:not(:disabled) {
+    background: #222222;
+    color: #e5e5e5;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}

@@ -700,3 +700,57 @@ def test_hard_caps_match_worker_constants():
         "max_findings_per_agent": 100,
         "max_concurrent_reviews": 50,
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /orgs — org context for the settings UI (Step 5)
+# ---------------------------------------------------------------------------
+
+_LIST_URL = f"{API}/orgs"
+
+
+async def test_org_list_requires_auth(client):
+    resp = await client.get(_LIST_URL)
+    assert resp.status_code == 401
+
+
+async def test_org_list_returns_only_own_memberships(client, db):
+    """The one cross-org test for GET /orgs: caller never sees foreign orgs."""
+    acme = await _make_org(db, name="acme", installation_id=21)
+    beta = await _make_org(db, name="beta", installation_id=22)
+    alice = await _make_user(db, "kc-list-alice")
+    await _make_member(db, acme, alice, "ORG_ADMIN")
+    bob = await _make_user(db, "kc-list-bob")
+    await _make_member(db, beta, bob, "DEVELOPER")
+
+    resp = await client.get(_LIST_URL, headers=_auth("kc-list-alice"))
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert [(o["name"], o["role"]) for o in payload] == [("acme", "ORG_ADMIN")]
+    assert str(acme.id) == payload[0]["id"]
+    assert str(beta.id) not in [o["id"] for o in payload]
+
+
+async def test_org_list_none_user_gets_empty_list(client, db):
+    """NONE users hold no memberships → 200 with [] (read is fine, no org)."""
+    await _make_org(db, name="acme", installation_id=23)
+    resp = await client.get(_LIST_URL, headers=_auth("kc-list-none", ("NONE",)))
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_org_list_platform_admin_sees_every_org(client, db):
+    """F2: PLATFORM_ADMIN sees all orgs; role is their membership if any."""
+    acme = await _make_org(db, name="acme", installation_id=24)
+    beta = await _make_org(db, name="beta", installation_id=25)
+    pa = await _make_user(db, "kc-list-pa")
+    await _make_member(db, acme, pa, "ORG_ADMIN")
+
+    resp = await client.get(_LIST_URL, headers=_auth("kc-list-pa", ("PLATFORM_ADMIN",)))
+    assert resp.status_code == 200
+    by_name = {o["name"]: o for o in resp.json()}
+    assert set(by_name) == {"acme", "beta"}
+    assert by_name["acme"]["role"] == "ORG_ADMIN"
+    assert by_name["beta"]["role"] is None
+    assert str(acme.id) in {o["id"] for o in resp.json()}
+    assert str(beta.id) in {o["id"] for o in resp.json()}

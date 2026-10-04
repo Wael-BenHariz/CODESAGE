@@ -1,7 +1,11 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { KeycloakService } from 'keycloak-angular';
+
+import { AuthService } from '../../core/services/auth.service';
 
 import { SettingsComponent } from './settings.component';
 import {
@@ -9,11 +13,15 @@ import {
   LLMSettingsUpdate,
   LlmSettingsService
 } from '../../core/services/llm-settings.service';
+import { OrgSettingsService } from '../../core/services/org-settings.service';
 
 describe('SettingsComponent — AI model settings', () => {
   let fixture: ComponentFixture<SettingsComponent>;
   let component: SettingsComponent;
   let svc: jasmine.SpyObj<LlmSettingsService>;
+  let orgSvc: jasmine.SpyObj<OrgSettingsService>;
+  /** Writable view of the fake session user (role drives the org link). */
+  let authSignal: ReturnType<typeof signal<{ role: string } | null>>;
 
   const savedConfig: LLMSettings = {
     provider: 'groq',
@@ -54,11 +62,22 @@ describe('SettingsComponent — AI model settings', () => {
       })
     );
 
+    orgSvc = jasmine.createSpyObj<OrgSettingsService>('OrgSettingsService', ['listOrgs']);
+    orgSvc.listOrgs.and.returnValue(of([]));
+
+    authSignal = signal<{ role: string } | null>(null);
+
     await TestBed.configureTestingModule({
       imports: [SettingsComponent],
       providers: [
         provideHttpClient(),
+        // SettingsComponent imports RouterModule (org-settings link).
+        provideRouter([]),
         { provide: LlmSettingsService, useValue: svc },
+        { provide: OrgSettingsService, useValue: orgSvc },
+        // Only currentUser().role is read by the org-link logic; null
+        // mirrors the real AuthService in tests (no Keycloak session).
+        { provide: AuthService, useValue: { currentUser: authSignal } },
         // AuthService (injected by the component) depends on KeycloakService.
         {
           provide: KeycloakService,
@@ -201,5 +220,34 @@ describe('SettingsComponent — AI model settings', () => {
     const text = (fresh.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('boom');
     expect(text).toContain('Retry');
+  });
+
+  it('hides the org-settings link when the caller manages no org', () => {
+    expect(orgSvc.listOrgs).toHaveBeenCalled();
+    expect(el().querySelector('[data-testid="org-settings-link"]')).toBeNull();
+  });
+
+  it('shows the org-settings link for an ORG_ADMIN membership (effective role)', () => {
+    // DEVELOPER claim + ORG_ADMIN membership → effective ORG_ADMIN (plan §2).
+    authSignal.set({ role: 'DEVELOPER' });
+    orgSvc.listOrgs.and.returnValue(
+      of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
+    );
+    const fresh = TestBed.createComponent(SettingsComponent);
+    fresh.detectChanges();
+    const link = (fresh.nativeElement as HTMLElement).querySelector(
+      '[data-testid="org-settings-link"]'
+    );
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('href')).toBe('/settings/org');
+  });
+
+  it('stays hidden when listing orgs fails (fail closed)', () => {
+    orgSvc.listOrgs.and.returnValue(throwError(() => new Error('nope')));
+    const fresh = TestBed.createComponent(SettingsComponent);
+    fresh.detectChanges();
+    expect(
+      (fresh.nativeElement as HTMLElement).querySelector('[data-testid="org-settings-link"]')
+    ).toBeNull();
   });
 });

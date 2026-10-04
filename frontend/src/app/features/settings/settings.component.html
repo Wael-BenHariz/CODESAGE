@@ -1,6 +1,11 @@
 <div class="settings-page">
   <header class="page-header">
     <h1>Settings</h1>
+    @if (canManageOrgSettings()) {
+      <a class="org-settings-link" routerLink="/settings/org" data-testid="org-settings-link">
+        Organization settings →
+      </a>
+    }
   </header>
 
   <div class="settings-sections">

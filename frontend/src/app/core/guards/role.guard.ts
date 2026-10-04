@@ -1,6 +1,9 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree } from '@angular/router';
 import { KeycloakAuthGuard, KeycloakService } from 'keycloak-angular';
+import { firstValueFrom } from 'rxjs';
+
+import { OrgSettingsService } from '../services/org-settings.service';
 
 /**
  * Every authenticated role — matches the backend's "reads: any role" rule
@@ -13,6 +16,17 @@ export const WRITE_ROLES = ['DEVELOPER', 'REVIEWER', 'ORG_ADMIN', 'PLATFORM_ADMI
 
 /** Org/platform administration entries (org settings, member management). */
 export const ADMIN_ROLES = ['ORG_ADMIN', 'PLATFORM_ADMIN'];
+
+/**
+ * True when the route declares exactly the admin role list — those are
+ * the routes eligible for the org-membership elevation below (an org
+ * members row raises the effective role, plan §2 max(JWT, org_members.role)).
+ */
+export function isAdminRoute(required: readonly string[]): boolean {
+  return (
+    required.length === ADMIN_ROLES.length && required.every(role => ADMIN_ROLES.includes(role))
+  );
+}
 
 /**
  * One-release compatibility map: legacy claim -> new claim. Mirrors the
@@ -101,9 +115,18 @@ export function navVisibility(role: string | null | undefined): {
  * `data.roles`) an effective role among them. Role lists (ANY_ROLE,
  * WRITE_ROLES, ADMIN_ROLES) are exported from this file and set per route
  * in app.routes.ts.
+ *
+ * When the JWT role alone does not qualify for an **admin** route, the
+ * guard consults `GET /orgs`: an `org_members` row with `ORG_ADMIN`
+ * elevates the caller (plan §2 effective role = max(JWT, org_members.role)).
+ * This is what lets a DEVELOPER-claim user who is the seeded admin of
+ * their org reach the org settings page. The lookup fails closed, and the
+ * backend re-runs the identical effective-role check on every request.
  */
 @Injectable({ providedIn: 'root' })
 export class RoleGuard extends KeycloakAuthGuard {
+  private readonly orgs = inject(OrgSettingsService);
+
   constructor(router: Router, keycloakAngular: KeycloakService) {
     super(router, keycloakAngular);
   }
@@ -128,9 +151,23 @@ export class RoleGuard extends KeycloakAuthGuard {
       return true;
     }
 
+    if (isAdminRoute(required) && (await this.hasOrgAdminMembership())) {
+      return true;
+    }
+
     // Authenticated but the effective role is not allowed here (e.g. NONE
     // hitting /dashboard) — fall back to the read-only home every role can
     // open instead of bouncing between restricted routes.
     return this.router.createUrlTree(['/repositories']);
+  }
+
+  /** Membership elevation (admin routes only) — any error denies access. */
+  private async hasOrgAdminMembership(): Promise<boolean> {
+    try {
+      const orgs = await firstValueFrom(this.orgs.listOrgs());
+      return orgs.some(org => org.role === 'ORG_ADMIN');
+    } catch {
+      return false;
+    }
   }
 }
