@@ -11,7 +11,9 @@ fault-isolated:
 - the stage counts as failed only when BOTH tools fail (logged loudly,
   findings empty);
 - ``SEMGREP_ENABLED=false`` removes Semgrep from the run entirely —
-  neither ``tools_run`` nor ``tools_failed`` (disabled != broken).
+  neither ``tools_run`` nor ``tools_failed`` (disabled != broken);
+- the org's effective ``sonarqube_enabled`` / ``semgrep_enabled`` flags
+  (Step 4) remove a tool per review the same way — disabled != broken.
 
 SonarQube's grouped output stays available on the result for
 observability. The unified findings — normalized, cross-tool merged, and
@@ -68,7 +70,15 @@ class StaticAnalysisResult:
     both_failed: bool = field(default=False)
 
 
-async def _run_sonar(project_key: str, files: list[dict], language: str) -> ToolOutcome:
+async def _run_sonar(
+    project_key: str,
+    files: list[dict],
+    language: str,
+    *,
+    enabled: bool = True,
+) -> ToolOutcome:
+    if not enabled:
+        return ToolOutcome()  # disabled by org settings: not run, not failed
     try:
         groups = await sonarqube_service.scan(
             project_key=project_key, files=files, language=language
@@ -81,8 +91,9 @@ async def _run_sonar(project_key: str, files: list[dict], language: str) -> Tool
     return ToolOutcome(groups)
 
 
-async def _run_semgrep(files: list[dict]) -> ToolOutcome:
-    if not settings.SEMGREP_ENABLED:
+async def _run_semgrep(files: list[dict], *, enabled: bool = True) -> ToolOutcome:
+    # Org flag (Step 4) OR config flag: disabled != broken either way.
+    if not enabled or not settings.SEMGREP_ENABLED:
         return ToolOutcome()  # disabled: not run, not failed, no note
 
     try:
@@ -138,20 +149,25 @@ async def run_static_analysis(
     project_key: str,
     files: list[dict],
     language: str,
+    sonar_enabled: bool = True,
+    semgrep_enabled: bool = True,
 ) -> StaticAnalysisResult:
     """Run SonarQube and Semgrep concurrently and merge their findings.
 
     ``files`` is the ``[{"filename", "content"}]`` workspace; an empty
     list means neither tool can run (precondition note for SonarQube,
-    matching the pre-Semgrep behaviour).
+    matching the pre-Semgrep behaviour). ``sonar_enabled`` /
+    ``semgrep_enabled`` are the org's effective flags (Step 4): a disabled
+    tool is skipped entirely — neither ``tools_run`` nor ``tools_failed``
+    (disabled != broken, same rule as ``SEMGREP_ENABLED=false``).
     """
     if not files:
         sonar = ToolOutcome(None, "SonarQube scan skipped: no fetchable file contents")
         semgrep = ToolOutcome()
     else:
         sonar, semgrep = await asyncio.gather(
-            _run_sonar(project_key, files, language),
-            _run_semgrep(files),
+            _run_sonar(project_key, files, language, enabled=sonar_enabled),
+            _run_semgrep(files, enabled=semgrep_enabled),
         )
 
     report = _build_report(sonar, semgrep, files)

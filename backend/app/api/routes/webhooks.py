@@ -314,8 +314,8 @@ async def _handle_pull_request_event(
             await db.commit()
             await db.refresh(review)
 
-            # Queue review job
-            await queue_review(str(review.id))
+            # Queue review job (webhook deliveries are pull_request triggers)
+            await queue_review(str(review.id), trigger="pull_request")
 
             # Mark event as processed
             webhook_event.processed = True

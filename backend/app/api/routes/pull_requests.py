@@ -191,7 +191,7 @@ async def trigger_review(
     # Queue the review job (will be picked up by worker)
     try:
         from app.workers.review_queue import queue_review
-        await queue_review(str(review.id))
+        await queue_review(str(review.id), trigger="manual")
     except Exception:
         # Update review status to failed if queue fails
         review.status = "failed"

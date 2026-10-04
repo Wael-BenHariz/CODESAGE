@@ -296,7 +296,7 @@ async def retry_review(
     try:
         from app.workers.review_queue import queue_review
 
-        await queue_review(review_id)
+        await queue_review(review_id, trigger="manual")
     except Exception:
         review.status = "failed"
         review.error_message = "Failed to queue review"

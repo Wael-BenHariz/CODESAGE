@@ -165,19 +165,22 @@ class ReviewQueue:
 review_queue = ReviewQueue()
 
 
-async def queue_review(review_id: str) -> str:
+async def queue_review(review_id: str, trigger: str = "pull_request") -> str:
     """
     Queue a code review for processing.
-    
+
     Args:
         review_id: UUID of the review to process
-        
+        trigger: ``pull_request`` (webhook) or ``manual`` (API trigger /
+            retry) — consumed by the worker's trigger gate (Step 4);
+            jobs without the key default to ``pull_request``.
+
     Returns:
         Job ID
     """
     return await review_queue.add_job(
         "process-review",
-        {"review_id": review_id},
+        {"review_id": review_id, "trigger": trigger},
         {"jobId": f"review-{review_id}"},
     )
 

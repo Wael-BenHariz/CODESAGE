@@ -50,13 +50,16 @@ def _specialist_schema(agent_name: str) -> str:
     return SPECIALIST_SCHEMA.replace("__AGENT_NAME__", agent_name)
 
 
-def format_findings(findings: list[NormalizedFinding]) -> str:
+def format_findings(
+    findings: list[NormalizedFinding], limit: int = MAX_FINDINGS_PER_AGENT
+) -> str:
     """Render a domain's unified findings as compact Markdown.
 
     Findings are ordered by unified severity (highest first) and capped at
-    ``MAX_FINDINGS_PER_AGENT`` to keep the prompt under the free tier's
-    per-request TPM ceiling; the agent is told how many lower-severity
-    entries were omitted.
+    ``limit`` (default ``MAX_FINDINGS_PER_AGENT``; the org's effective
+    ``max_findings_per_agent`` overrides it per review — Step 4) to keep
+    the prompt under the free tier's per-request TPM ceiling; the agent is
+    told how many lower-severity entries were omitted.
 
     Each entry: unified severity, producing tool(s) — including cross-tool
     agreement — rule id, ``file:line``, CWE ids, the message, and the
@@ -68,7 +71,7 @@ def format_findings(findings: list[NormalizedFinding]) -> str:
     ordered = sorted(
         findings, key=lambda f: _SEVERITY_RANK.get(f.severity, len(_SEVERITY_RANK))
     )
-    kept = ordered[:MAX_FINDINGS_PER_AGENT]
+    kept = ordered[: max(0, limit)]
     blocks = []
     for finding in kept:
         line_ref = f":{finding.line_start}" if finding.line_start else " (file level)"
@@ -99,11 +102,18 @@ class _SpecialistAgent(BaseAgent):
 
     DOMAIN = "general"
 
-    def _format_findings(self, findings: list[NormalizedFinding]) -> str:
-        return format_findings(findings)
+    def _format_findings(
+        self, findings: list[NormalizedFinding], limit: int | None = None
+    ) -> str:
+        return format_findings(
+            findings,
+            limit=MAX_FINDINGS_PER_AGENT if limit is None else limit,
+        )
 
     def _build_prompt(self, context: ReviewContext) -> str:
-        findings_block = self._format_findings(context.findings)
+        findings_block = self._format_findings(
+            context.findings, context.max_findings_per_agent
+        )
         return f"""You are a {self.DOMAIN} code review specialist.
 Two static analyzers — SonarQube and Semgrep — analyzed this pull request; their findings for your domain are listed below. Each entry names the tool that found it, findings both tools agreed on are merged and marked "also detected by", and each finding carries a numbered ±10-line code excerpt.
 Your job is NOT to re-scan the code from scratch. Your job is to:

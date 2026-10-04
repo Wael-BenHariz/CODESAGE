@@ -21,6 +21,10 @@ class ReviewContext(BaseModel):
     # both => "static analysis unavailable", one => partial coverage note.
     sonar_scan_failed: bool = False
     semgrep_scan_failed: bool = False
+    # Org-effective settings the pipeline passes down (Step 4): None means
+    # "use the code default" so direct construction stays valid.
+    max_findings_per_agent: int | None = None
+    enabled_agents: list[str] | None = None
 
     def with_findings(self, findings: list[NormalizedFinding]) -> "ReviewContext":
         """Copy of this context carrying one agent's slice of findings."""
@@ -32,6 +36,8 @@ class ReviewContext(BaseModel):
             findings=findings,
             sonar_scan_failed=self.sonar_scan_failed,
             semgrep_scan_failed=self.semgrep_scan_failed,
+            max_findings_per_agent=self.max_findings_per_agent,
+            enabled_agents=self.enabled_agents,
         )
 
 

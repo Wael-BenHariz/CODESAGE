@@ -82,15 +82,32 @@ class ReviewOrchestrator:
         Each agent only ever sees its own domain's slice of the unified
         findings via ``context.with_findings(...)`` (routing by
         ``domain_for_finding``).
+
+        ``context.enabled_agents`` (org setting, Step 4) filters which
+        specialists run — ``None`` means all five; the orchestrator's
+        summary call always runs. An explicit empty list leaves zero
+        specialists, and ``synthesize`` falls back to its honest
+        "no conclusions" body.
         """
 
-        agents = [
-            SecurityAgent(self.client),
-            ComplexityAgent(self.client),
-            PerformanceAgent(self.client),
-            StyleAgent(self.client),
-            TestCoverageAgent(self.client),
+        declared = [
+            (SecurityAgent(self.client), "security"),
+            (ComplexityAgent(self.client), "complexity"),
+            (PerformanceAgent(self.client), "performance"),
+            (StyleAgent(self.client), "style"),
+            (TestCoverageAgent(self.client), "test_coverage"),
         ]
+        if context.enabled_agents is not None:
+            enabled = set(context.enabled_agents)
+            pairs = [(agent, domain) for agent, domain in declared if domain in enabled]
+            skipped = [domain for _, domain in declared if domain not in enabled]
+            if skipped:
+                logger.info(
+                    "Review specialists disabled by org settings",
+                    extra={"skipped_domains": skipped},
+                )
+        else:
+            pairs = declared
 
         # One LLM call in flight at a time: parallel calls burst past the
         # free-tier per-minute quota (429) and overload the model (503).
@@ -107,16 +124,13 @@ class ReviewOrchestrator:
                 return await agent.run(context.with_findings(slice_))
 
         results = await asyncio.gather(
-            *(
-                _run_limited(agent, domain)
-                for agent, domain in zip(agents, AGENT_DOMAINS)
-            ),
+            *(_run_limited(agent, domain) for agent, domain in pairs),
             return_exceptions=True,
         )
 
         valid_results: list[AgentResult] = []
         failed_agents: list[str] = []
-        for agent, result in zip(agents, results):
+        for (agent, _domain), result in zip(pairs, results):
             if isinstance(result, AgentResult):
                 logger.info(
                     "Review agent succeeded",
