@@ -1,10 +1,5 @@
 import { Routes } from '@angular/router';
-import { RoleGuard } from './core/guards/role.guard';
-
-/** All authenticated roles — matches the backend's "reads: any role" rule. */
-const ANY_ROLE = ['DEVELOPER', 'GUEST', 'SUPER_ADMIN'];
-/** Roles allowed to mutate anything — matches require_developer. */
-const WRITE_ROLES = ['DEVELOPER', 'SUPER_ADMIN'];
+import { ANY_ROLE, RoleGuard, WRITE_ROLES } from './core/guards/role.guard';
 
 export const routes: Routes = [
   {

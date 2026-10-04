@@ -87,11 +87,11 @@ describe('AuthService (Keycloak-backed)', () => {
       expect(auth.currentUser()?.login).toBe('octocat');
 
       // The background refresh carries the role derived from the current JWT.
-      const fresh: User = { ...fakeUser, role: 'GUEST' };
+      const fresh: User = { ...fakeUser, role: 'REVIEWER' };
       const req = httpMock.expectOne(`${environment.apiUrl}/auth/me`);
       req.flush(fresh);
-      expect(auth.currentUser()?.role).toBe('GUEST');
-      expect(JSON.parse(localStorage.getItem(environment.userKey) ?? '{}').role).toBe('GUEST');
+      expect(auth.currentUser()?.role).toBe('REVIEWER');
+      expect(JSON.parse(localStorage.getItem(environment.userKey) ?? '{}').role).toBe('REVIEWER');
     });
   });
 

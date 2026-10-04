@@ -9,9 +9,11 @@
           <h1>{{ repo.fullName }}</h1>
         </div>
         <div class="header-actions">
-          <button class="toggle-btn" [class.enabled]="repo.enabled" (click)="toggleEnabled()">
-            {{ repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
-          </button>
+          @if (nav().write) {
+            <button class="toggle-btn" [class.enabled]="repo.enabled" (click)="toggleEnabled()">
+              {{ repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
+            </button>
+          }
         </div>
       </header>
 

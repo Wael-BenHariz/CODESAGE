@@ -26,14 +26,16 @@
         </div>
         <div class="header-actions">
           @if (!pr.reviewStatus || pr.reviewStatus.status === 'completed') {
-            <button
-              class="btn btn-primary"
-              [class.loading]="isReviewing()"
-              [disabled]="isReviewing()"
-              (click)="triggerReview()"
-            >
-              {{ isReviewing() ? 'Starting...' : 'Start AI Review' }}
-            </button>
+            @if (nav().write) {
+              <button
+                class="btn btn-primary"
+                [class.loading]="isReviewing()"
+                [disabled]="isReviewing()"
+                (click)="triggerReview()"
+              >
+                {{ isReviewing() ? 'Starting...' : 'Start AI Review' }}
+              </button>
+            }
           } @else {
             <span class="review-status" [class]="pr.reviewStatus.status">
               {{ pr.reviewStatus.status }}

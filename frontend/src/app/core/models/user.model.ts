@@ -8,8 +8,8 @@ export interface User {
   updatedAt: string;
   /**
    * Effective app role derived from the Keycloak JWT on every request
-   * (SUPER_ADMIN | DEVELOPER | GUEST). Optional because legacy cached
-   * profiles may not carry it yet.
+   * (PLATFORM_ADMIN | ORG_ADMIN | REVIEWER | DEVELOPER | NONE). Optional
+   * because legacy cached profiles may not carry it yet.
    */
   role?: string;
 }

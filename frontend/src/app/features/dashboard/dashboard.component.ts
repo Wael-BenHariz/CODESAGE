@@ -1,8 +1,9 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { GithubService } from '../../core/services/github.service';
+import { navVisibility } from '../../core/guards/role.guard';
 import { Repository } from '../../core/models/repository.model';
 import { User } from '../../core/models/user.model';
 
@@ -20,6 +21,8 @@ export class DashboardComponent implements OnInit {
   user = signal<User | null>(null);
   repositories = signal<Repository[]>([]);
   isLoading = signal(true);
+  /** Cosmetic write/admin gating for header nav entries (backend stays authoritative). */
+  readonly nav = computed(() => navVisibility(this.auth.currentUser()?.role));
   stats = signal({
     totalRepos: 0,
     enabledRepos: 0,

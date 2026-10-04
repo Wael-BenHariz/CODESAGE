@@ -1,7 +1,9 @@
-import { Component, OnInit, inject, signal, input } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
 import { GithubService } from '../../../core/services/github.service';
+import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
 
 @Component({
@@ -13,6 +15,10 @@ import { Repository } from '../../../core/models/repository.model';
 })
 export class RepositoryDetailComponent implements OnInit {
   private readonly github = inject(GithubService);
+  private readonly auth = inject(AuthService);
+
+  /** Cosmetic write gating for the enable/disable toggle (backend stays authoritative). */
+  readonly nav = computed(() => navVisibility(this.auth.currentUser()?.role));
 
   owner = input.required<string>();
   repo = input.required<string>();

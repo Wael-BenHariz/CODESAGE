@@ -1,7 +1,9 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
 import { GithubService, GitHubAppRepo } from '../../../core/services/github.service';
+import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
 
 @Component({
@@ -13,6 +15,10 @@ import { Repository } from '../../../core/models/repository.model';
 })
 export class RepositoryListComponent implements OnInit {
   private readonly github = inject(GithubService);
+  private readonly auth = inject(AuthService);
+
+  /** Cosmetic write gating for header/card actions (backend stays authoritative). */
+  readonly nav = computed(() => navVisibility(this.auth.currentUser()?.role));
 
   /** Shared GitHub App install status (refreshed on init and after the App callback). */
   readonly githubInstalled = this.github.githubInstalled;

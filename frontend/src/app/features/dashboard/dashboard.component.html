@@ -6,9 +6,13 @@
         <span class="logo-text">CodeSage</span>
       </a>
       <nav class="nav">
-        <a routerLink="/dashboard" routerLinkActive="active" class="nav-link">Dashboard</a>
+        @if (nav().write) {
+          <a routerLink="/dashboard" routerLinkActive="active" class="nav-link">Dashboard</a>
+        }
         <a routerLink="/repositories" routerLinkActive="active" class="nav-link">Repositories</a>
-        <a routerLink="/settings" routerLinkActive="active" class="nav-link">Settings</a>
+        @if (nav().write) {
+          <a routerLink="/settings" routerLinkActive="active" class="nav-link">Settings</a>
+        }
       </nav>
     </div>
     <div class="header-right">
