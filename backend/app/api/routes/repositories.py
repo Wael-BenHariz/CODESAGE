@@ -26,6 +26,7 @@ from app.security.dependencies import get_current_user
 from app.security.roles import require_developer
 from app.services import repo_tenant
 from app.services.github import github_service
+from app.services.org_provisioning import provision_installation_org
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,10 @@ async def sync_github_app_installation(
     installation = await _upsert_installation(db, installation_data)
     await _ensure_installation_accessible_to_user(db, installation, current_user)
     repos = await _sync_installation_repositories(db, installation, installation_id)
+    # Org provisioning (Step 3): sync is the manual counterpart of the
+    # installation webhook — keep orgs/members fresh here too (the user
+    # link itself is written by the callback/webhook/adoption paths).
+    await provision_installation_org(db, installation)
     await db.commit()
 
     return GitHubInstallationSyncResponse(

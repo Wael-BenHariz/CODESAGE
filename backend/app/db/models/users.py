@@ -10,6 +10,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.oauth_tokens import OAuthToken
+    from app.db.models.orgs import OrgMember
     from app.db.models.reviews import Review
     from app.db.models.watched_repos import WatchedRepo
 
@@ -157,6 +158,13 @@ class User(Base):
 
     watched_repos: Mapped[list["WatchedRepo"]] = relationship(
         "WatchedRepo",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    org_memberships: Mapped[list["OrgMember"]] = relationship(
+        "OrgMember",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="select",

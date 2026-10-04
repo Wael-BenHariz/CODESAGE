@@ -199,6 +199,24 @@ async def github_app_callback(
     user.github_installation_id = installation_id
     await db.commit()
 
+    # Org provisioning (Step 3): seed the org + the linker's membership
+    # (least-privilege rule). Best-effort: a failure here must not break
+    # the install redirect — the `installation created` webhook and
+    # `scripts/org_seed_report.py --apply` are the heal paths.
+    try:
+        from app.services.org_provisioning import provision_for_user_link
+
+        await provision_for_user_link(db, user)
+        await db.commit()
+    except Exception:  # best-effort by design — never break the redirect
+        logger.exception(
+            "Org provisioning failed after install callback "
+            "(user=%s installation=%s)",
+            user.id,
+            installation_id,
+        )
+        await db.rollback()
+
     # No token pair in the redirect: Keycloak owns tokens now. The SPA keeps
     # its session in localStorage and keycloak-js re-establishes it (silent
     # check-sso iframe) when /github/callback boots.

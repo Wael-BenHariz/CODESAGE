@@ -271,6 +271,25 @@ async def _adopt_github_installation(db: AsyncSession, user: User) -> None:
         user.github_id,
     )
 
+    # Org provisioning (Step 3): the healed link needs its membership row
+    # (least-privilege rule). Best-effort: this runs inside authentication,
+    # so a failure must never fail the login — the webhook hook and
+    # `scripts/org_seed_report.py --apply` are the heal paths.
+    try:
+        from app.services.org_provisioning import provision_for_user_link
+
+        await provision_for_user_link(db, user)
+        await db.commit()
+    except Exception:  # best-effort inside auth — never fail the login
+        logger.exception(
+            "Org provisioning failed after installation adoption (user=%s)",
+            user.id,
+        )
+        await db.rollback()
+        # rollback() expired the instance; refresh it explicitly — _authenticate
+        # still reads user attributes and a lazy re-read would raise MissingGreenlet.
+        await db.refresh(user)
+
 
 async def _authenticate(
     credentials: HTTPAuthorizationCredentials | None,

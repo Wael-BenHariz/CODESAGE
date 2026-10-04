@@ -20,6 +20,7 @@ from app.db.models import GitHubInstallation, PullRequest, Repository, Review, U
 from app.schemas.webhook import WebhookProcessResult
 from app.services import repo_tenant
 from app.services.github import github_service
+from app.services.org_provisioning import provision_installation_org
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,9 @@ async def _handle_pull_request_event(
     if not install_record:
         installation_data = await github_service.get_app_installation(installation_id)
         install_record = await _upsert_installation_record(db, installation_data)
+        # Org provisioning (Step 3): covers the fallback path where the
+        # `installation created` webhook never arrived. Idempotent.
+        await provision_installation_org(db, install_record)
         await db.commit()
     
     # Find or create repository record for the real GitHub App installation.
@@ -387,6 +391,13 @@ async def _handle_installation_event(
                 .where(User.github_id == account["id"])
                 .values(github_installation_id=installation_id)
             )
+
+        # Org provisioning (Step 3): one org per installation +
+        # least-privilege members — runs AFTER the link update above so
+        # the member count sees it. Flushes only; the commit below
+        # persists both. A failure here raises → 500 → GitHub redelivers
+        # the event and the upserts above are idempotent.
+        await provision_installation_org(db, record)
 
         await db.commit()
         
