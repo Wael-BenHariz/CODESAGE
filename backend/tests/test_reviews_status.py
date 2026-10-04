@@ -78,3 +78,60 @@ async def test_status_with_token_200(client, db, user):
     assert body["review_id"] == str(review.id)
     assert body["status"] == "processing"
     assert body["progress"] is None or 0 <= body["progress"] <= 100
+
+
+async def test_status_surfaces_ready_to_post(client, db, user):
+    """Staged reviews surface the raw ready_to_post status (Step 6)."""
+    installation = GitHubInstallation(
+        app_id=1,
+        installation_id=987655,
+        account_id=1,
+        account_login="test-owner",
+        account_type="User",
+    )
+    db.add(installation)
+    await db.flush()
+
+    repository = Repository(
+        installation_id=installation.id,
+        github_repo_id=111,
+        name="demo",
+        full_name="test-owner/demo",
+    )
+    db.add(repository)
+    await db.flush()
+
+    pull_request = PullRequest(
+        repository_id=repository.id,
+        github_pr_id=222,
+        number=2,
+        title="Add feature",
+        author_login="test-owner",
+        base_branch="main",
+        head_branch="feature",
+        base_sha="a" * 40,
+        head_sha="b" * 40,
+    )
+    db.add(pull_request)
+    await db.flush()
+
+    review = Review(
+        pull_request_id=pull_request.id,
+        user_id=user.id,
+        status="ready_to_post",
+        posting_mode="staged",
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    db.add(review)
+    await db.commit()
+
+    token = make_keycloak_token()
+    resp = await client.get(
+        f"{API}/reviews/{review.id}/status",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["review_id"] == str(review.id)
+    assert body["status"] == "ready_to_post"

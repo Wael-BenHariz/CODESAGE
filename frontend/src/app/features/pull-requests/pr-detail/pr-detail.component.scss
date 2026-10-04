@@ -161,6 +161,18 @@
     color: #00aaff;
   }
 
+  &.processing {
+    background: rgba(0, 170, 255, 0.1);
+    color: #00aaff;
+  }
+
+  &.ready_to_post {
+    background: rgba(177, 136, 255, 0.1);
+    color: #b188ff;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
   &.completed {
     background: rgba(0, 232, 123, 0.1);
     color: #00e87b;

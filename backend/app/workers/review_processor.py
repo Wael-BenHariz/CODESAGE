@@ -23,6 +23,7 @@ from app.services.github_app import fetch_file_content, get_installation_token
 from app.services.llm_client import resolve_llm_client
 from app.services.org_settings import resolve_org_settings
 from app.services.review_orchestrator import ReviewOrchestrator
+from app.services.review_posting import ReviewPostError, post_review_to_github
 from app.services.scan_report_store import persist_scan_report
 from app.services.static_analysis import run_static_analysis
 
@@ -52,62 +53,6 @@ _COMMENT_SEVERITY_MAP = {
     "error": "high",
 }
 _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-
-
-class ReviewPostError(Exception):
-    """GitHub PR review POST failure (carries HTTP status + raw response body)."""
-
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(f"GitHub review POST failed ({status_code}): {detail}")
-        self.status_code = status_code
-        self.detail = detail
-
-
-async def post_pr_review(
-    full_name: str,
-    pr_number: int,
-    commit_sha: str,
-    body: str,
-    installation_token: str,
-) -> int:
-    """
-    Post a single pull request review (summary body only, no inline comments).
-
-    Args:
-        full_name: Repository full name (owner/repo)
-        pr_number: Pull request number
-        commit_sha: HEAD sha to attach the review to (stored head_sha)
-        body: Review summary markdown (posted verbatim)
-        installation_token: GitHub App installation access token
-
-    Returns:
-        GitHub review ID
-
-    Raises:
-        ReviewPostError: On 401/403/404/422 responses (detail = raw body)
-    """
-    url = f"https://api.github.com/repos/{full_name}/pulls/{pr_number}/reviews"
-    headers = {
-        "Authorization": f"token {installation_token}",
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    # Always COMMENT -- the bot must never approve or request changes.
-    payload = {
-        "commit_id": commit_sha,
-        "body": body,
-        "event": "COMMENT",
-    }
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(url, json=payload, headers=headers)
-
-    if response.status_code in (401, 403, 404, 422):
-        raise ReviewPostError(response.status_code, response.text)
-    response.raise_for_status()
-    data = response.json()
-    return int(data.get("id") or 0)
 
 
 def _classify_error(exc: Exception) -> str:
@@ -329,6 +274,10 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         # failure (same as any other DB read in this job).
         org_id = await _resolve_org_id(db, installation.installation_id)
         effective = await resolve_org_settings(db, org_id)
+        # Staged-posting column mirrors the org's effective setting from
+        # here on: every terminal path (trigger gate, empty diff, staged,
+        # auto, failure) commits this truthful value (Step 6).
+        review.posting_mode = effective.posting_mode
         logger.info(
             "Review %s effective org settings",
             review_id,
@@ -522,6 +471,14 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         summary = review_result.get("summary", "")
         comments = review_result.get("comments", [])
 
+        # Persistable results BEFORE posting: the shared poster reads
+        # review.summary / review.posting_mode off the row (Step 6).
+        review.summary = summary
+        review.overall_severity = review_result.get("overall_severity", "info")
+        review.gemini_model = llm_client.model_name
+        if review_result.get("usage"):
+            review.tokens_used = review_result["usage"].get("total_tokens", 0)
+
         # Post ONE summary review to GitHub (no inline comments), attached to
         # the head_sha stored by the webhook at event time — unless the org's
         # effective settings say otherwise (Step 4):
@@ -547,13 +504,10 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             logger.info("Review %s post skipped: %s", review_id, post_note)
         else:
             try:
-                github_review_id = await post_pr_review(
-                    full_name=repo.full_name,
-                    pr_number=pr.number,
-                    commit_sha=pr.head_sha,
-                    body=summary,
-                    installation_token=token,
+                github_review_id = await post_review_to_github(
+                    db, review, pr=pr, repo=repo, installation_token=token
                 )
+                review.posted_at = datetime.now(timezone.utc)
             except ReviewPostError as exc:
                 if exc.status_code == 404:
                     # PR closed/deleted after the event: finish gracefully.
@@ -576,12 +530,8 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
                 else:
                     raise
 
-        # Store results in DB.
-        review.summary = summary
-        review.overall_severity = review_result.get("overall_severity", "info")
-        review.gemini_model = llm_client.model_name
-        if review_result.get("usage"):
-            review.tokens_used = review_result["usage"].get("total_tokens", 0)
+        # Store results in DB (summary/severity/model/tokens assigned
+        # before the post above; posting_mode/posted_at set along the way).
         review.github_review_id = github_review_id
         # SonarQube/Semgrep failures are recorded but never fail the
         # review: it still completes with status=completed (brief A7.3).

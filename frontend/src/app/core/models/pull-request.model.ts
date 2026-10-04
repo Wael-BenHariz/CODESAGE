@@ -22,7 +22,7 @@ export interface PRAuthor {
 }
 
 export interface ReviewStatus {
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'in_progress' | 'ready_to_post' | 'completed' | 'failed';
   reviewId: string | null;
   commentCount: number;
   issueCount: number;

@@ -1,9 +1,18 @@
 """Review comment model for inline code review comments."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +37,9 @@ class ReviewComment(Base):
         category: Category of the issue (bug, security, style, etc.)
         resolved: Whether the comment has been resolved
         resolved_at: When the comment was resolved
+        dismissed: Excluded from the staged Findings section when true
+        dismissed_by: User who dismissed the comment (optional)
+        dismissed_at: When the comment was dismissed
     """
 
     __tablename__ = "review_comments"
@@ -60,7 +72,7 @@ class ReviewComment(Base):
     )
 
     # GitHub Comment Reference
-    github_comment_id: Mapped[Optional[int]] = mapped_column(
+    github_comment_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         index=True,
@@ -75,7 +87,7 @@ class ReviewComment(Base):
         comment="Path to the file being commented on",
     )
 
-    line_number: Mapped[Optional[int]] = mapped_column(
+    line_number: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Line number in the file",
@@ -106,7 +118,7 @@ class ReviewComment(Base):
     )
 
     # Optional suggested fix for the commented issue
-    suggestion: Mapped[Optional[str]] = mapped_column(
+    suggestion: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Optional suggested fix for the comment",
@@ -120,10 +132,31 @@ class ReviewComment(Base):
         comment="Whether the comment has been resolved",
     )
 
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+    resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="When the comment was resolved",
+    )
+
+    # Staged posting (Step 6): dismissal state for the Findings section.
+    dismissed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Excluded from the staged Findings section when true",
+    )
+
+    dismissed_by: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="User who dismissed the comment",
+    )
+
+    dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the comment was dismissed",
     )
 
     # Timestamps

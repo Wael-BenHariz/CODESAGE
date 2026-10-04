@@ -21,9 +21,12 @@ class Review(Base):
     Attributes:
         pull_request_id: Reference to the pull request
         user_id: Reference to the user who triggered the review (optional)
-        status: Review status (pending, processing, completed, failed)
+        status: Review status (pending, processing, ready_to_post, completed, failed)
         error_message: Error message if review failed
         summary: Review summary text
+        posting_mode: Org posting mode at run time (auto | staged)
+        posted_at: When the summary was posted to GitHub (NULL = never)
+        edited_summary: Human-edited staged summary (wins over summary)
         gemini_model: AI model used for the review
         tokens_used: Number of tokens consumed
         started_at: When the review started processing
@@ -50,7 +53,7 @@ class Review(Base):
     )
 
     # User who triggered the review
-    user_id: Mapped[Optional[UUID]] = mapped_column(
+    user_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
@@ -64,48 +67,69 @@ class Review(Base):
         nullable=False,
         default="pending",
         index=True,
-        comment="Review status: pending, processing, completed, failed",
+        comment="Review status: pending, processing, ready_to_post, completed, failed",
     )
 
     # Review Content
-    error_message: Mapped[Optional[str]] = mapped_column(
+    error_message: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Error message if review failed",
     )
 
-    summary: Mapped[Optional[str]] = mapped_column(
+    summary: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Review summary text",
     )
 
     # AI Model Information
-    gemini_model: Mapped[Optional[str]] = mapped_column(
+    gemini_model: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="AI model used for the review",
     )
 
-    tokens_used: Mapped[Optional[int]] = mapped_column(
+    tokens_used: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Number of tokens consumed",
     )
 
     # Overall AI verdict (info | warning | error)
-    overall_severity: Mapped[Optional[str]] = mapped_column(
+    overall_severity: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Overall review severity: info, warning, error",
     )
 
     # GitHub PR review reference (set after posting the review summary)
-    github_review_id: Mapped[Optional[int]] = mapped_column(
+    github_review_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         index=True,
         comment="GitHub pull request review ID",
+    )
+
+    # Staged posting (Step 6): how/whether this review reached GitHub.
+    posting_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="auto",
+        server_default="auto",
+        comment="Org posting mode at run time: auto | staged",
+    )
+
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the summary was posted to GitHub (NULL = never)",
+    )
+
+    edited_summary: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Human-edited staged summary (wins over summary when set)",
     )
 
     # Timing
@@ -116,7 +140,7 @@ class Review(Base):
         comment="When the review started processing",
     )
 
-    completed_at: Mapped[Optional[datetime]] = mapped_column(
+    completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="When the review completed",
@@ -163,7 +187,17 @@ class Review(Base):
         return self.status == "failed"
 
     @property
-    def processing_duration_seconds(self) -> Optional[float]:
+    def is_ready_to_post(self) -> bool:
+        """Check if a staged review is waiting for the explicit GitHub post."""
+        return self.status == "ready_to_post"
+
+    @property
+    def is_posted(self) -> bool:
+        """Check if the summary review was posted to GitHub."""
+        return self.github_review_id is not None
+
+    @property
+    def processing_duration_seconds(self) -> float | None:
         """Calculate processing duration in seconds."""
         if self.completed_at and self.started_at:
             return (self.completed_at - self.started_at).total_seconds()

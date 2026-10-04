@@ -28,7 +28,7 @@ from app.db.models import (
     ReviewComment,
 )
 from app.redis import get_redis
-from app.services import static_analysis
+from app.services import review_posting, static_analysis
 from app.services.agents import AgentResult
 from app.services.agents.schemas import ReviewContext
 from app.services.agents.specialist_agents import format_findings
@@ -334,7 +334,9 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(rp, "persist_scan_report", fake_persist)
     monkeypatch.setattr(rp, "resolve_llm_client", fake_resolve_llm_client)
     monkeypatch.setattr(rp, "ReviewOrchestrator", FakeOrchestrator)
-    monkeypatch.setattr(rp, "post_pr_review", fake_post_pr_review)
+    # Step 6: the HTTP seam lives in the shared service — patch it there so
+    # the worker's real post_review_to_github (body building included) runs.
+    monkeypatch.setattr(review_posting, "post_pr_review", fake_post_pr_review)
     monkeypatch.setattr(rp, "resolve_org_settings", fake_resolve)
     return state
 
@@ -462,6 +464,9 @@ async def test_auto_path_unchanged(pipeline, db, user):
     assert chain.review.github_review_id == 999
     assert chain.review.error_message is None
     assert chain.review.gemini_model == "fake-model"
+    # Step 6: posting_mode mirrors the org setting; auto records posted_at.
+    assert chain.review.posting_mode == "auto"
+    assert chain.review.posted_at is not None
 
     comments = (
         await db.execute(
@@ -559,6 +564,9 @@ async def test_staged_mode_never_posts(pipeline, monkeypatch, db, user):
     assert chain.review.summary == "## Review\nLooks good."
     assert chain.review.error_message is None  # staged is not a note-worthy state
     assert chain.review.completed_at is not None
+    # Step 6: the row records the staged mode and that nothing was posted.
+    assert chain.review.posting_mode == "staged"
+    assert chain.review.posted_at is None
 
     # Comments still persisted for the panel / staged findings section.
     comments = (
