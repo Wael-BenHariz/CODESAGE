@@ -2,10 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, Subject, shareReplay, tap } from 'rxjs';
 
 import { ApiService } from './api.service';
+import { PaginatedResponse } from '../models/pagination.model';
 import {
   CommentValidation,
   ReviewComment,
   ReviewDetail,
+  ReviewSummary,
   ScanReport,
   ValidationSeverity,
   ValidationVerdict
@@ -25,6 +27,24 @@ import {
 @Injectable({ providedIn: 'root' })
 export class ReviewService {
   private readonly api = inject(ApiService);
+
+  /**
+   * `GET /reviews` — the caller-visible list (org-scoped F3; PLATFORM_ADMIN
+   * sees everything), newest first. `statusFilter` maps to the backend's
+   * `status_filter` query param, which filters BOTH the items and the
+   * envelope `total` (plan Step 10: dashboard review counts).
+   */
+  listReviews(
+    page = 1,
+    perPage = 20,
+    statusFilter?: string
+  ): Observable<PaginatedResponse<ReviewSummary>> {
+    const params: Record<string, number | string> = { page, per_page: perPage };
+    if (statusFilter) {
+      params['status_filter'] = statusFilter;
+    }
+    return this.api.get<PaginatedResponse<ReviewSummary>>('/reviews', params);
+  }
 
   /** Session cache of `GET /reviews/{id}` observables — see getReviewDetail(). */
   private readonly detailCache = new Map<string, Observable<ReviewDetail>>();

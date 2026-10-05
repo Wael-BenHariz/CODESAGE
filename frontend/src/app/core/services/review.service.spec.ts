@@ -204,4 +204,28 @@ describe('ReviewService — /reviews group (plan Steps 7b–10)', () => {
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(ok).toEqual({ scan_id: 'scan-2' });
   });
+
+  // --- dashboard list (plan Step 10) -----------------------------------------
+
+  it('lists reviews from GET /reviews with pagination params', () => {
+    api.get.and.returnValue(of({ items: [], total: 0, page: 1, per_page: 5, pages: 0 }));
+
+    service.listReviews(1, 5).subscribe();
+
+    expect(api.get).toHaveBeenCalledWith('/reviews', { page: 1, per_page: 5 });
+  });
+
+  it('passes status_filter through — the backend applies it to items AND total', () => {
+    api.get.and.returnValue(of({ items: [], total: 7, page: 1, per_page: 1, pages: 7 }));
+
+    let total: number | undefined;
+    service.listReviews(1, 1, 'pending').subscribe(list => (total = list.total));
+
+    expect(api.get).toHaveBeenCalledWith('/reviews', {
+      page: 1,
+      per_page: 1,
+      status_filter: 'pending'
+    });
+    expect(total).toBe(7); // the filtered envelope total is the dashboard's pending count
+  });
 });

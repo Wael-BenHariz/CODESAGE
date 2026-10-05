@@ -24,7 +24,7 @@
           </svg>
         </div>
         <div class="stat-info">
-          <span class="stat-value">{{ stats().totalRepos }}</span>
+          <span class="stat-value">{{ reposState() === 'ready' ? stats().totalRepos : '—' }}</span>
           <span class="stat-label">Repositories</span>
         </div>
       </div>
@@ -43,7 +43,9 @@
           </svg>
         </div>
         <div class="stat-info">
-          <span class="stat-value">{{ stats().enabledRepos }}</span>
+          <span class="stat-value">{{
+            reposState() === 'ready' ? stats().enabledRepos : '—'
+          }}</span>
           <span class="stat-label">Enabled</span>
         </div>
       </div>
@@ -62,8 +64,8 @@
           </svg>
         </div>
         <div class="stat-info">
-          <span class="stat-value">{{ stats().openPRs }}</span>
-          <span class="stat-label">Open PRs</span>
+          <span class="stat-value" data-testid="stat-reviews">{{ totalReviews() ?? '—' }}</span>
+          <span class="stat-label">Reviews</span>
         </div>
       </div>
       <div class="stat-card">
@@ -82,7 +84,7 @@
           </svg>
         </div>
         <div class="stat-info">
-          <span class="stat-value">{{ stats().pendingReviews }}</span>
+          <span class="stat-value" data-testid="stat-pending">{{ pendingReviews() ?? '—' }}</span>
           <span class="stat-label">Pending</span>
         </div>
       </div>
@@ -94,13 +96,20 @@
         <a routerLink="/repositories" class="btn btn-ghost">View All →</a>
       </div>
 
-      @if (isLoading()) {
-        <div class="loading">
+      @if (reposState() === 'loading') {
+        <div class="loading" data-testid="repos-loading">
           <div class="spinner"></div>
           <span>Loading...</span>
         </div>
+      } @else if (reposState() === 'error') {
+        <div class="error-state" role="alert" data-testid="repos-error">
+          <span>{{ reposError() }}</span>
+          <button class="btn btn-secondary" type="button" (click)="loadRepositories()">
+            Retry
+          </button>
+        </div>
       } @else if (repositories().length === 0) {
-        <div class="empty">
+        <div class="empty" data-testid="repos-empty">
           <p>No repositories connected yet</p>
           <a routerLink="/repositories" class="btn btn-primary">Connect Repository</a>
         </div>
@@ -125,6 +134,49 @@
             </a>
           }
         </div>
+      }
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Recent Reviews</h2>
+      </div>
+
+      @if (reviewsState() === 'loading') {
+        <div class="loading" data-testid="reviews-loading">
+          <div class="spinner"></div>
+          <span>Loading...</span>
+        </div>
+      } @else if (reviewsState() === 'error') {
+        <div class="error-state" role="alert" data-testid="reviews-error">
+          <span>{{ reviewsError() }}</span>
+          <button class="btn btn-secondary" type="button" (click)="loadReviews()">Retry</button>
+        </div>
+      } @else if (recentReviews().length === 0) {
+        <div class="empty" data-testid="reviews-empty">
+          <p>No reviews yet</p>
+        </div>
+      } @else {
+        <ul class="review-list" data-testid="review-list">
+          @for (review of recentReviews(); track review.id) {
+            <li class="review-item">
+              <span
+                class="review-status"
+                [class.failed]="review.status === 'failed'"
+                [class.done]="review.status === 'completed' || review.status === 'ready_to_post'"
+              >
+                {{ review.status }}
+              </span>
+              @if (review.overall_severity) {
+                <span class="review-severity">{{ review.overall_severity }}</span>
+              }
+              <span class="review-time">{{ review.created_at | date: 'medium' }}</span>
+              @if (review.status === 'failed' && review.error_message) {
+                <span class="review-error">{{ review.error_message }}</span>
+              }
+            </li>
+          }
+        </ul>
       }
     </section>
   </main>
