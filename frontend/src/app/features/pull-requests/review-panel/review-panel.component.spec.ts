@@ -1,11 +1,16 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 
 import { ReviewPanelComponent } from './review-panel.component';
 import { ApiError } from '../../../core/services/api.service';
 import { GithubService } from '../../../core/services/github.service';
-import { ReviewComment, ReviewDetail, ReviewSummary } from '../../../core/models/review.model';
+import {
+  CommentValidation,
+  ReviewComment,
+  ReviewDetail,
+  ReviewSummary
+} from '../../../core/models/review.model';
 
 describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () => {
   let fixture: ComponentFixture<ReviewPanelComponent>;
@@ -46,6 +51,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     line_end: null,
     snippet: null,
     also_detected_by: null,
+    validations: [],
     ...over
   });
 
@@ -68,7 +74,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       'postReview',
       'updateReviewSummary',
       'dismissReviewComment',
-      'restoreReviewComment'
+      'restoreReviewComment',
+      'validateReviewFinding'
     ]);
     github.getPullRequestReviews.and.returnValue(of([]));
     github.getReviewDetail.and.returnValue(of(detail()));
@@ -646,6 +653,149 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('api-error')?.textContent).toContain('Comment not found');
       expect(testid('comment-dismissed')).toBeNull(); // state did not change
       expect((testid('dismiss-finding') as HTMLButtonElement).disabled).toBeFalse();
+    });
+  });
+
+  // --- reviewer validation (plan Step 10) ----------------------------------
+
+  describe('reviewer validation (plan Step 10)', () => {
+    const validationRow = (over: Partial<CommentValidation> = {}): CommentValidation => ({
+      verdict: 'confirmed',
+      severity_override: null,
+      note: null,
+      reviewer_login: 'kc-reviewer-a',
+      created_at: '2026-01-01T00:10:00Z',
+      updated_at: '2026-01-01T00:10:00Z',
+      ...over
+    });
+
+    const judgedComment = (): ReviewComment =>
+      comment({
+        id: 'c-1',
+        severity: 'error',
+        body: 'SQL injection risk',
+        file_path: 'src/a.py',
+        line_number: 5,
+        validations: [validationRow({ note: 'True positive <script>alert(1)</script>' })]
+      });
+
+    const plainComment = (): ReviewComment =>
+      comment({
+        id: 'c-1',
+        severity: 'error',
+        body: 'SQL injection risk',
+        file_path: 'src/a.py',
+        line_number: 5
+      });
+
+    function createWithRole(viewer_role: string, comments: ReviewComment[]): void {
+      github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+      github.getReviewDetail.and.returnValue(
+        of(detail({ status: 'completed', viewer_role }, comments))
+      );
+      create();
+    }
+
+    it('shows verdicts to every viewer but only renders controls for REVIEWER+', () => {
+      createWithRole('DEVELOPER', [judgedComment()]);
+
+      // Existing verdicts: who / what / when — visible below the threshold.
+      expect(testid('verdict-list')).not.toBeNull();
+      expect(testid('verdict-who')?.textContent).toContain('kc-reviewer-a');
+      expect(testid('verdict-badge')?.textContent).toContain('confirmed');
+      expect(testid('verdict-note')?.textContent).toContain('True positive');
+      // The note renders as TEXT — interpolation escapes, never parsed markup.
+      expect(el().querySelector('script')).toBeNull();
+      expect(testid('validation-controls')).toBeNull();
+
+      // Crossing the threshold (REVIEWER) unlocks the controls.
+      createWithRole('REVIEWER', [judgedComment()]);
+      expect(testid('verdict-list')).not.toBeNull();
+      expect(testid('validation-controls')).not.toBeNull();
+      expect(testid('confirm-finding')).not.toBeNull();
+      expect(testid('fp-finding')).not.toBeNull();
+      expect(testid('severity-override')).not.toBeNull();
+      expect(testid('validation-note')).not.toBeNull();
+    });
+
+    it('optimistically shows my pending verdict and settles with the server row', () => {
+      const response = new Subject<CommentValidation>();
+      github.validateReviewFinding.and.returnValue(response);
+      createWithRole('REVIEWER', [plainComment()]);
+
+      (testid('confirm-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(github.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
+        verdict: 'confirmed',
+        severity_override: null,
+        note: null
+      });
+      // Optimistic row visible BEFORE the server answers.
+      expect(testid('verdict-list')).not.toBeNull();
+      expect(el().textContent).toContain('(you)');
+      expect((testid('confirm-finding') as HTMLButtonElement).disabled).toBeTrue();
+
+      response.next(
+        validationRow({
+          reviewer_login: 'octocat',
+          created_at: '2026-01-01T00:20:00Z',
+          updated_at: '2026-01-01T00:20:00Z'
+        })
+      );
+      fixture.detectChanges();
+
+      // Server row replaces the placeholder; controls re-enable.
+      expect(testid('verdict-who')?.textContent).toContain('octocat');
+      expect(el().textContent).not.toContain('(you)');
+      expect((testid('confirm-finding') as HTMLButtonElement).disabled).toBeFalse();
+    });
+
+    it('sends the severity override + trimmed note draft with the verdict', () => {
+      github.validateReviewFinding.and.returnValue(
+        of(validationRow({ severity_override: 'warning', note: 'check authz' }))
+      );
+      createWithRole('REVIEWER', [plainComment()]);
+
+      const select = testid('severity-override') as HTMLSelectElement;
+      select.value = 'warning';
+      select.dispatchEvent(new Event('change'));
+      const noteInput = testid('validation-note') as HTMLInputElement;
+      noteInput.value = '  check authz  ';
+      noteInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      (testid('fp-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(github.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
+        verdict: 'false_positive',
+        severity_override: 'warning',
+        note: 'check authz'
+      });
+      // Draft cleared once the verdict landed; server row is displayed.
+      expect((testid('severity-override') as HTMLSelectElement).value).toBe('');
+      expect((testid('validation-note') as HTMLInputElement).value).toBe('');
+      expect(el().textContent).toContain('kc-reviewer-a');
+      expect(el().textContent).not.toContain('(you)');
+    });
+
+    it('rolls back the optimistic verdict and surfaces the API error', () => {
+      const response = new Subject<CommentValidation>();
+      github.validateReviewFinding.and.returnValue(response);
+      createWithRole('REVIEWER', [judgedComment()]); // existing verdict by kc-reviewer-a
+
+      (testid('fp-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el().textContent).toContain('(you)'); // optimistic row added alongside
+
+      response.error(new ApiError('Verdict rejected (403)', 403, 'forbidden'));
+      fixture.detectChanges();
+
+      expect(el().textContent).not.toContain('(you)'); // rolled back
+      expect(testid('verdict-who')?.textContent).toContain('kc-reviewer-a');
+      expect(testid('api-error')?.textContent).toContain('Verdict rejected (403)');
+      expect((testid('fp-finding') as HTMLButtonElement).disabled).toBeFalse();
     });
   });
 });

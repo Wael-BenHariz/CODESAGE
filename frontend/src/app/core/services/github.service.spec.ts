@@ -4,7 +4,7 @@ import { of } from 'rxjs';
 import { ApiService } from './api.service';
 import { GithubService } from './github.service';
 
-describe('GithubService — review routes (plan Steps 7b & 8)', () => {
+describe('GithubService — review routes (plan Steps 7b–10)', () => {
   let api: jasmine.SpyObj<ApiService>;
   let service: GithubService;
 
@@ -80,5 +80,15 @@ describe('GithubService — review routes (plan Steps 7b & 8)', () => {
     service.postReview('rev-9').subscribe();
 
     expect(api.post).toHaveBeenCalledWith('/reviews/rev-9/post', {});
+  });
+
+  it('upserts reviewer verdicts via PATCH /reviews/{id}/comments/{cid}/validate', () => {
+    api.patch.and.returnValue(of({}));
+
+    service.validateReviewFinding('rev-9', 'c-1', { verdict: 'confirmed' }).subscribe();
+
+    expect(api.patch).toHaveBeenCalledWith('/reviews/rev-9/comments/c-1/validate', {
+      verdict: 'confirmed'
+    });
   });
 });

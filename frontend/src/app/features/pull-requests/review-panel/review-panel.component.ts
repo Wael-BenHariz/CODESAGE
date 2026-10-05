@@ -2,7 +2,13 @@ import { Component, OnInit, computed, inject, input, signal } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { ApiError } from '../../../core/services/api.service';
 import { GithubService } from '../../../core/services/github.service';
-import { ReviewComment, ReviewDetail } from '../../../core/models/review.model';
+import {
+  CommentValidation,
+  ReviewComment,
+  ReviewDetail,
+  ValidationSeverity,
+  ValidationVerdict
+} from '../../../core/models/review.model';
 
 /** Comments of one file after the plan's ordering: severity → file → line. */
 export interface ReviewFileGroup {
@@ -37,6 +43,31 @@ function actionErrorMessage(err: unknown): string {
     return err.message;
   }
   return 'Request failed — please try again.';
+}
+
+/** Login shown on the optimistic verdict row — the client never guesses identity. */
+const PENDING_LOGIN = '(you)';
+
+/** Per-comment draft of the Step 10 severity-override + note inputs. */
+interface ValidationDraft {
+  severity: ValidationSeverity | '';
+  note: string;
+}
+
+/**
+ * Upsert one verdict into a comment's list (plan Step 9: one row per
+ * reviewer): the incoming row replaces any row for the same reviewer and
+ * any pending placeholder; ordering stays newest-first (`updated_at` desc).
+ */
+function withValidation(
+  validations: CommentValidation[],
+  incoming: CommentValidation
+): CommentValidation[] {
+  const next = validations.filter(
+    v => v.reviewer_login !== incoming.reviewer_login && v.reviewer_login !== PENDING_LOGIN
+  );
+  next.push(incoming);
+  return next.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
 /**
@@ -82,6 +113,12 @@ export class ReviewPanelComponent implements OnInit {
   readonly savingSummary = signal(false);
   /** Comment id of an in-flight dismiss/restore (disables that button). */
   readonly pendingCommentId = signal<string | null>(null);
+
+  // --- Reviewer validation (plan Step 10) -----------------------------------
+  /** Comment id of the in-flight verdict upsert — one at a time → safe rollback. */
+  readonly validatingCommentId = signal<string | null>(null);
+  /** Per-comment draft of the severity-override + note inputs (keyed by comment id). */
+  readonly validationDrafts = signal<Record<string, ValidationDraft>>({});
 
   ngOnInit(): void {
     this.load();
@@ -349,5 +386,131 @@ export class ReviewPanelComponent implements OnInit {
     return comment.line_number !== null
       ? `${comment.file_path}:${comment.line_number}`
       : comment.file_path;
+  }
+
+  // --- Reviewer validation (Step 10) ----------------------------------------
+
+  /**
+   * Gate on the verdict controls: effective role >= REVIEWER — exactly the
+   * plan's condition (the guarded backend enforces it; this is cosmetic).
+   * Existing verdicts stay visible to every viewer regardless.
+   */
+  readonly canValidate = computed(() => {
+    const role = this.detail()?.viewer_role;
+    return role === 'REVIEWER' || role === 'ORG_ADMIN' || role === 'PLATFORM_ADMIN';
+  });
+
+  validationSeverity(commentId: string): ValidationSeverity | '' {
+    return this.validationDrafts()[commentId]?.severity ?? '';
+  }
+
+  validationNote(commentId: string): string {
+    return this.validationDrafts()[commentId]?.note ?? '';
+  }
+
+  onValidationSeverityChange(commentId: string, event: Event): void {
+    const severity = (event.target as HTMLSelectElement).value as ValidationSeverity | '';
+    this.validationDrafts.update(drafts => ({
+      ...drafts,
+      [commentId]: { severity, note: this.validationNote(commentId) }
+    }));
+  }
+
+  onValidationNoteChange(commentId: string, event: Event): void {
+    const note = (event.target as HTMLInputElement).value;
+    this.validationDrafts.update(drafts => ({
+      ...drafts,
+      [commentId]: { severity: this.validationSeverity(commentId), note }
+    }));
+  }
+
+  /** Stored verdict value → display text. */
+  verdictLabel(verdict: string): string {
+    if (verdict === 'false_positive') {
+      return 'false positive';
+    }
+    if (verdict === 'needs_investigation') {
+      return 'needs investigation';
+    }
+    return verdict;
+  }
+
+  /**
+   * Submit the caller's verdict for one finding: optimistic pending row
+   * first, the server row on success, snapshot rollback + error strip on
+   * failure (plan Step 10's optimistic update with rollback).
+   */
+  submitValidation(comment: ReviewComment, verdict: ValidationVerdict): void {
+    const detail = this.detail();
+    if (!detail || this.validatingCommentId()) {
+      return;
+    }
+    const draft = this.validationDrafts()[comment.id] ?? { severity: '', note: '' };
+    const trimmedNote = draft.note.trim();
+    const payload = {
+      verdict,
+      severity_override: draft.severity === '' ? null : draft.severity,
+      note: trimmedNote === '' ? null : trimmedNote
+    };
+
+    const snapshot = detail; // rollback point — detail is only ever replaced wholesale
+    const now = new Date().toISOString();
+    this.validatingCommentId.set(comment.id);
+    this.actionError.set(null);
+    this.detail.update(current =>
+      current
+        ? {
+            ...current,
+            comments: current.comments.map(existing =>
+              existing.id === comment.id
+                ? {
+                    ...existing,
+                    validations: withValidation(existing.validations, {
+                      verdict: payload.verdict,
+                      severity_override: payload.severity_override,
+                      note: payload.note,
+                      reviewer_login: PENDING_LOGIN,
+                      created_at: now,
+                      updated_at: now
+                    })
+                  }
+                : existing
+            )
+          }
+        : current
+    );
+
+    this.github.validateReviewFinding(detail.id, comment.id, payload).subscribe({
+      next: validation => {
+        this.validatingCommentId.set(null);
+        // Server row is the truth: it replaces the pending row (and any
+        // older verdict of the same reviewer — one row per reviewer).
+        this.detail.update(current =>
+          current
+            ? {
+                ...current,
+                comments: current.comments.map(existing =>
+                  existing.id === comment.id
+                    ? {
+                        ...existing,
+                        validations: withValidation(existing.validations, validation)
+                      }
+                    : existing
+                )
+              }
+            : current
+        );
+        this.validationDrafts.update(drafts => {
+          const rest = { ...drafts };
+          delete rest[comment.id];
+          return rest;
+        });
+      },
+      error: (err: unknown) => {
+        this.validatingCommentId.set(null);
+        this.detail.set(snapshot); // rollback the optimistic row
+        this.actionError.set(actionErrorMessage(err));
+      }
+    });
   }
 }

@@ -228,6 +228,84 @@
                         comment.snippet
                       }}</pre>
                     }
+                    <!-- Reviewer verdicts (plan Step 10): visible to every
+                         viewer; the controls only render for role >= REVIEWER.
+                         Interpolation escapes notes — never innerHTML. -->
+                    @if (comment.validations.length > 0) {
+                      <ul class="verdict-list" data-testid="verdict-list">
+                        @for (validation of comment.validations; track validation.reviewer_login) {
+                          <li class="verdict" data-testid="verdict">
+                            <span
+                              class="verdict-badge"
+                              [ngClass]="'verdict-' + validation.verdict"
+                              data-testid="verdict-badge"
+                            >
+                              {{ verdictLabel(validation.verdict) }}
+                            </span>
+                            <span class="verdict-who" data-testid="verdict-who">
+                              {{ validation.reviewer_login }}
+                            </span>
+                            @if (validation.severity_override) {
+                              <span class="verdict-sev" data-testid="verdict-severity">
+                                as {{ validation.severity_override }}
+                              </span>
+                            }
+                            <span class="verdict-when">
+                              {{ validation.updated_at | date: 'medium' }}
+                            </span>
+                            @if (validation.note) {
+                              <p class="verdict-note" data-testid="verdict-note">
+                                {{ validation.note }}
+                              </p>
+                            }
+                          </li>
+                        }
+                      </ul>
+                    }
+                    @if (canValidate()) {
+                      <div class="validation-controls" data-testid="validation-controls">
+                        <button
+                          class="btn-mini"
+                          data-testid="confirm-finding"
+                          [disabled]="validatingCommentId() === comment.id"
+                          (click)="submitValidation(comment, 'confirmed')"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          class="btn-mini"
+                          data-testid="fp-finding"
+                          [disabled]="validatingCommentId() === comment.id"
+                          (click)="submitValidation(comment, 'false_positive')"
+                        >
+                          False positive
+                        </button>
+                        <select
+                          class="sev-select"
+                          data-testid="severity-override"
+                          [value]="validationSeverity(comment.id)"
+                          [disabled]="validatingCommentId() === comment.id"
+                          [attr.aria-label]="'Severity override for ' + locationLabel(comment)"
+                          (change)="onValidationSeverityChange(comment.id, $event)"
+                        >
+                          <option value="">severity: keep original</option>
+                          <option value="info">info</option>
+                          <option value="warning">warning</option>
+                          <option value="error">error</option>
+                          <option value="suggestion">suggestion</option>
+                        </select>
+                        <input
+                          class="note-input"
+                          type="text"
+                          data-testid="validation-note"
+                          placeholder="Note (optional)"
+                          [value]="validationNote(comment.id)"
+                          [disabled]="validatingCommentId() === comment.id"
+                          [attr.aria-label]="'Validation note for ' + locationLabel(comment)"
+                          (input)="onValidationNoteChange(comment.id, $event)"
+                        />
+                      </div>
+                    }
                   </li>
                 }
               </ul>

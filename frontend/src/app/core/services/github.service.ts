@@ -3,7 +3,14 @@ import { ApiService } from './api.service';
 import { Observable, map, tap } from 'rxjs';
 import { Repository, RepositoryStats } from '../models/repository.model';
 import { PullRequest } from '../models/pull-request.model';
-import { ReviewComment, ReviewDetail, ReviewSummary } from '../models/review.model';
+import {
+  CommentValidation,
+  ReviewComment,
+  ReviewDetail,
+  ReviewSummary,
+  ValidationSeverity,
+  ValidationVerdict
+} from '../models/review.model';
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -204,5 +211,23 @@ export class GithubService {
     message: string;
   }> {
     return this.api.post(`/reviews/${reviewId}/post`, {});
+  }
+
+  // --- Reviewer validation (plan Step 9/10) ---------------------------------
+
+  /**
+   * Upsert the caller's verdict for one finding (`PATCH .../validate`).
+   * Backend: member + effective role >= REVIEWER (no PLATFORM_ADMIN bypass).
+   */
+  validateReviewFinding(
+    reviewId: string,
+    commentId: string,
+    payload: {
+      verdict: ValidationVerdict;
+      severity_override?: ValidationSeverity | null;
+      note?: string | null;
+    }
+  ): Observable<CommentValidation> {
+    return this.api.patch(`/reviews/${reviewId}/comments/${commentId}/validate`, payload);
   }
 }
