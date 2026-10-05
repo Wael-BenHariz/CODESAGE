@@ -307,6 +307,24 @@
   color: #666666;
 }
 
+.unavailable-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #666666;
+  margin: 0 0 12px;
+}
+
+.precedence-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a0a0a0;
+  border: 1px dashed #2a2a2a;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0;
+}
+
 .llm-status {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;

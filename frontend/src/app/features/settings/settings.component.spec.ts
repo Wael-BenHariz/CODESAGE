@@ -250,4 +250,40 @@ describe('SettingsComponent — AI model settings', () => {
       (fresh.nativeElement as HTMLElement).querySelector('[data-testid="org-settings-link"]')
     ).toBeNull();
   });
+
+  it('keeps backendless preference toggles disabled with a not-available label (plan Step 8)', () => {
+    // Review Preferences + Notifications have no API — they must be visibly
+    // unavailable and must not imply a saved state.
+    const autoReview = el().querySelector('#settings-auto-review') as HTMLInputElement;
+    expect(autoReview.disabled).toBeTrue();
+    expect(autoReview.checked).toBeFalse();
+    expect(
+      (el().querySelector('#settings-security-scans') as HTMLInputElement).disabled
+    ).toBeTrue();
+    expect(
+      (el().querySelector('#settings-review-frequency') as HTMLSelectElement).disabled
+    ).toBeTrue();
+
+    const prefsNote = el().querySelector('[data-testid="prefs-unavailable"]')?.textContent ?? '';
+    expect(prefsNote).toContain('Not available yet');
+    expect(prefsNote).toContain('nothing here is saved');
+
+    const emailToggle = el().querySelector(
+      '.notifications-card input[type="checkbox"]'
+    ) as HTMLInputElement;
+    expect(emailToggle.disabled).toBeTrue();
+    expect(emailToggle.checked).toBeFalse();
+    expect(el().querySelector('[data-testid="notifications-unavailable"]')?.textContent).toContain(
+      'Not available yet'
+    );
+  });
+
+  it('explains the model precedence in plain text (plan Step 8)', () => {
+    const text = el().querySelector('[data-testid="llm-precedence"]')?.textContent ?? '';
+    expect(text).toContain("installation owner's personal model");
+    expect(text).toContain("organization's AI model");
+    expect(text).toContain('platform default');
+    expect(text).toContain('never changes your provider or API key');
+    expect(text).toContain('working personal credentials');
+  });
 });

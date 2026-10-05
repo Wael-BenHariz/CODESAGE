@@ -43,13 +43,19 @@
     <section class="settings-section">
       <h2>Review Preferences</h2>
       <div class="card preferences-card">
+        <!-- Plan Step 8 / gap 4: no backend exists for these preferences —
+             they are rendered disabled with an explicit label and must
+             never pretend to save. -->
+        <p class="unavailable-note" data-testid="prefs-unavailable">
+          Not available yet — these preferences have no backend and nothing here is saved.
+        </p>
         <div class="preference-item">
           <label for="settings-auto-review">Auto-review on PR open</label>
-          <input id="settings-auto-review" type="checkbox" />
+          <input id="settings-auto-review" type="checkbox" disabled />
         </div>
         <div class="preference-item">
           <label for="settings-review-frequency">Review frequency</label>
-          <select id="settings-review-frequency">
+          <select id="settings-review-frequency" disabled>
             <option value="immediate">Immediate</option>
             <option value="hourly">Hourly</option>
             <option value="daily">Daily</option>
@@ -57,11 +63,11 @@
         </div>
         <div class="preference-item">
           <label for="settings-security-scans">Include security scans</label>
-          <input id="settings-security-scans" type="checkbox" checked />
+          <input id="settings-security-scans" type="checkbox" disabled />
         </div>
         <div class="preference-item">
           <label for="settings-performance-checks">Include performance checks</label>
-          <input id="settings-performance-checks" type="checkbox" checked />
+          <input id="settings-performance-checks" type="checkbox" disabled />
         </div>
       </div>
     </section>
@@ -85,6 +91,15 @@
               Personal key configured — {{ settings()?.provider }} {{ settings()?.model }}
             </div>
           }
+
+          <!-- Plan Step 8 — precedence rule as confirmed with the product
+               owner (code: review_processor._effective_model). -->
+          <p class="precedence-note" data-testid="llm-precedence">
+            Which model a review uses: the GitHub App installation owner's personal model (set
+            above) → the organization's AI model → the platform default. An organization can only
+            contribute a model name — it never changes your provider or API key — and its model
+            applies only when the installation owner has working personal credentials.
+          </p>
 
           <div class="llm-grid">
             <div class="field">
@@ -183,13 +198,17 @@
     <section class="settings-section">
       <h2>Notifications</h2>
       <div class="card notifications-card">
+        <!-- Plan Step 8 / gap 4: no email-notification backend exists. -->
+        <p class="unavailable-note" data-testid="notifications-unavailable">
+          Not available yet — email notifications have no backend and nothing here is saved.
+        </p>
         <div class="notification-item">
           <span>Email notifications for new reviews</span>
-          <input type="checkbox" checked />
+          <input type="checkbox" disabled />
         </div>
         <div class="notification-item">
           <span>Email notifications for comments</span>
-          <input type="checkbox" />
+          <input type="checkbox" disabled />
         </div>
       </div>
     </section>
