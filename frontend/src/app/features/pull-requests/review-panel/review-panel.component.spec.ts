@@ -864,8 +864,44 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('validation-controls')).not.toBeNull();
       expect(testid('confirm-finding')).not.toBeNull();
       expect(testid('fp-finding')).not.toBeNull();
+      expect(testid('investigate-finding')).not.toBeNull(); // plan Step 5 trio
       expect(testid('severity-override')).not.toBeNull();
       expect(testid('validation-note')).not.toBeNull();
+    });
+
+    it('submits a needs_investigation verdict like the other two (plan Step 5)', () => {
+      reviewApi.validateReviewFinding.and.returnValue(
+        of(validationRow({ verdict: 'needs_investigation' }))
+      );
+      createWithRole('REVIEWER', [plainComment()]);
+
+      (testid('investigate-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(reviewApi.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
+        verdict: 'needs_investigation',
+        severity_override: null,
+        note: null
+      });
+      expect(testid('verdict-badge')?.textContent).toContain('needs investigation');
+    });
+
+    it('leaves the controls active with an existing verdict — a re-verdict upserts', () => {
+      reviewApi.validateReviewFinding.and.returnValue(of(validationRow({ verdict: 'confirmed' })));
+      createWithRole('REVIEWER', [judgedComment()]); // a verdict already exists
+
+      expect((testid('confirm-finding') as HTMLButtonElement).disabled).toBeFalse();
+
+      (testid('confirm-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      // Same endpoint, same payload shape — the backend upserts per
+      // (comment, reviewer), so changing one's own verdict is just a re-post.
+      expect(reviewApi.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
+        verdict: 'confirmed',
+        severity_override: null,
+        note: null
+      });
     });
 
     it('optimistically shows my pending verdict and settles with the server row', () => {

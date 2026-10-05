@@ -319,6 +319,14 @@
                         >
                           False positive
                         </button>
+                        <button
+                          class="btn-mini"
+                          data-testid="investigate-finding"
+                          [disabled]="validatingCommentId() === comment.id"
+                          (click)="submitValidation(comment, 'needs_investigation')"
+                        >
+                          Needs investigation
+                        </button>
                         <select
                           class="sev-select"
                           data-testid="severity-override"
