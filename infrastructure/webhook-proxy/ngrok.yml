@@ -1,0 +1,19 @@
+# ngrok agent config — CodeSage webhook tunnel.
+# Staged by setup; the implementing agent fills in `authtoken` (and `domain`)
+# once provided from https://dashboard.ngrok.com/get-started/your-authtoken
+#
+# Architecture:  GitHub -> https://<domain>/api/v1/webhooks/github
+#                  -> ngrok agent -> 127.0.0.1:8081 (webhook path-filter proxy)
+#                  -> http://10.171.24.201 (ingress) -> backend pod
+version: "3"
+
+agent:
+  authtoken: REPLACE_ME
+
+tunnels:
+  codesage-webhook:
+    proto: http
+    addr: 127.0.0.1:8081
+    # Free reserved static domain (dashboard.ngrok.com/domains) => stable URL.
+    # Delete this line to fall back to a random URL that changes on restart.
+    domain: REPLACE_ME.ngrok-free.app

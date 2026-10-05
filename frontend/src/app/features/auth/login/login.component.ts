@@ -23,6 +23,9 @@ export class LoginComponent implements OnInit {
   }
 
   loginWithGitHub(): void {
-    this.auth.login();
+    // Honor the returnUrl the RoleGuard captured when it bounced the user
+    // here (AuthService itself always uses idpHint: 'github').
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? undefined;
+    this.auth.login(returnUrl);
   }
 }

@@ -1,0 +1,180 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: codesage
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          # Keycloak 24 — matches the realm export schema used by the ConfigMap.
+          image: quay.io/keycloak/keycloak:24.0
+          args:
+            - start-dev
+            - --import-realm
+            - --http-relative-path=/auth
+            - --hostname-strict=false
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Keycloak 24 admin bootstrap (KC 24 uses the legacy env names —
+            # KC_BOOTSTRAP_ADMIN_* only exists in KC 25+ and is silently
+            # ignored here, which left master without an admin user).
+            - name: KEYCLOAK_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_ADMIN
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres-service.codesage.svc.cluster.local:5432/keycloak_db
+            - name: KC_DB_USERNAME
+              value: codesage
+            - name: KC_DB_PASSWORD
+              value: codesage
+            # Rendered into the realm import JSON by the realm-templating
+            # init container (GitHub IdP credentials + backend client secret).
+            # Keycloak itself does NOT resolve env placeholders on import.
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: GITHUB_CLIENT_ID
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: GITHUB_CLIENT_SECRET
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_CLIENT_SECRET
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+          readinessProbe:
+            # Realm-endpoint readiness: ready only once the realm is served.
+            httpGet:
+              path: /auth/realms/codesage-realm
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /auth/realms/codesage-realm
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              # start-dev + realm import on boot exceeds 1Gi (JVM off-heap);
+              # OOMKilled at 1Gi. Node has plenty of headroom.
+              memory: 2Gi
+          volumeMounts:
+            # Rendered copy written by the realm-templating init container
+            # (emptyDir — re-rendered on every pod start).
+            - name: realm-import-rendered
+              mountPath: /opt/keycloak/data/import
+            - name: keycloak-data
+              mountPath: /opt/keycloak/data
+      initContainers:
+        # Vanilla Keycloak does not substitute env placeholders in realm
+        # import JSON, so ${GITHUB_CLIENT_ID}/${GITHUB_CLIENT_SECRET}/
+        # ${KEYCLOAK_CLIENT_SECRET}/${KEYCLOAK_SUPERADMIN_PASSWORD} are
+        # rendered from the keycloak secret into the import file before
+        # start. Secrets never touch the git-committed ConfigMap.
+        - name: realm-templating
+          image: postgres:15-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              # Every templated value must be present: envsubst/sed render an
+              # EMPTY string for an unset var, which the placeholder check
+              # below cannot detect.
+              for v in GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET KEYCLOAK_CLIENT_SECRET KEYCLOAK_SUPERADMIN_PASSWORD; do
+                if [ -z "$(printenv "$v" || :)" ]; then
+                  echo "ERROR: $v is empty or unset" >&2
+                  exit 1
+                fi
+              done
+              for f in /realm-src/*; do
+                base=$(basename "$f")
+                if command -v envsubst >/dev/null 2>&1; then
+                  envsubst '$GITHUB_CLIENT_ID $GITHUB_CLIENT_SECRET $KEYCLOAK_CLIENT_SECRET $KEYCLOAK_SUPERADMIN_PASSWORD' \
+                    < "$f" > "/render-out/$base"
+                else
+                  sed -e "s|\${GITHUB_CLIENT_ID}|${GITHUB_CLIENT_ID}|g" \
+                      -e "s|\${GITHUB_CLIENT_SECRET}|${GITHUB_CLIENT_SECRET}|g" \
+                      -e "s|\${KEYCLOAK_CLIENT_SECRET}|${KEYCLOAK_CLIENT_SECRET}|g" \
+                      -e "s|\${KEYCLOAK_SUPERADMIN_PASSWORD}|${KEYCLOAK_SUPERADMIN_PASSWORD}|g" \
+                      "$f" > "/render-out/$base"
+                fi
+              done
+              echo "rendered: $(ls /render-out)"
+              # fail loudly if a placeholder survived
+              if grep -q '\${GITHUB_CLIENT_ID}\|\${GITHUB_CLIENT_SECRET}\|\${KEYCLOAK_CLIENT_SECRET}\|\${KEYCLOAK_SUPERADMIN_PASSWORD}' /render-out/*; then
+                echo "ERROR: unrendered placeholder in output" >&2
+                exit 1
+              fi
+          env:
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: GITHUB_CLIENT_ID
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: GITHUB_CLIENT_SECRET
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_CLIENT_SECRET
+            - name: KEYCLOAK_SUPERADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secret
+                  key: KEYCLOAK_SUPERADMIN_PASSWORD
+          volumeMounts:
+            - name: realm-import
+              mountPath: /realm-src
+              readOnly: true
+            - name: realm-import-rendered
+              mountPath: /render-out
+      volumes:
+        - name: realm-import
+          configMap:
+            name: keycloak-realm
+        - name: realm-import-rendered
+          emptyDir: {}
+        - name: keycloak-data
+          persistentVolumeClaim:
+            claimName: keycloak-pvc

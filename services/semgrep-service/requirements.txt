@@ -1,0 +1,8 @@
+# CodeSage Semgrep Scan Service Dependencies
+
+# Core web framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Multipart upload parsing (POST /scan)
+python-multipart>=0.0.6

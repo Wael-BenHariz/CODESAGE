@@ -1,16 +1,17 @@
 """Base class for LLM-backed review agents."""
 
-from abc import ABC, abstractmethod
 import asyncio
 import json
 import logging
 import re
-from typing import Any, Iterator
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
 from app.services.agents.schemas import AgentResult, ReviewContext
-from app.services.groq import GroqClient
+from app.services.llm_client import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +38,24 @@ class BaseAgent(ABC):
     # last a minute or more — short retries just keep re-triggering them.
     RATE_LIMIT_BACKOFF = (15, 30, 60)
 
-    def __init__(self, groq_client: GroqClient):
-        self.groq_client = groq_client
+    def __init__(self, client: BaseLLMClient):
+        self.client = client
 
     async def run(self, context: ReviewContext) -> AgentResult:
-        """Build the agent prompt, call Gemini once, and validate the result."""
+        """Build the agent prompt, call the LLM once, and validate the result.
 
+        Specialists are finding-refiners: with no findings in their domain
+        there is nothing to validate, so the LLM call is skipped entirely
+        (returns an empty, confident result) and the free-tier TPM budget
+        is spent only on agents that have real work.
+        """
+
+        if not context.findings:
+            return AgentResult(
+                agent=self.AGENT_NAME,
+                confidence=1.0,
+                comments=[],
+            )
         prompt = self._build_prompt(context)
         data = await self._call_llm(prompt)
         data.setdefault("agent", self.AGENT_NAME)
@@ -82,14 +95,16 @@ class BaseAgent(ABC):
                     f"Agent {self.AGENT_NAME}: giving up after {http_attempts - 1} HTTP attempts: {last_error}"
                 )
             try:
-                raw = await self.groq_client.generate(
+                raw = await self.client.complete(
                     prompt,
                     temperature=self.TEMPERATURE,
                     max_tokens=max_tokens,
                 )
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code if exc.response is not None else None
-                retryable = status == 429 or (status is not None and 500 <= status <= 504)
+                retryable = status == 429 or (
+                    status is not None and 500 <= status <= 504
+                )
                 if status == 413 and len(prompt) // 4 < GROQ_TPM_TOKENS:
                     # Groq reports rolling-TPM overflow as 413 ("Limit 8000,
                     # Requested N" — N includes recent window usage, so it can
@@ -137,32 +152,53 @@ class BaseAgent(ABC):
     def _parse_response(self, raw: str) -> dict[str, Any]:
         """Parse Gemini output into a dict.
 
-        Tolerant pipeline:
+        Tolerant pipeline — order matters:
         1. Reject empty responses with a clear error (retryable).
-        2. Strip markdown code fences if present.
-        3. Fast path: the whole text is valid JSON.
-        4. Balanced-brace extraction (string-aware) so concatenated objects
-           parse individually — the old greedy regex ``\\{[\\s\\S]*\\}`` merged
+        2. Fast path: the whole response is already valid JSON. This MUST
+           run BEFORE any fence stripping: a valid JSON object containing a
+           markdown fence inside a string value (code samples in
+           ``suggestion`` fields) would be destroyed by
+           ``_strip_code_fences``, which returns only the fence's inner code
+           and throws the surrounding JSON away — observed in production as
+           two specialist agents failing on well-formed responses.
+        3. Strip markdown code fences when the whole response is wrapped in
+           one (```json ... ```) and parse that.
+        4. Balanced-brace extraction (string-aware) over the raw and the
+           stripped text so embedded or concatenated objects parse
+           individually — the old greedy regex ``\\{[\\s\\S]*\\}`` merged
            ``{...}{...}`` into one invalid blob.
         """
 
         if not raw or not raw.strip():
             raise ValueError("LLM returned an empty response")
 
-        text = self._strip_code_fences(raw)
-
         try:
-            return json.loads(text)
+            return json.loads(raw)
         except json.JSONDecodeError:
             pass
 
-        for candidate in self._iter_json_objects(text):
+        text = self._strip_code_fences(raw)
+        if text != raw:
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+
+        for candidate in self._iter_json_objects(raw):
             try:
                 return json.loads(candidate)
             except json.JSONDecodeError:
                 continue
+        if text != raw:
+            for candidate in self._iter_json_objects(text):
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    continue
 
-        raise ValueError(f"no parseable JSON object found (response head: {text[:200]!r})")
+        raise ValueError(
+            f"no parseable JSON object found (response head: {raw[:200]!r})"
+        )
 
     @staticmethod
     def _strip_code_fences(text: str) -> str:

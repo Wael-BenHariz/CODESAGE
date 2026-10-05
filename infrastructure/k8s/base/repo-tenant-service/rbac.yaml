@@ -1,0 +1,29 @@
+# Least-privilege RBAC for repo-tenant-service:
+#   - namespaces: create/delete/get (the tenant lifecycle itself)
+#   - resourcequotas + limitranges: the per-namespace quota objects
+# Cluster-scoped objects are NOT namespaced by kustomize's `namespace:`
+# transformer (only ServiceAccount subjects are — set explicitly below).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: repo-tenant-service
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: repo-tenant-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: repo-tenant-service
+subjects:
+  - kind: ServiceAccount
+    name: repo-tenant-service
+    namespace: codesage

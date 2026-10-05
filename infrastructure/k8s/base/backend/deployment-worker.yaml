@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codesage-worker
+  namespace: codesage
+  labels:
+    app: codesage-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: codesage-worker
+  template:
+    metadata:
+      labels:
+        app: codesage-worker
+    spec:
+      containers:
+        - name: worker
+          image: 127.0.0.1:5000/codesage/worker:v0.3.0
+          # Exact tag, pre-imported at this ref (or registries.yaml entry).
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.workers.main"]
+          envFrom:
+            - secretRef:
+                name: codesage-backend-secret   # same secret ref as the API
+            - configMapRef:
+                name: semgrep-config   # SEMGREP_* client settings
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi

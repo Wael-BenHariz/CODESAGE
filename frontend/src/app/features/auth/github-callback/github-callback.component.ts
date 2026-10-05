@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ActivatedRoute, Router } from '@angular/router';
-import { GithubService } from '../../../core/services/github.service';
+import { GithubAppService } from '../../../core/services/github-app.service';
 import { AuthService } from '../../../core/services/auth.service';
 
 type CallbackState = 'processing' | 'success' | 'error';
@@ -17,7 +17,7 @@ type CallbackState = 'processing' | 'success' | 'error';
 export class GithubCallbackComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly github = inject(GithubService);
+  private readonly github = inject(GithubAppService);
   private readonly auth = inject(AuthService);
 
   statusMessage = signal('Finalizing GitHub App installation...');
@@ -33,7 +33,8 @@ export class GithubCallbackComponent implements OnInit {
   }
 
   private processCallback(): void {
-    const verified = this.route.snapshot.queryParamMap.get('success') === 'true';
+    const params = this.route.snapshot.queryParamMap;
+    const verified = params.get('success') === 'true';
     this.isSuccess.set(verified);
 
     if (!verified) {
@@ -44,19 +45,27 @@ export class GithubCallbackComponent implements OnInit {
       return;
     }
 
-    // Hard rule: never call a protected endpoint unless a JWT exists in storage.
-    if (!this.auth.getToken()) {
-      // Session lost (e.g. storage cleared) — no protected API calls here.
-      this.state.set('success');
-      this.statusMessage.set('GitHub App installed successfully. Please log in to continue.');
-      setTimeout(() => {
-        this.router.navigate(['/login'], { queryParams: { message: 'app_installed' } });
-      }, 2000);
+    // The Keycloak SSO session survives the full-page round-trip to GitHub:
+    // APP_INITIALIZER ran check-sso (silent iframe) while this page loaded,
+    // before ngOnInit. No tokens ever ride on this URL.
+    if (this.auth.isAuthenticated()) {
+      this.finalizeInstallation();
       return;
     }
 
-    // JWT present in localStorage — the session survives the redirect, so
-    // verify the installation normally and continue to the dashboard.
+    // No session — ask the user to log in.
+    this.showLoginFallback();
+  }
+
+  private showLoginFallback(): void {
+    this.state.set('success');
+    this.statusMessage.set('GitHub App installed successfully. Please log in to continue.');
+    setTimeout(() => {
+      this.router.navigate(['/login'], { queryParams: { message: 'app_installed' } });
+    }, 2000);
+  }
+
+  private finalizeInstallation(): void {
     this.state.set('processing');
     this.statusMessage.set('Finalizing GitHub App installation...');
 

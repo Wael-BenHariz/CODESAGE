@@ -3,6 +3,7 @@ Webhook Routes
 GitHub webhook handling endpoints.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -17,7 +18,9 @@ from sqlalchemy.orm import selectinload
 from app.db import get_db
 from app.db.models import GitHubInstallation, PullRequest, Repository, Review, User, WatchedRepo, WebhookEvent
 from app.schemas.webhook import WebhookProcessResult
+from app.services import repo_tenant
 from app.services.github import github_service
+from app.services.org_provisioning import provision_installation_org
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +114,9 @@ async def _handle_pull_request_event(
     if not install_record:
         installation_data = await github_service.get_app_installation(installation_id)
         install_record = await _upsert_installation_record(db, installation_data)
+        # Org provisioning (Step 3): covers the fallback path where the
+        # `installation created` webhook never arrived. Idempotent.
+        await provision_installation_org(db, install_record)
         await db.commit()
     
     # Find or create repository record for the real GitHub App installation.
@@ -308,8 +314,8 @@ async def _handle_pull_request_event(
             await db.commit()
             await db.refresh(review)
 
-            # Queue review job
-            await queue_review(str(review.id))
+            # Queue review job (webhook deliveries are pull_request triggers)
+            await queue_review(str(review.id), trigger="pull_request")
 
             # Mark event as processed
             webhook_event.processed = True
@@ -373,6 +379,25 @@ async def _handle_installation_event(
 
         for repo_data in payload.get("repositories", []):
             await _upsert_repository_record(db, record, repo_data)
+
+        # Link the installing account's owner immediately: the browser-side
+        # install callback may never arrive (GitHub App Setup URL unset or
+        # the redirect aborted), and without this link /github/status says
+        # "not installed", /github/repos 400s, and PR webhooks are ignored
+        # with "no user linked to installation".
+        if action == "created" and account.get("id"):
+            await db.execute(
+                update(User)
+                .where(User.github_id == account["id"])
+                .values(github_installation_id=installation_id)
+            )
+
+        # Org provisioning (Step 3): one org per installation +
+        # least-privilege members — runs AFTER the link update above so
+        # the member count sees it. Flushes only; the commit below
+        # persists both. A failure here raises → 500 → GitHub redelivers
+        # the event and the upserts above are idempotent.
+        await provision_installation_org(db, record)
 
         await db.commit()
         
@@ -446,15 +471,33 @@ async def _handle_installation_repos_event(
     removed_ids = [repo.get("id") for repo in repos_removed if repo.get("id")]
     for repo in repos_removed:
         await _delete_repository_record(db, repo.get("id"))
+
+    # Which of the removed repos actually had the review switch on — those
+    # own a tenant/namespace in repo-tenant-service that must be torn down.
+    removed_watched: list[int] = []
     if removed_ids:
+        previously = await db.execute(
+            select(WatchedRepo.repo_id).where(
+                WatchedRepo.repo_id.in_(removed_ids),
+                WatchedRepo.enabled.is_(True),
+            )
+        )
+        removed_watched = list(previously.scalars().all())
         await db.execute(
             update(WatchedRepo)
             .where(WatchedRepo.repo_id.in_(removed_ids))
             .values(enabled=False)
         )
-    
+
     await db.commit()
-    
+
+    # Best-effort teardown (same swallow-all contract as the selection hook):
+    # an App uninstall must not leak per-repo namespaces.
+    if removed_watched:
+        await asyncio.gather(
+            *(repo_tenant.disable_repo(repo_id) for repo_id in removed_watched)
+        )
+
     return {
         "status": "success",
         "repos_added": len(repos_added),

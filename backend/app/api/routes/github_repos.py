@@ -1,5 +1,7 @@
 """GitHub App repository selection routes."""
 
+import asyncio
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,7 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.db.models import User, WatchedRepo
 from app.security.dependencies import get_current_user
+from app.security.roles import require_developer
+from app.services import repo_tenant
 from app.services.github_app import get_installation_repos
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -101,12 +107,17 @@ async def get_github_app_repos(
 async def save_github_app_repo_selection(
     payload: RepoSelectionPayload,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_developer),
 ):
     existing_result = await db.execute(
         select(WatchedRepo).where(WatchedRepo.user_id == current_user.id)
     )
     existing = {item.repo_id: item for item in existing_result.scalars().all()}
+    # Snapshot BEFORE mutating the rows — drives the repo-tenant
+    # enable/disable transition diff below (one repo = one namespace).
+    previously_enabled = {
+        repo_id: bool(record.enabled) for repo_id, record in existing.items()
+    }
 
     payload_ids: set[int] = set()
     for repo in payload.repos:
@@ -125,12 +136,46 @@ async def save_github_app_repo_selection(
                 )
             )
 
+    sync_disabled: list[int] = []
     if payload.sync:
         # Full-state payload: watched repos absent from it are no longer
         # selected (e.g. deselected or removed from the installation).
         for record in existing.values():
             if record.repo_id not in payload_ids:
+                if previously_enabled.get(record.repo_id):
+                    sync_disabled.append(record.repo_id)
                 record.enabled = False
 
     await db.commit()
+
+    # ── Best-effort mirror into repo-tenant-service ────────────────────────
+    # Transitions only: newly-enabled -> enable (creates the namespace),
+    # newly-disabled -> disable (teardown). Both are idempotent server-side,
+    # and failures are swallowed inside the client — the selection above is
+    # already committed and must never surface a 5xx because the
+    # microservice is down.
+    enable_calls = [
+        repo_tenant.enable_repo(
+            repo_id=repo.id, full_name=repo.name, owner_user_id=current_user.id
+        )
+        for repo in payload.repos
+        if repo.enabled and not previously_enabled.get(repo.id, False)
+    ]
+    disable_ids = [
+        repo.id
+        for repo in payload.repos
+        if not repo.enabled and previously_enabled.get(repo.id, False)
+    ]
+    disable_calls = [
+        repo_tenant.disable_repo(repo_id) for repo_id in (*disable_ids, *sync_disabled)
+    ]
+
+    if enable_calls or disable_calls:
+        results = await asyncio.gather(
+            *enable_calls, *disable_calls, return_exceptions=True
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.warning("repo-tenant hook failed unexpectedly: %s", result)
+
     return {"saved": True}

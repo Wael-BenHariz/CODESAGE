@@ -1,18 +1,28 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { GithubService, GitHubAppRepo } from '../../../core/services/github.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { GithubAppService } from '../../../core/services/github-app.service';
+import { GitHubAppRepo } from '../../../core/models/github-app.model';
+import { RepositoryService } from '../../../core/services/repository.service';
+import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
+import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-repository-list',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [SiteHeaderComponent, CommonModule, RouterLink],
   templateUrl: './repository-list.component.html',
   styleUrl: './repository-list.component.scss'
 })
 export class RepositoryListComponent implements OnInit {
-  private readonly github = inject(GithubService);
+  private readonly github = inject(GithubAppService);
+  private readonly repoApi = inject(RepositoryService);
+  private readonly auth = inject(AuthService);
+
+  /** Cosmetic write gating for header/card actions (backend stays authoritative). */
+  readonly nav = computed(() => navVisibility(this.auth.currentUser()?.role));
 
   /** Shared GitHub App install status (refreshed on init and after the App callback). */
   readonly githubInstalled = this.github.githubInstalled;
@@ -77,7 +87,7 @@ export class RepositoryListComponent implements OnInit {
   }
 
   private loadRepositories(): void {
-    this.github.getRepositories().subscribe({
+    this.repoApi.getRepositories().subscribe({
       next: repos => {
         this.repositories.set(repos);
         this.isLoading.set(false);
@@ -94,15 +104,15 @@ export class RepositoryListComponent implements OnInit {
 
   toggleRepo(repo: Repository): void {
     if (repo.enabled) {
-      this.github.disableRepository(repo.id).subscribe(() => this.loadRepositories());
+      this.repoApi.disableRepository(repo.id).subscribe(() => this.loadRepositories());
     } else {
-      this.github.enableRepository(repo.id).subscribe(() => this.loadRepositories());
+      this.repoApi.enableRepository(repo.id).subscribe(() => this.loadRepositories());
     }
   }
 
   deleteRepo(repo: Repository): void {
     if (confirm(`Are you sure you want to remove ${repo.fullName}?`)) {
-      this.github.deleteRepository(repo.id).subscribe(() => this.loadRepositories());
+      this.repoApi.deleteRepository(repo.id).subscribe(() => this.loadRepositories());
     }
   }
 
@@ -112,7 +122,9 @@ export class RepositoryListComponent implements OnInit {
   }
 
   installGitHubApp(): void {
-    this.github.getInstallUrl().subscribe(({ url }) => {
+    // Signed URL from GET /auth/github/app/install-url (state = JWT) — the
+    // URL is used exactly as returned, never rebuilt by hand.
+    this.auth.getInstallUrl().subscribe(({ url }) => {
       window.location.href = url;
     });
   }

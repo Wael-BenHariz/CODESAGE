@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semgrep-service
+  namespace: codesage
+  labels:
+    app: semgrep-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: semgrep-service
+  template:
+    metadata:
+      labels:
+        app: semgrep-service
+    spec:
+      containers:
+        - name: semgrep-service
+          image: 127.0.0.1:5000/codesage/semgrep-service:v0.2.1-semgrep
+          # IfNotPresent + the exact ref: works with the images pre-imported
+          # into containerd, or with registries.yaml declaring 127.0.0.1:5000
+          # as a plain-HTTP registry for kubelet (see plan section 2.4).
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: semgrep-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 4
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5

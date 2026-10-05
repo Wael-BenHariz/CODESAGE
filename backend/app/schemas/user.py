@@ -4,17 +4,16 @@ Request/Response models for user management.
 """
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
     """Base user schema with common fields."""
 
-    email: Optional[EmailStr] = Field(None, description="Email address")
-    name: Optional[str] = Field(None, max_length=255, description="Display name")
+    email: EmailStr | None = Field(None, description="Email address")
+    name: str | None = Field(None, max_length=255, description="Display name")
 
 
 class UserCreate(UserBase):
@@ -22,26 +21,33 @@ class UserCreate(UserBase):
 
     github_id: int = Field(..., description="GitHub user ID")
     login: str = Field(..., max_length=255, description="GitHub username")
-    avatar_url: Optional[str] = Field(None, description="Avatar URL")
+    avatar_url: str | None = Field(None, description="Avatar URL")
 
 
 class UserUpdate(BaseModel):
     """Schema for updating user information."""
 
-    email: Optional[EmailStr] = Field(None, description="Email address")
-    name: Optional[str] = Field(None, max_length=255, description="Display name")
-    avatar_url: Optional[str] = Field(None, description="Avatar URL")
+    email: EmailStr | None = Field(None, description="Email address")
+    name: str | None = Field(None, max_length=255, description="Display name")
+    avatar_url: str | None = Field(None, description="Avatar URL")
 
 
 class UserResponse(BaseModel):
     """User response schema."""
 
     id: str = Field(..., description="User UUID")
-    github_id: int = Field(..., description="GitHub user ID")
+    keycloak_id: str | None = Field(None, description="Keycloak subject (sub)")
+    role: str = Field(
+        "NONE",
+        description=(
+            "Realm role: PLATFORM_ADMIN | ORG_ADMIN | REVIEWER | DEVELOPER | NONE"
+        ),
+    )
+    github_id: int | None = Field(None, description="GitHub user ID")
     login: str = Field(..., description="GitHub username")
-    email: Optional[str] = Field(None, description="Email address")
-    name: Optional[str] = Field(None, description="Display name")
-    avatar_url: Optional[str] = Field(None, description="Avatar URL")
+    email: str | None = Field(None, description="Email address")
+    name: str | None = Field(None, description="Display name")
+    avatar_url: str | None = Field(None, description="Avatar URL")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -69,11 +75,12 @@ class CurrentUser(BaseModel):
     """Current authenticated user information."""
 
     id: str
-    github_id: int
+    github_id: int | None
+    role: str = "DEVELOPER"
     login: str
-    email: Optional[str]
-    name: Optional[str]
-    avatar_url: Optional[str]
+    email: str | None
+    name: str | None
+    avatar_url: str | None
     is_active: bool
 
     model_config = {"from_attributes": True}

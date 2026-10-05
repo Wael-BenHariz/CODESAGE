@@ -1,4 +1,5 @@
 <div class="pr-detail-page">
+  <app-site-header />
   @if (isLoading()) {
     <div class="loading">
       <div class="spinner"></div>
@@ -26,14 +27,16 @@
         </div>
         <div class="header-actions">
           @if (!pr.reviewStatus || pr.reviewStatus.status === 'completed') {
-            <button
-              class="btn btn-primary"
-              [class.loading]="isReviewing()"
-              [disabled]="isReviewing()"
-              (click)="triggerReview()"
-            >
-              {{ isReviewing() ? 'Starting...' : 'Start AI Review' }}
-            </button>
+            @if (nav().write) {
+              <button
+                class="btn btn-primary"
+                [class.loading]="isReviewing()"
+                [disabled]="isReviewing()"
+                (click)="triggerReview()"
+              >
+                {{ isReviewing() ? 'Starting...' : 'Start AI Review' }}
+              </button>
+            }
           } @else {
             <span class="review-status" [class]="pr.reviewStatus.status">
               {{ pr.reviewStatus.status }}
@@ -55,15 +58,48 @@
           <span class="stat-value">{{ pr.changedFiles }}</span>
           <span class="stat-label">files changed</span>
         </div>
-        @if (pr.reviewStatus) {
-          <div class="stat">
-            <span class="stat-value">{{ pr.reviewStatus.commentCount }}</span>
-            <span class="stat-label">comments</span>
-          </div>
-          <div class="stat">
-            <span class="stat-value">{{ pr.reviewStatus.issueCount }}</span>
-            <span class="stat-label">issues</span>
-          </div>
+        <!--
+          Review stats (plan Step 2, Q1/Option 1): both numbers come from the
+          ONE shared `GET /reviews/{id}` call. "open issues" is derived in the
+          frontend (comments with dismissed = false) — the backend has no
+          issue count. "—" = loading/failed (never 0); "n/a" = the API did not
+          return that number. Scan findings are never counted here.
+        -->
+        @if (reviewStats(); as stats) {
+          @if (stats.kind === 'ready') {
+            <div class="stat">
+              <span class="stat-value" data-testid="stat-comments">
+                {{ stats.comments ?? 'n/a' }}
+              </span>
+              <span class="stat-label">comments</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" data-testid="stat-open-issues">
+                {{ stats.openIssues ?? 'n/a' }}
+              </span>
+              <span class="stat-label">open issues</span>
+            </div>
+          } @else if (stats.kind === 'loading' || stats.kind === 'failed') {
+            <div class="stat">
+              <span class="stat-value" data-testid="stat-comments">—</span>
+              <span class="stat-label">comments</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" data-testid="stat-open-issues">—</span>
+              <span class="stat-label">open issues</span>
+            </div>
+            @if (stats.kind === 'failed') {
+              <button
+                type="button"
+                class="btn stat-retry"
+                data-testid="stats-retry"
+                aria-label="Retry loading review stats"
+                (click)="reloadReviewStats()"
+              >
+                Retry
+              </button>
+            }
+          }
         }
       </div>
 
@@ -74,6 +110,15 @@
         </div>
       }
 
+      <!-- Read-only AI review panel (plan Step 7b). -->
+      <app-review-panel
+        [prId]="pr.id"
+        [owner]="owner()"
+        [repo]="repo()"
+        [number]="pr.number"
+        [canTrigger]="nav().write"
+      />
+
       <div class="card diff-section">
         <h3>Changes</h3>
         <div class="diff-placeholder">
@@ -82,5 +127,14 @@
         </div>
       </div>
     </ng-container>
+
+    @if (loadError()) {
+      <!-- Load failure (e.g. 404 after an org-scope miss): an explicit
+               error state instead of a blank page (F3 pre-check b). -->
+      <div class="error-state" data-testid="pr-load-error">
+        <p>Couldn't load this pull request — it may not exist or you may not have access.</p>
+        <button class="btn" (click)="loadPullRequest()">Try again</button>
+      </div>
+    }
   }
 </div>

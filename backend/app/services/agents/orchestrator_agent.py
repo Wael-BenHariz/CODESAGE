@@ -26,7 +26,7 @@ from app.services.agents.schemas import (
     ReviewResult,
     ReviewStatistics,
 )
-from app.services.groq import GroqClient
+from app.services.llm_client import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ class OrchestratorAgent(BaseAgent):
     TEMPERATURE = settings.AGENT_ORCHESTRATOR_TEMPERATURE
     MAX_TOKENS = settings.AGENT_ORCHESTRATOR_MAX_TOKENS
 
-    def __init__(self, groq_client: GroqClient):
-        super().__init__(groq_client)
+    def __init__(self, client: BaseLLMClient):
+        super().__init__(client)
 
     async def synthesize(
         self,
@@ -82,14 +82,14 @@ class OrchestratorAgent(BaseAgent):
                     "by_severity": {},
                     "by_category": {},
                 },
-                usage=self.groq_client.total_usage(),
+                usage=self.client.total_usage(),
             )
 
         # Deterministic merge: exact stats, verbatim bodies, strongest
         # finding wins per file+line — all independent of the LLM.
         merged = self._merge_comments(agent_results)
         statistics = self._compute_statistics(merged)
-        usage = self.groq_client.total_usage()
+        usage = self.client.total_usage()
 
         prompt = self._build_summary_prompt(
             context,
@@ -100,9 +100,7 @@ class OrchestratorAgent(BaseAgent):
         try:
             data = await self._call_llm(prompt)
             summary = (
-                (data.get("summary") or "").strip()
-                if isinstance(data, dict)
-                else ""
+                (data.get("summary") or "").strip() if isinstance(data, dict) else ""
             )
             severity = data.get("overall_severity") if isinstance(data, dict) else None
             if not summary:
@@ -147,15 +145,16 @@ class OrchestratorAgent(BaseAgent):
             for comment in result.comments:
                 key = (comment.file_path, comment.line_number)
                 existing = merged.get(key)
-                if existing is None:
-                    merged[key] = comment
-                elif _SEVERITY_RANK.get(comment.severity, 1) > _SEVERITY_RANK.get(
-                    existing.severity, 1
-                ):
+                if existing is None or _SEVERITY_RANK.get(
+                    comment.severity, 1
+                ) > _SEVERITY_RANK.get(existing.severity, 1):
                     merged[key] = comment
         return sorted(
             merged.values(),
-            key=lambda c: (c.file_path, c.line_number if c.line_number is not None else -1),
+            key=lambda c: (
+                c.file_path,
+                c.line_number if c.line_number is not None else -1,
+            ),
         )
 
     @staticmethod
@@ -187,8 +186,7 @@ class OrchestratorAgent(BaseAgent):
         )
         if not comments:
             return (
-                header
-                + "- No findings were reported by the specialists — this does "
+                header + "- No findings were reported by the specialists — this does "
                 "not prove the code is clean, given the failed summary call."
             )
         lines = []
@@ -218,12 +216,15 @@ class OrchestratorAgent(BaseAgent):
         """
 
         failed_agents = failed_agents or []
-        headlines = "\n".join(
-            f"- {c.file_path}:"
-            f"{c.line_number if c.line_number is not None else '?'} "
-            f"[{c.severity}/{c.category}] {c.body[:240]}"
-            for c in merged
-        ) or "- (no specialist findings reported)"
+        headlines = (
+            "\n".join(
+                f"- {c.file_path}:"
+                f"{c.line_number if c.line_number is not None else '?'} "
+                f"[{c.severity}/{c.category}] {c.body[:240]}"
+                for c in merged
+            )
+            or "- (no specialist findings reported)"
+        )
 
         if failed_agents:
             failure_note = f"""
@@ -234,13 +235,31 @@ IMPORTANT — failed specialist agents: {", ".join(failed_agents)} ({len(failed_
         else:
             failure_note = ""
 
-        return f"""You are the final code review orchestrator.
-Specialist review agents reviewed this pull request; their findings have already been deduplicated and merged by the orchestrator (strongest severity kept per file+line, statistics computed exactly).
+        if context.sonar_scan_failed and context.semgrep_scan_failed:
+            static_note = """
+IMPORTANT — static analysis was unavailable for this review: BOTH analyzers (SonarQube and Semgrep) failed, so the specialist agents received no findings to refine. You MUST open the summary with a clear note such as "⚠️ Static analysis unavailable" and state that the review could not include static-analysis findings, so the absence of issues does not mean the code is clean."""
+        elif context.sonar_scan_failed:
+            static_note = """
+IMPORTANT — the SonarQube scan failed for this review: the findings below come from Semgrep only. Mention in the summary that SonarQube coverage is missing, so the absence of issues in other categories does not mean the code is clean."""
+        elif context.semgrep_scan_failed:
+            static_note = """
+IMPORTANT — the Semgrep scan failed for this review: the findings below come from SonarQube only. Mention in the summary that Semgrep coverage is missing, so the absence of issues in other categories does not mean the code is clean."""
+        else:
+            static_note = ""
+
+        return f"""You are synthesizing a GitHub PR code review.
+The findings below were detected by static analysis (SonarQube and/or Semgrep — cross-tool duplicates are already merged) and explained by specialist review agents; they have already been deduplicated and merged by the orchestrator (strongest severity kept per file+line, statistics computed exactly).
 Your task: write the final review summary and choose the overall severity.
-{failure_note}
+Write:
+1. A concise executive summary (2-3 sentences)
+2. Critical issues (BLOCKER/CRITICAL) first
+3. Findings grouped by file where multiple issues share a file
+4. A short "What to fix first" priority list at the end
+Format entirely in GitHub Markdown — ## headers, bullet points, backticks. This is posted verbatim as a PR review comment.
+{failure_note}{static_note}
 Rules:
 - Return ONLY valid JSON (no markdown fences, no text before or after): {{"summary": "...", "overall_severity": "info|warning|error"}}
-- The summary field will be posted verbatim as a GitHub Pull Request review comment body. Format it with Markdown: use ## headers, bullet points, and code blocks where appropriate. Be concise and actionable — call out the most important findings as file:line bullets, and mention testing gaps if obvious.
+- The summary field will be posted verbatim as a GitHub Pull Request review comment body.
 - Do not invent findings beyond the list below. If the list reports no findings, say the specialists reported no issues (unless the failed-agents note above says otherwise).
 - overall_severity must be info, warning, or error — use error if any finding below has severity error.
 

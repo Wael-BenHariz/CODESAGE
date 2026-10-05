@@ -1,24 +1,27 @@
 import { Component, OnInit, inject, signal, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { GithubService } from '../../../core/services/github.service';
+import { PullRequestService } from '../../../core/services/pull-request.service';
 import { PullRequest } from '../../../core/models/pull-request.model';
+import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-pr-list',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [SiteHeaderComponent, CommonModule, RouterLink],
   templateUrl: './pr-list.component.html',
   styleUrl: './pr-list.component.scss'
 })
 export class PrListComponent implements OnInit {
-  private readonly github = inject(GithubService);
+  private readonly github = inject(PullRequestService);
 
   owner = input.required<string>();
   repo = input.required<string>();
 
   pullRequests = signal<PullRequest[]>([]);
   isLoading = signal(true);
+  /** True when the load failed (404/5xx/network) — renders the error state. */
+  loadError = signal(false);
   filter = signal<'all' | 'open' | 'closed'>('all');
 
   get openCount() {
@@ -40,14 +43,17 @@ export class PrListComponent implements OnInit {
     this.loadPullRequests();
   }
 
-  private loadPullRequests(): void {
-    this.github.getPullRequests(`${this.owner()}/${this.repo()}`).subscribe({
+  loadPullRequests(): void {
+    this.loadError.set(false);
+    this.isLoading.set(true);
+    this.github.getPullRequests(this.owner(), this.repo()).subscribe({
       next: prs => {
         this.pullRequests.set(prs);
         this.isLoading.set(false);
       },
       error: () => {
         this.isLoading.set(false);
+        this.loadError.set(true);
       }
     });
   }

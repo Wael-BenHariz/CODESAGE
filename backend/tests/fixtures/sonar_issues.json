@@ -1,0 +1,68 @@
+[
+  {
+    "key": "AX1",
+    "rule": "java:S2077",
+    "component": "codesage-review-deadbeef:src/main/java/com/app/UserDao.java",
+    "severity": "BLOCKER",
+    "type": "VULNERABILITY",
+    "line": 42,
+    "message": "Make sure that no vulnerable SQL queries are built with this user-provided data.",
+    "effort": "20min",
+    "tags": ["sql", "external/cwe/cwe-89", "owasp2021-a03-injection"]
+  },
+  {
+    "key": "AX2",
+    "rule": "java:S1541",
+    "component": "codesage-review-deadbeef:src/main/java/com/app/ReportService.java",
+    "severity": "MAJOR",
+    "type": "CODE_SMELL",
+    "line": 88,
+    "message": "Refactor this method to reduce its Cognitive Complexity from 15 to the 15 allowed.",
+    "effort": "30min",
+    "tags": ["brain-overload"]
+  },
+  {
+    "key": "AX3",
+    "rule": "python:S4502",
+    "component": "codesage-review-deadbeef:app/server.py",
+    "severity": "MINOR",
+    "type": "BUG",
+    "line": 17,
+    "message": "Make sure disabling SSL certificate verification is safe here.",
+    "effort": null,
+    "tags": []
+  },
+  {
+    "key": "AX4",
+    "rule": "python:S100",
+    "component": "app/utils.py",
+    "severity": "INFO",
+    "type": "CODE_SMELL",
+    "line": null,
+    "message": "'do_thing' is a bad name; rename it.\n\nMore than one line of detail.",
+    "effort": "1min",
+    "tags": ["convention"]
+  },
+  {
+    "key": "AX5",
+    "rule": "java:S5766",
+    "component": "codesage-review-deadbeef:src/App.java",
+    "severity": "BLOCKER",
+    "type": "SECURITY_HOTSPOT",
+    "line": 5,
+    "message": "Review this dangerous method usage.",
+    "effort": "10min",
+    "tags": []
+  },
+  {
+    "key": "AX6",
+    "rule": "custom:R1",
+    "component": "codesage-review-deadbeef:tools/build.py",
+    "severity": "SOME_FUTURE_LEVEL",
+    "type": "SOME_FUTURE_TYPE",
+    "line": 3,
+    "message": "Future schema values must degrade gracefully.",
+    "effort": null,
+    "tags": []
+  }
+]

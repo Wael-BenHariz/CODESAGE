@@ -1,0 +1,37 @@
+# One-shot Job: create the Keycloak database on the shared postgres.
+# Safe to re-run (idempotent); kubectl apply keeps it as a completed Job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-db-init
+  namespace: codesage
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: keycloak-db-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: postgres:15-alpine
+          env:
+            - name: PGHOST
+              value: postgres-service.codesage.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: codesage
+            - name: PGPASSWORD
+              value: codesage
+            - name: PGDATABASE
+              value: codesage
+          command:
+            - /bin/sh
+            - -c
+            - |
+              psql -v ON_ERROR_STOP=1 -c "SELECT 1 FROM pg_database WHERE datname='keycloak_db'" -tA \
+                | grep -q 1 || psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE keycloak_db OWNER codesage";
+              echo "keycloak_db ready"

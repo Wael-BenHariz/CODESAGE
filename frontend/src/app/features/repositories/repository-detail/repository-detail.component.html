@@ -1,6 +1,13 @@
 <div class="repo-detail-page">
+  <app-site-header />
   @if (isLoading()) {
-    <div class="loading">Loading repository...</div>
+    <div class="loading" data-testid="repo-loading">Loading repository...</div>
+  } @else if (loadError()) {
+    <!-- Load failure: explicit error state instead of a blank content area. -->
+    <div class="error-state" data-testid="repo-load-error">
+      <p>Couldn't load this repository — check the repository or your access.</p>
+      <button class="btn" (click)="loadRepository()">Try again</button>
+    </div>
   } @else {
     @if (repository(); as repo) {
       <header class="page-header">
@@ -9,9 +16,16 @@
           <h1>{{ repo.fullName }}</h1>
         </div>
         <div class="header-actions">
-          <button class="toggle-btn" [class.enabled]="repo.enabled" (click)="toggleEnabled()">
-            {{ repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
-          </button>
+          @if (nav().write) {
+            <button
+              class="toggle-btn"
+              [class.enabled]="repo.enabled"
+              [disabled]="toggling()"
+              (click)="toggleEnabled()"
+            >
+              {{ toggling() ? 'Saving...' : repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
+            </button>
+          }
         </div>
       </header>
 

@@ -1,0 +1,36 @@
+[
+  {
+    "key": "H1",
+    "rule": "python:S555",
+    "component": "codesage-review-deadbeef:app/views.py",
+    "line": 31,
+    "status": "TO_REVIEW",
+    "vulnerabilityProbability": "HIGH",
+    "message": "Make sure that using this hardcoded password is safe."
+  },
+  {
+    "key": "H2",
+    "rule": "java:S4426",
+    "component": "src/Crypto.java",
+    "line": 12,
+    "status": "TO_REVIEW",
+    "vulnerabilityProbability": "MEDIUM",
+    "message": "Make sure that using this pseudorandom number generator is safe."
+  },
+  {
+    "key": "H3",
+    "rule": "java:S2245",
+    "component": "src/Random.java",
+    "line": 8,
+    "status": "REVIEWED",
+    "vulnerabilityProbability": "LOW",
+    "message": "Make sure that using this pseudorandom number generator is safe here."
+  },
+  {
+    "key": "H4",
+    "rule": "java:S2245",
+    "component": "codesage-review-deadbeef:src/Unknown.java",
+    "status": "TO_REVIEW",
+    "message": "No probability field and no line: file-level default."
+  }
+]

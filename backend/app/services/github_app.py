@@ -1,11 +1,15 @@
 """GitHub App helpers for installation and repository access."""
 
+import logging
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 import httpx
 from jose import jwt
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 GITHUB_API_BASE_URL = "https://api.github.com"
 GITHUB_ACCEPT_HEADER = "application/vnd.github+json"
@@ -42,6 +46,55 @@ async def get_installation_token(installation_id: int) -> str:
         if not token:
             raise ValueError("GitHub installation token was not returned")
         return token
+
+
+async def fetch_file_content(
+    full_name: str,
+    file_path: str,
+    ref: str,
+    token: str,
+) -> str | None:
+    """Fetch the FULL text content of a file at ``ref`` (SonarQube needs
+    complete files, not just diff patches).
+
+    Uses the GitHub App installation token — never a user OAuth token.
+
+    Returns:
+        The decoded file content, or None when the file is missing (404),
+        is a directory, or is binary/non-UTF-8 content.
+    """
+    encoded_path = quote(file_path, safe="/")
+    url = f"{GITHUB_API_BASE_URL}/repos/{full_name}/contents/{encoded_path}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.raw+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url, params={"ref": ref}, headers=headers)
+
+    if response.status_code == 404:
+        logger.debug("File not found on GitHub: %s@%s (%s)", file_path, ref, full_name)
+        return None
+    if response.status_code in (403, 422):
+        # Unsupported content (directory, submodule, too large) or access
+        # rule: skip the file instead of failing the whole review.
+        logger.warning(
+            "Skipping file %s for %s: HTTP %s %s",
+            file_path,
+            full_name,
+            response.status_code,
+            response.text[:200],
+        )
+        return None
+    response.raise_for_status()
+
+    try:
+        return response.content.decode("utf-8")
+    except UnicodeDecodeError:
+        logger.debug("Skipping binary file: %s (%s)", file_path, full_name)
+        return None
 
 
 def _has_next_page(link_header: str | None) -> bool:

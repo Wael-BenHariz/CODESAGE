@@ -1,9 +1,19 @@
 """Review comment model for inline code review comments."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    ARRAY,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +21,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.pull_requests import PullRequest
+    from app.db.models.review_finding_validations import ReviewFindingValidation
     from app.db.models.reviews import Review
 
 
@@ -28,6 +39,13 @@ class ReviewComment(Base):
         category: Category of the issue (bug, security, style, etc.)
         resolved: Whether the comment has been resolved
         resolved_at: When the comment was resolved
+        dismissed: Excluded from the staged Findings section when true
+        dismissed_by: User who dismissed the comment (optional)
+        dismissed_at: When the comment was dismissed
+        tool/rule_id/cwe/line_start/line_end/snippet/also_detected_by:
+            Source-finding metadata (Step 7b enrichment) — NULL for
+            comments the worker could not match back to a finding, and
+            for all pre-015 comments.
     """
 
     __tablename__ = "review_comments"
@@ -60,7 +78,7 @@ class ReviewComment(Base):
     )
 
     # GitHub Comment Reference
-    github_comment_id: Mapped[Optional[int]] = mapped_column(
+    github_comment_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         index=True,
@@ -75,7 +93,7 @@ class ReviewComment(Base):
         comment="Path to the file being commented on",
     )
 
-    line_number: Mapped[Optional[int]] = mapped_column(
+    line_number: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Line number in the file",
@@ -106,7 +124,7 @@ class ReviewComment(Base):
     )
 
     # Optional suggested fix for the commented issue
-    suggestion: Mapped[Optional[str]] = mapped_column(
+    suggestion: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Optional suggested fix for the comment",
@@ -120,10 +138,76 @@ class ReviewComment(Base):
         comment="Whether the comment has been resolved",
     )
 
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+    resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="When the comment was resolved",
+    )
+
+    # Staged posting (Step 6): dismissal state for the Findings section.
+    dismissed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Excluded from the staged Findings section when true",
+    )
+
+    dismissed_by: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="User who dismissed the comment",
+    )
+
+    dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the comment was dismissed",
+    )
+
+    # Source-finding enrichment (Step 7b): metadata of the normalized
+    # finding this comment refines, stamped by the worker on creation.
+    # Nullable: unmatched comments and pre-015 rows stay NULL.
+    tool: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        comment="Tool that produced the matched finding (sonarqube/semgrep)",
+    )
+
+    rule_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Rule id of the matched finding",
+    )
+
+    cwe: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="CWE ids of the matched finding",
+    )
+
+    line_start: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="First line of the matched finding's range",
+    )
+
+    line_end: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Last line of the matched finding's range",
+    )
+
+    snippet: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Source excerpt of the matched finding",
+    )
+
+    also_detected_by: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="Other tools that found the same defect",
     )
 
     # Timestamps
@@ -142,6 +226,18 @@ class ReviewComment(Base):
     pull_request: Mapped["PullRequest"] = relationship(
         "PullRequest",
         back_populates="review_comments",
+    )
+
+    # Reviewer verdicts (Step 9). selectin so GET /reviews/{id} and the
+    # dismiss/restore responses can serialize them without an async
+    # lazy-load; newest verdict first.
+    validations: Mapped[list["ReviewFindingValidation"]] = relationship(
+        "ReviewFindingValidation",
+        back_populates="comment",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        foreign_keys="ReviewFindingValidation.comment_id",
+        order_by="ReviewFindingValidation.updated_at.desc()",
     )
 
     def __repr__(self) -> str:

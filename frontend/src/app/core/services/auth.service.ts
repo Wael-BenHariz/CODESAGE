@@ -1,136 +1,169 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, of, map } from 'rxjs';
-import { User, AuthResponse } from '../models/user.model';
+import { Observable, map, tap, catchError, throwError } from 'rxjs';
+import { KeycloakService } from 'keycloak-angular';
+import { User } from '../models/user.model';
+import { UserResponseDto, toUser } from './mappers/user.mapper';
 import { environment } from '@env/environment';
 
+/**
+ * Application auth state backed by Keycloak.
+ *
+ * keycloak-js owns the tokens (PKCE S256, silent refresh, SSO session) — it
+ * is initialized by APP_INITIALIZER before any of this runs. This service
+ * owns the app-level pieces: the user profile (GET /auth/me), the login /
+ * logout / switch-account entry points, and the signals templates bind to.
+ */
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly keycloak = inject(KeycloakService);
 
   private readonly _currentUser = signal<User | null>(null);
   private readonly _isLoading = signal<boolean>(false);
   private readonly _error = signal<string | null>(null);
 
+  /**
+   * Set once logout()/switchAccount() has started tearing the session down.
+   * Guarantees idempotency: no duplicate server call, no duplicate redirect —
+   * regardless of double-clicks. Reset when a new login starts.
+   */
+  private sessionClosed = false;
+
   readonly currentUser = this._currentUser.asReadonly();
   readonly isLoading = this._isLoading.asReadonly();
   readonly error = this._error.asReadonly();
-  readonly isAuthenticated = computed(() => this._currentUser() !== null);
 
   constructor() {
-    this.initializeAuth();
-  }
+    // Restore the cached profile synchronously so the first rendered page
+    // (e.g. dashboard) has a user immediately, then refresh it below.
+    const cached = this.getStoredUser();
+    if (cached) {
+      this._currentUser.set(cached);
+    }
 
-  private initializeAuth(): void {
-    const token = this.getToken();
-    const userData = this.getStoredUser();
-
-    if (token && userData) {
-      this._currentUser.set(userData);
-      this.validateToken(token).subscribe({
-        error: () => {
-          this.logout();
-        }
-      });
+    // APP_INITIALIZER has already completed check-sso init by the time any
+    // component/service can inject this class.
+    if (this.keycloak.isLoggedIn()) {
+      this.loadUser().subscribe({ error: () => undefined });
+    } else if (cached) {
+      // Cached profile without a Keycloak session is stale — drop it.
+      this.clearSession();
     }
   }
 
-  login(): void {
-    // Fetch fresh OAuth URL from backend each time (never cached)
-    this.http.get<{ authorization_url: string }>(`${environment.apiUrl}/auth/github`).subscribe({
-      next: response => {
-        window.location.href = response.authorization_url;
-      },
-      error: error => {
-        console.error('Failed to initiate GitHub OAuth:', error);
+  /** True when this browser holds a live Keycloak session. */
+  isAuthenticated(): boolean {
+    return this.keycloak.isLoggedIn();
+  }
+
+  /**
+   * Start the GitHub social login. `idpHint: 'github'` skips the Keycloak
+   * login form and forwards straight to the GitHub broker — every login goes
+   * through GitHub. `returnUrl` (from the guard) is honored; anything else
+   * lands on the dashboard.
+   */
+  login(returnUrl?: string): void {
+    this._error.set(null);
+    this.sessionClosed = false;
+    const target =
+      returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
+        ? returnUrl
+        : '/dashboard';
+    this.keycloak
+      .login({
+        idpHint: 'github',
+        redirectUri: `${window.location.origin}${target}`
+      })
+      .catch((err: unknown) => {
+        console.error('Failed to start Keycloak login:', err);
         this._error.set('Failed to start GitHub login. Please try again.');
-      }
+      });
+  }
+
+  /**
+   * Switch account: end the current Keycloak SSO session (server-side session
+   * invalidated, local profile dropped) and land on `returnUrl` (default: the
+   * login page) so the next login() starts from a clean slate. The invite
+   * accept page passes its own URL so a different account comes back to the
+   * same invitation, signed out.
+   */
+  switchAccount(returnUrl: string = '/login'): void {
+    if (this.sessionClosed) {
+      return;
+    }
+    this.sessionClosed = true;
+    this.clearSession();
+    const target = returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/login';
+    this.keycloak.logout(`${window.location.origin}${target}`).catch(() => {
+      this.router.navigate(['/login']);
     });
   }
 
-  switchAccount(): void {
-    // Clear all auth data and re-login
-    this.removeToken();
-    this.removeUser();
-    localStorage.removeItem('codesage_refresh_token');
-    this._currentUser.set(null);
-    this.login();
-  }
+  /**
+   * Best-effort server-side logout: POSTs /auth/logout while the Keycloak
+   * token is still attached (backend revokes stored GitHub tokens and sets a
+   * revocation cutoff), then ALWAYS tears down local state and redirects
+   * through Keycloak's end-session endpoint. Idempotent.
+   */
+  logout(): void {
+    if (this.sessionClosed) {
+      return;
+    }
+    this.sessionClosed = true;
 
-  completeLogin(token: string, refreshToken: string): Observable<User> {
-    this._isLoading.set(true);
-    this._error.set(null);
-
-    // Store tokens immediately
-    this.setToken(token);
-    if (refreshToken) {
-      localStorage.setItem('codesage_refresh_token', refreshToken);
+    const wasLoggedIn = this.keycloak.isLoggedIn();
+    if (wasLoggedIn) {
+      // Fire-and-forget: must start BEFORE the end-session redirect below.
+      // Errors are swallowed — teardown happens either way.
+      this.http.post(`${environment.apiUrl}/auth/logout`, {}).subscribe({ error: () => undefined });
     }
 
-    // Fetch user info from backend
-    return this.http.get<User>(`${environment.apiUrl}/auth/me`).pipe(
-      tap(user => {
-        this.setUser(user);
-        this._currentUser.set(user);
-        this._isLoading.set(false);
-      }),
-      catchError(error => {
-        this._isLoading.set(false);
-        this._error.set(error.error?.message || 'Failed to load user profile');
-        throw error;
-      })
-    );
+    this.clearSession();
+    if (wasLoggedIn) {
+      this.keycloak.logout(`${window.location.origin}/`).catch(() => {
+        this.router.navigate(['/login']);
+      });
+    } else {
+      this.router.navigate(['/login']);
+    }
   }
 
-  handleCallback(code: string): Observable<User> {
+  /**
+   * `GET /auth/me` — (re)loads the profile. The role in the response always
+   * reflects the current JWT: the backend derives it from the token on every
+   * request, never from the database. The payload is mapped through
+   * `user.mapper` (snake_case `UserResponse` → camelCase `User`).
+   */
+  loadUser(): Observable<User> {
     this._isLoading.set(true);
     this._error.set(null);
 
-    return this.http
-      .post<AuthResponse>(`${environment.apiUrl}/auth/github/callback`, { code })
-      .pipe(
-        map(response => response.user),
-        tap(user => {
-          this.setUser(user);
-          this._currentUser.set(user);
-          this._isLoading.set(false);
-          this.router.navigate(['/dashboard']);
-        }),
-        catchError(error => {
-          this._isLoading.set(false);
-          this._error.set(error.error?.message || 'Authentication failed');
-          throw error;
-        })
-      );
-  }
-
-  logout(): void {
-    this.removeToken();
-    this.removeUser();
-    this._currentUser.set(null);
-    this.router.navigate(['/login']);
-  }
-
-  refreshToken(): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${environment.apiUrl}/auth/refresh`, {}).pipe(
-      tap(response => {
-        this.setToken(response.accessToken);
-        this.setUser(response.user);
-        this._currentUser.set(response.user);
+    return this.http.get<UserResponseDto>(`${environment.apiUrl}/auth/me`).pipe(
+      map(toUser),
+      tap(user => {
+        this._currentUser.set(user);
+        this.setUser(user);
+        this._isLoading.set(false);
       }),
       catchError(error => {
-        this.logout();
-        throw error;
+        this._isLoading.set(false);
+        // FastAPI errors carry `detail`; keep `message` for plain Error bodies.
+        const detail =
+          typeof error.error?.detail === 'string' ? error.error.detail : error.error?.message;
+        this._error.set(detail || 'Failed to load user profile');
+        return throwError(() => error);
       })
     );
   }
 
   updateProfile(updates: Partial<User>): Observable<User> {
-    return this.http.patch<User>(`${environment.apiUrl}/users/me`, updates).pipe(
+    return this.http.patch<UserResponseDto>(`${environment.apiUrl}/users/me`, updates).pipe(
+      map(toUser),
       tap(user => {
         this._currentUser.set(user);
         this.setUser(user);
@@ -138,41 +171,32 @@ export class AuthService {
     );
   }
 
-  private validateToken(_token: string): Observable<User> {
-    return this.http.get<User>(`${environment.apiUrl}/auth/me`).pipe(
-      tap(user => {
-        this._currentUser.set(user);
-        this.setUser(user);
-      }),
-      catchError(() => {
-        this.logout();
-        return of(null as unknown as User);
-      })
-    );
-  }
-
-  getToken(): string | null {
-    return localStorage.getItem(environment.tokenKey);
-  }
-
-  private setToken(token: string): void {
-    localStorage.setItem(environment.tokenKey, token);
-  }
-
-  private removeToken(): void {
-    localStorage.removeItem(environment.tokenKey);
+  /**
+   * `GET /auth/github/app/install-url` — signed GitHub App installation
+   * URL. The `state` claim is a JWT signed with STATE_TOKEN_SECRET so the
+   * `/auth/github/app/callback` endpoint can identify the installing user —
+   * never construct the GitHub URL manually.
+   */
+  getInstallUrl(): Observable<{ url: string }> {
+    return this.http.get<{ url: string }>(`${environment.apiUrl}/auth/github/app/install-url`);
   }
 
   private getStoredUser(): User | null {
-    const userData = localStorage.getItem(environment.userKey);
-    return userData ? JSON.parse(userData) : null;
+    try {
+      const userData = localStorage.getItem(environment.userKey);
+      return userData ? (JSON.parse(userData) as User) : null;
+    } catch {
+      return null;
+    }
   }
 
   private setUser(user: User): void {
     localStorage.setItem(environment.userKey, JSON.stringify(user));
   }
 
-  private removeUser(): void {
+  /** Clears local profile state (cache + signal). No navigation. */
+  private clearSession(): void {
     localStorage.removeItem(environment.userKey);
+    this._currentUser.set(null);
   }
 }

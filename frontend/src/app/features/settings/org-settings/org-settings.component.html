@@ -1,0 +1,219 @@
+<div class="settings-page">
+  <app-site-header />
+  <header class="page-header">
+    <h1>Organization Settings</h1>
+    <p class="page-subtitle">
+      Per-organization review behavior, capped by platform-wide ceilings. The backend re-checks your
+      effective role on every save.
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="state-note">Loading settings…</p>
+  } @else if (loadError()) {
+    <div class="banner error" role="alert">
+      <span>{{ loadError() }}</span>
+      <button class="btn btn-secondary" type="button" (click)="load()">Retry</button>
+    </div>
+  } @else {
+    @if (isPlatformAdmin && platformError(); as platformErrMsg) {
+      <div class="banner error" role="alert">
+        <span>{{ platformErrMsg }}</span>
+        <button class="btn btn-secondary" type="button" (click)="retryPlatform()">Retry</button>
+      </div>
+    }
+
+    @for (sec of sections(); track sec.id) {
+      <section class="settings-section">
+        <h2>{{ sec.title }}</h2>
+        <p class="section-subtitle">{{ sec.subtitle }}</p>
+
+        <div class="card">
+          @if (sec.id === 'org') {
+            @if (orgs.length === 0) {
+              <p class="state-note">
+                No organization is linked to your account. Install the CodeSage GitHub App on a
+                repository first.
+              </p>
+            } @else {
+              <div class="org-picker">
+                <div class="field">
+                  <label for="org-settings-picker">Organization</label>
+                  <select
+                    id="org-settings-picker"
+                    [ngModel]="selectedOrgId"
+                    (ngModelChange)="selectOrg($event)"
+                  >
+                    @for (org of orgs; track org.id) {
+                      <option [value]="org.id">{{ org.name }} ({{ org.account_type }})</option>
+                    }
+                  </select>
+                </div>
+                <span class="role-badge" data-testid="effective-role">
+                  Effective role: {{ effectiveRoleLabel }}
+                </span>
+              </div>
+
+              @if (sectionReady('org') && !canEdit('org')) {
+                <div class="banner info" role="note" data-testid="read-only-banner">
+                  Read-only — changing organization settings requires the ORG_ADMIN effective role.
+                </div>
+              }
+            }
+          }
+
+          @if (sectionReady(sec.id)) {
+            @for (key of fieldsFor(sec.id); track key) {
+              <div class="setting-field" [class.invalid]="fieldError(sec.id, key)">
+                <div class="field-label-row">
+                  <label [attr.for]="fieldId(sec.id, key)">{{ labelOf(key) }}</label>
+                  @if (kindOf(key) === 'number') {
+                    <span class="ceiling-hint" data-testid="ceiling-hint">
+                      max {{ ceilingLabel(sec.id, key) }}
+                    </span>
+                  }
+                </div>
+
+                @switch (kindOf(key)) {
+                  @case ('number') {
+                    <input
+                      [id]="fieldId(sec.id, key)"
+                      type="number"
+                      [ngModel]="valueOf(sec.id, key)"
+                      (ngModelChange)="setField(sec.id, key, $event)"
+                      [disabled]="!canEdit(sec.id) || formFor(sec.id).saving"
+                      [attr.data-testid]="fieldId(sec.id, key)"
+                    />
+                  }
+                  @case ('boolean') {
+                    <label class="check-item">
+                      <input
+                        type="checkbox"
+                        [checked]="valueOf(sec.id, key) === true"
+                        (change)="toggleBoolean(sec.id, key, $event)"
+                        [disabled]="!canEdit(sec.id) || formFor(sec.id).saving"
+                        [attr.data-testid]="fieldId(sec.id, key)"
+                      />
+                      <span>{{ valueOf(sec.id, key) === true ? 'Enabled' : 'Disabled' }}</span>
+                    </label>
+                  }
+                  @case ('multi') {
+                    <div class="check-row">
+                      @for (option of optionsFor(key); track option) {
+                        <label class="check-item">
+                          <input
+                            type="checkbox"
+                            [checked]="isMultiSelected(sec.id, key, option)"
+                            (change)="toggleMulti(sec.id, key, option)"
+                            [disabled]="!canEdit(sec.id) || formFor(sec.id).saving"
+                          />
+                          <span>{{ optionLabel(key, option) }}</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                  @case ('enum') {
+                    <select
+                      [id]="fieldId(sec.id, key)"
+                      [ngModel]="valueOf(sec.id, key)"
+                      (ngModelChange)="setField(sec.id, key, $event)"
+                      [disabled]="!canEdit(sec.id) || formFor(sec.id).saving"
+                      [attr.data-testid]="fieldId(sec.id, key)"
+                    >
+                      @for (option of optionsFor(key); track option) {
+                        <option [value]="option">{{ optionLabel(key, option) }}</option>
+                      }
+                    </select>
+                  }
+                  @case ('text') {
+                    <input
+                      [id]="fieldId(sec.id, key)"
+                      type="text"
+                      [ngModel]="valueOf(sec.id, key)"
+                      (ngModelChange)="setField(sec.id, key, $event)"
+                      [placeholder]="placeholderFor(sec.id, key)"
+                      [disabled]="!canEdit(sec.id) || formFor(sec.id).saving"
+                      [attr.data-testid]="fieldId(sec.id, key)"
+                    />
+                  }
+                }
+
+                <div class="field-meta">
+                  @if (hintOf(sec.id, key)) {
+                    <span class="field-hint">{{ hintOf(sec.id, key) }}</span>
+                  }
+                  @if (isOverridden(sec.id, key)) {
+                    <span class="override-chip">overridden</span>
+                    <button
+                      type="button"
+                      class="btn-link"
+                      [disabled]="!canEdit(sec.id) || formFor(sec.id).saving"
+                      (click)="resetField(sec.id, key)"
+                      [attr.data-testid]="'reset-' + fieldId(sec.id, key)"
+                    >
+                      Reset to default
+                    </button>
+                  } @else {
+                    <span class="inherit-hint">inherits {{ inheritText(sec.id, key) }}</span>
+                  }
+                </div>
+
+                @if (fieldError(sec.id, key); as fieldErrorMsg) {
+                  <span
+                    class="field-error"
+                    role="alert"
+                    [attr.data-testid]="'error-' + fieldId(sec.id, key)"
+                  >
+                    {{ fieldErrorMsg }}
+                  </span>
+                }
+              </div>
+            }
+
+            @if (formFor(sec.id).error; as sectionErrMsg) {
+              <div class="banner error" role="alert" data-testid="section-error">
+                {{ sectionErrMsg }}
+              </div>
+            }
+            @if (formFor(sec.id).saved) {
+              <div class="banner success" role="status" data-testid="section-saved">Saved.</div>
+            }
+
+            <div class="form-actions">
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="!canSave(sec.id)"
+                (click)="save(sec.id)"
+                [attr.data-testid]="'save-' + sec.id"
+              >
+                {{ formFor(sec.id).saving ? 'Saving…' : 'Save changes' }}
+              </button>
+            </div>
+          } @else if (formFor(sec.id).error) {
+            <div class="banner error" role="alert" data-testid="section-error">
+              {{ formFor(sec.id).error }}
+            </div>
+          } @else if (sec.id !== 'org' || orgs.length > 0) {
+            <p class="state-note">{{ sectionNote(sec.id) }}</p>
+          }
+        </div>
+      </section>
+    }
+
+    @if (selectedOrgId; as currentOrgId) {
+      <section class="settings-section">
+        <h2>Member invitations</h2>
+        <p class="section-subtitle">
+          Invite teammates as DEVELOPER or REVIEWER — existing roles are never downgraded by an
+          invitation.
+        </p>
+        @for (orgId of [currentOrgId]; track orgId) {
+          <!-- @for-track remounts the child when the selected org changes,
+               so its ngOnInit always loads the right org. -->
+          <app-org-invitations [orgId]="orgId" [canManage]="canEdit('org')" />
+        }
+      </section>
+    }
+  }
+</div>

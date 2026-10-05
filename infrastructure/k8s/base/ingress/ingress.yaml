@@ -1,0 +1,61 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codesage-ingress
+  namespace: codesage
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+
+spec:
+  ingressClassName: nginx
+
+  # Deliberately hostless (no spec.rules[].host): a rule host must be a DNS
+  # name — Kubernetes rejects an IP — and GITHUB_CALLBACK_URL, FRONTEND_URL
+  # and the GitHub-side OAuth/Setup redirects all point at
+  # http://10.171.24.201. A hostless rule matches every Host header, so the
+  # bare IP, codesage.local, and any LAN alias all route correctly; with a
+  # host-restricted rule the IP-based GitHub redirects 404 at nginx's default
+  # backend before ever reaching the app.
+  rules:
+    - http:
+        paths:
+          # repo-tenant-service read API — MUST precede the generic /api
+          # rule (ingress-nginx also re-sorts by length, but keeping the
+          # order explicit documents the intent: /api/v1/repos/* is NOT
+          # served by the backend).
+          - path: /api/v1/repos
+            pathType: Prefix
+            backend:
+              service:
+                name: repo-tenant-service
+                port:
+                  number: 8085
+
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: codesage-backend
+                port:
+                  number: 8000
+
+          # Keycloak (identity provider) — served under /auth via
+          # --http-relative-path=/auth, so browser + backend both reach it at
+          # http://10.171.24.201/auth/realms/codesage-realm/...
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak-service
+                port:
+                  number: 8080
+
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: codesage-frontend
+                port:
+                  number: 80

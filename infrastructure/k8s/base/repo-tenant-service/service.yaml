@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: repo-tenant-service
+  namespace: codesage
+  labels:
+    app: repo-tenant-service
+spec:
+  type: ClusterIP
+  selector:
+    app: repo-tenant-service
+  ports:
+    - name: http
+      port: 8085
+      targetPort: 8085

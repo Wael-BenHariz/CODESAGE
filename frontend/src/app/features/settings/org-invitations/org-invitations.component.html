@@ -1,0 +1,104 @@
+<div class="invitations">
+  @if (loading()) {
+    <p class="state-note">Loading invitations…</p>
+  } @else if (loadError()) {
+    <div class="banner error" role="alert" data-testid="invites-load-error">
+      <span>{{ loadError() }}</span>
+      <button class="btn btn-secondary" type="button" (click)="load()">Retry</button>
+    </div>
+  } @else {
+    @if (canManage()) {
+      <div class="invite-form">
+        <div class="field">
+          <label for="invite-email">Email address</label>
+          <input
+            id="invite-email"
+            type="email"
+            [ngModel]="email()"
+            (ngModelChange)="email.set($event)"
+            placeholder="teammate@example.com"
+            data-testid="invite-email"
+          />
+        </div>
+        <div class="field">
+          <label for="invite-role">Role</label>
+          <select
+            id="invite-role"
+            [ngModel]="role()"
+            (ngModelChange)="role.set($event)"
+            data-testid="invite-role"
+          >
+            <option value="DEVELOPER">DEVELOPER</option>
+            <option value="REVIEWER">REVIEWER</option>
+          </select>
+        </div>
+        <button
+          class="btn btn-primary"
+          type="button"
+          [disabled]="sending() || !email().trim()"
+          (click)="send()"
+          data-testid="invite-send"
+        >
+          {{ sending() ? 'Sending…' : 'Send invitation' }}
+        </button>
+      </div>
+
+      @if (sentTo(); as to) {
+        <div class="banner success" role="status" data-testid="invite-sent">
+          Invitation created for {{ to }} — the link was emailed to them.
+        </div>
+      }
+      @if (formError(); as err) {
+        <div class="banner error" role="alert" data-testid="invite-form-error">{{ err }}</div>
+      }
+    }
+
+    @if (items().length === 0) {
+      <p class="state-note">No invitations yet.</p>
+    } @else {
+      <table class="invites-table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Expires</th>
+            <th>Invited by</th>
+            <th><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (invitation of items(); track invitation.id) {
+            <tr data-testid="invite-row">
+              <td>{{ invitation.email }}</td>
+              <td>{{ invitation.role }}</td>
+              <td>
+                <span class="status-chip" data-testid="invite-status">
+                  {{ invitation.status }}
+                </span>
+              </td>
+              <td>{{ invitation.expires_at | date: 'mediumDate' }}</td>
+              <td>{{ invitation.invited_by ?? '—' }}</td>
+              <td class="row-actions">
+                @if (canManage() && invitation.status === 'pending') {
+                  <button
+                    class="btn-link"
+                    type="button"
+                    [disabled]="revokingId() === invitation.id"
+                    (click)="revoke(invitation)"
+                    data-testid="invite-revoke"
+                  >
+                    {{ revokingId() === invitation.id ? 'Revoking…' : 'Revoke' }}
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      @if (revokeError(); as err) {
+        <div class="banner error" role="alert" data-testid="invite-revoke-error">{{ err }}</div>
+      }
+    }
+  }
+</div>

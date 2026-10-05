@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: repo-tenant-service
+  namespace: codesage
+  labels:
+    app: repo-tenant-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: repo-tenant-service
+  template:
+    metadata:
+      labels:
+        app: repo-tenant-service
+    spec:
+      serviceAccountName: repo-tenant-service
+      containers:
+        - name: repo-tenant-service
+          image: 127.0.0.1:5000/codesage-repo-tenant-service:latest
+          imagePullPolicy: Never # imported into k3s, not from a registry
+          ports:
+            - containerPort: 8085
+              name: http
+          envFrom:
+            - configMapRef:
+                name: repo-tenant-config
+            - secretRef:
+                name: repo-tenant-service-secret
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            timeoutSeconds: 5

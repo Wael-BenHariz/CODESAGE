@@ -10,6 +10,34 @@
   color: #718096;
 }
 
+.error-state {
+  text-align: center;
+  padding: 48px 32px;
+  color: #999999;
+  background: #111111;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+
+  p {
+    margin-bottom: 16px;
+  }
+}
+
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #e0e0e0;
+  background: transparent;
+  border: 1px solid #2a2a2a;
+
+  &:hover:not(:disabled) {
+    border-color: #667eea;
+  }
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;

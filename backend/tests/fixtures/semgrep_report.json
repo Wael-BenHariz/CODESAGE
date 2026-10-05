@@ -1,0 +1,228 @@
+{
+  "version": "1.178.0",
+  "results": [
+    {
+      "check_id": "rules-packed.python.lang.security.audit.eval-detected.eval-detected",
+      "path": "vuln/app.py",
+      "start": {
+        "line": 14,
+        "col": 12,
+        "offset": 383
+      },
+      "end": {
+        "line": 14,
+        "col": 33,
+        "offset": 404
+      },
+      "extra": {
+        "message": "Detected the use of eval(). eval() can be dangerous if used to evaluate dynamic content. If this content can be input from outside the program, this may be a code injection vulnerability. Ensure evaluated content is not definable by external sources.",
+        "metadata": {
+          "source-rule-url": "https://bandit.readthedocs.io/en/latest/blacklists/blacklist_calls.html#b307-eval",
+          "cwe": [
+            "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+          ],
+          "owasp": [
+            "A03:2021 - Injection",
+            "A05:2025 - Injection"
+          ],
+          "asvs": {
+            "control_id": "5.2.4 Dyanmic Code Execution Features",
+            "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+            "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+            "version": "4"
+          },
+          "category": "security",
+          "technology": [
+            "python"
+          ],
+          "references": [
+            "https://owasp.org/Top10/A03_2021-Injection"
+          ],
+          "subcategory": [
+            "audit"
+          ],
+          "likelihood": "LOW",
+          "impact": "HIGH",
+          "confidence": "LOW",
+          "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+          "vulnerability_class": [
+            "Code Injection"
+          ],
+          "source": "https://semgrep.dev/r/python.lang.security.audit.eval-detected.eval-detected",
+          "shortlink": "https://sg.run/ZvrD"
+        },
+        "severity": "WARNING",
+        "fingerprint": "requires login",
+        "lines": "requires login",
+        "validation_state": "NO_VALIDATOR",
+        "engine_kind": "OSS"
+      }
+    },
+    {
+      "check_id": "rules-packed.python.lang.security.deserialization.pickle.avoid-pickle",
+      "path": "vuln/probe.py",
+      "start": {
+        "line": 19,
+        "col": 12,
+        "offset": 235
+      },
+      "end": {
+        "line": 19,
+        "col": 30,
+        "offset": 253
+      },
+      "extra": {
+        "message": "Avoid using `pickle`, which is known to lead to code execution vulnerabilities. When unpickling, the serialized data could be manipulated to run arbitrary code. Instead, consider serializing the relevant data as JSON or a similar text-based serialization format.",
+        "metadata": {
+          "owasp": [
+            "A08:2017 - Insecure Deserialization",
+            "A08:2021 - Software and Data Integrity Failures",
+            "A08:2025 - Software or Data Integrity Failures"
+          ],
+          "cwe": [
+            "CWE-502: Deserialization of Untrusted Data"
+          ],
+          "references": [
+            "https://docs.python.org/3/library/pickle.html"
+          ],
+          "category": "security",
+          "technology": [
+            "python"
+          ],
+          "cwe2022-top25": true,
+          "cwe2021-top25": true,
+          "subcategory": [
+            "audit"
+          ],
+          "likelihood": "LOW",
+          "impact": "MEDIUM",
+          "confidence": "LOW",
+          "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+          "vulnerability_class": [
+            "Insecure Deserialization "
+          ],
+          "source": "https://semgrep.dev/r/python.lang.security.deserialization.pickle.avoid-pickle",
+          "shortlink": "https://sg.run/OPwB"
+        },
+        "severity": "WARNING",
+        "fingerprint": "requires login",
+        "lines": "requires login",
+        "validation_state": "NO_VALIDATOR",
+        "engine_kind": "OSS"
+      }
+    },
+    {
+      "check_id": "rules-packed.python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+      "path": "vuln/probe.py",
+      "start": {
+        "line": 23,
+        "col": 39,
+        "offset": 306
+      },
+      "end": {
+        "line": 23,
+        "col": 43,
+        "offset": 310
+      },
+      "extra": {
+        "message": "Found 'subprocess' function 'call' with 'shell=True'. This is dangerous because this call will spawn the command using a shell process. Doing so propagates current shell settings and variables, which makes it much easier for a malicious actor to execute commands. Use 'shell=False' instead.",
+        "fix": "False",
+        "metadata": {
+          "source-rule-url": "https://bandit.readthedocs.io/en/latest/plugins/b602_subprocess_popen_with_shell_equals_true.html",
+          "owasp": [
+            "A01:2017 - Injection",
+            "A03:2021 - Injection",
+            "A05:2025 - Injection"
+          ],
+          "cwe": [
+            "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+          ],
+          "references": [
+            "https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess",
+            "https://docs.python.org/3/library/subprocess.html"
+          ],
+          "category": "security",
+          "technology": [
+            "python"
+          ],
+          "cwe2022-top25": true,
+          "cwe2021-top25": true,
+          "subcategory": [
+            "secure default"
+          ],
+          "likelihood": "HIGH",
+          "impact": "LOW",
+          "confidence": "MEDIUM",
+          "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+          "vulnerability_class": [
+            "Command Injection"
+          ],
+          "source": "https://semgrep.dev/r/python.lang.security.audit.subprocess-shell-true.subprocess-shell-true",
+          "shortlink": "https://sg.run/J92w"
+        },
+        "severity": "ERROR",
+        "fingerprint": "requires login",
+        "lines": "requires login",
+        "validation_state": "NO_VALIDATOR",
+        "engine_kind": "OSS"
+      }
+    },
+    {
+      "check_id": "semgrep-rules.python.lang.correctness.dict-modify-while-iterate.dict-modify-while-iterate",
+      "path": "src/utils.py",
+      "start": {
+        "line": 42,
+        "col": 5,
+        "offset": 812
+      },
+      "end": {
+        "line": 42,
+        "col": 38,
+        "offset": 845
+      },
+      "extra": {
+        "message": "Do not modify a dict while iterating over it.\nBuild a copy first.",
+        "lines": "    for k in d: del d[k]",
+        "metadata": {
+          "technology": [
+            "python"
+          ]
+        },
+        "severity": "INFO",
+        "engine_kind": "OSS",
+        "fingerprint": "synthetic-fingerprint-1"
+      }
+    },
+    {
+      "check_id": "rules-packed.python.style.equality-as-str.str-equality",
+      "path": "src/util.py",
+      "start": {
+        "line": 7,
+        "col": 11,
+        "offset": 133
+      },
+      "end": {
+        "line": 7,
+        "col": 30,
+        "offset": 152
+      },
+      "extra": {
+        "message": "Comparing strings with == may be unintended; use .equals().",
+        "lines": "    if x == \"yes\":",
+        "metadata": {},
+        "severity": "SOMETHING-NEW",
+        "engine_kind": "OSS",
+        "fingerprint": "synthetic-fingerprint-2"
+      }
+    }
+  ],
+  "errors": [],
+  "paths": {
+    "scanned": [
+      "vuln/probe.py",
+      "src/utils.py",
+      "src/util.py"
+    ]
+  },
+  "engine_requested": "OSS"
+}

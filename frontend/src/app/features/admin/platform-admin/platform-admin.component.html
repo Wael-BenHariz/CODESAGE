@@ -1,0 +1,118 @@
+<div class="platform-page">
+  <app-site-header />
+  <header class="page-header">
+    <h1>Platform Administration</h1>
+    <p class="page-subtitle">
+      Read-only overview of users and organizations — the API exposes no update endpoints here, so
+      this page offers no edit actions.
+    </p>
+  </header>
+
+  <section class="panel" aria-labelledby="platform-users-title">
+    <div class="panel-head">
+      <h2 id="platform-users-title">Users</h2>
+      @if (usersState() === 'ready') {
+        <span class="panel-meta" data-testid="users-meta">{{ total() }} total</span>
+      }
+    </div>
+
+    @if (usersState() === 'loading') {
+      <p class="state-note" data-testid="users-loading">Loading users…</p>
+    } @else if (usersState() === 'error') {
+      <div class="banner error" role="alert" data-testid="users-error">
+        <span>{{ usersError() }}</span>
+        <button class="btn btn-secondary" type="button" (click)="loadUsers()">Retry</button>
+      </div>
+    } @else if (users().length === 0) {
+      <p class="state-note" data-testid="users-empty">No users yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table" data-testid="users-table">
+          <thead>
+            <tr>
+              <th scope="col">Login</th>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Role</th>
+              <th scope="col">Joined</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (user of users(); track user.id) {
+              <tr>
+                <td>{{ user.login }}</td>
+                <td>{{ user.name || '—' }}</td>
+                <td>{{ user.email || '—' }}</td>
+                <td>
+                  <span class="role-badge">{{ user.role }}</span>
+                </td>
+                <td>{{ user.createdAt | date: 'mediumDate' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pager" data-testid="users-pager">
+        <button
+          class="btn btn-secondary"
+          type="button"
+          [disabled]="page() <= 1"
+          (click)="prevPage()"
+          data-testid="users-prev"
+        >
+          Previous
+        </button>
+        <span class="pager-status">Page {{ page() }} of {{ pages() }} · {{ total() }} users</span>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          [disabled]="page() >= pages()"
+          (click)="nextPage()"
+          data-testid="users-next"
+        >
+          Next
+        </button>
+      </div>
+    }
+  </section>
+
+  <section class="panel" aria-labelledby="platform-orgs-title">
+    <div class="panel-head">
+      <h2 id="platform-orgs-title">Organizations</h2>
+      <span class="panel-meta">Member lists are not available yet</span>
+    </div>
+
+    @if (orgsState() === 'loading') {
+      <p class="state-note" data-testid="orgs-loading">Loading organizations…</p>
+    } @else if (orgsState() === 'error') {
+      <div class="banner error" role="alert" data-testid="orgs-error">
+        <span>{{ orgsError() }}</span>
+        <button class="btn btn-secondary" type="button" (click)="loadOrgs()">Retry</button>
+      </div>
+    } @else if (orgs().length === 0) {
+      <p class="state-note" data-testid="orgs-empty">No organizations yet.</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table" data-testid="orgs-table">
+          <thead>
+            <tr>
+              <th scope="col">Organization</th>
+              <th scope="col">Type</th>
+              <th scope="col">Your role</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (org of orgs(); track org.id) {
+              <tr>
+                <td>{{ org.name }}</td>
+                <td>{{ org.account_type }}</td>
+                <td>{{ org.role || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
