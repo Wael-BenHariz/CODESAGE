@@ -1,8 +1,8 @@
 """GET /reviews/{review_id}/status requires authentication.
 
-Same contract as ``GET /reviews/{id}``: any authenticated user may read any
-review (reviews are shared across users — no ownership filter), and nobody
-may poll review status without a valid Keycloak access token.
+Same contract as ``GET /reviews/{id}``: an org member may read any
+review of their org (flag F3 retrofitted the org 404 onto this route),
+and nobody may poll review status without a valid Keycloak access token.
 """
 
 import uuid
@@ -11,7 +11,14 @@ from datetime import datetime, timezone
 from conftest import make_keycloak_token
 
 from app.config import settings
-from app.db.models import GitHubInstallation, PullRequest, Repository, Review
+from app.db.models import (
+    GitHubInstallation,
+    Org,
+    OrgMember,
+    PullRequest,
+    Repository,
+    Review,
+)
 
 API = settings.API_V1_PREFIX
 
@@ -24,7 +31,7 @@ async def test_status_without_token_401(client):
 
 
 async def test_status_with_token_200(client, db, user):
-    """A valid token → 200 with the review's polling status."""
+    """A valid token from an org member → 200 with the polling status."""
     # Minimal ownership chain: installation → repo → PR → review.
     installation = GitHubInstallation(
         app_id=1,
@@ -35,6 +42,12 @@ async def test_status_with_token_200(client, db, user):
     )
     db.add(installation)
     await db.flush()
+
+    # F3 retrofit: the caller reads through their org membership.
+    org = Org(name="test-owner", account_type="User", installation_id=987654)
+    db.add(org)
+    await db.flush()
+    db.add(OrgMember(org_id=org.id, user_id=user.id, role="DEVELOPER"))
 
     repository = Repository(
         installation_id=installation.id,
@@ -91,6 +104,12 @@ async def test_status_surfaces_ready_to_post(client, db, user):
     )
     db.add(installation)
     await db.flush()
+
+    # F3 retrofit: the caller reads through their org membership.
+    org = Org(name="test-owner-2", account_type="User", installation_id=987655)
+    db.add(org)
+    await db.flush()
+    db.add(OrgMember(org_id=org.id, user_id=user.id, role="DEVELOPER"))
 
     repository = Repository(
         installation_id=installation.id,

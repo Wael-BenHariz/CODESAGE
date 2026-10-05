@@ -26,13 +26,17 @@ export class PrDetailComponent implements OnInit {
 
   pullRequest = signal<PullRequest | null>(null);
   isLoading = signal(true);
+  /** True when the load failed (404/5xx/network) — renders the error state. */
+  loadError = signal(false);
   isReviewing = signal(false);
 
   ngOnInit(): void {
     this.loadPullRequest();
   }
 
-  private loadPullRequest(): void {
+  loadPullRequest(): void {
+    this.loadError.set(false);
+    this.isLoading.set(true);
     this.github.getPullRequest(this.owner(), this.repo(), this.number()).subscribe({
       next: pr => {
         this.pullRequest.set(pr);
@@ -40,6 +44,7 @@ export class PrDetailComponent implements OnInit {
       },
       error: () => {
         this.isLoading.set(false);
+        this.loadError.set(true);
       }
     });
   }

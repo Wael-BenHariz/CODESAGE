@@ -19,6 +19,8 @@ export class PrListComponent implements OnInit {
 
   pullRequests = signal<PullRequest[]>([]);
   isLoading = signal(true);
+  /** True when the load failed (404/5xx/network) — renders the error state. */
+  loadError = signal(false);
   filter = signal<'all' | 'open' | 'closed'>('all');
 
   get openCount() {
@@ -40,7 +42,9 @@ export class PrListComponent implements OnInit {
     this.loadPullRequests();
   }
 
-  private loadPullRequests(): void {
+  loadPullRequests(): void {
+    this.loadError.set(false);
+    this.isLoading.set(true);
     this.github.getPullRequests(`${this.owner()}/${this.repo()}`).subscribe({
       next: prs => {
         this.pullRequests.set(prs);
@@ -48,6 +52,7 @@ export class PrListComponent implements OnInit {
       },
       error: () => {
         this.isLoading.set(false);
+        this.loadError.set(true);
       }
     });
   }

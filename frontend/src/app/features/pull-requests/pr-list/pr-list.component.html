@@ -25,6 +25,13 @@
       <div class="spinner"></div>
       <span>Loading pull requests...</span>
     </div>
+  } @else if (loadError()) {
+    <!-- Load failure: an explicit error state rather than a misleading
+         "No pull requests found" (F3 pre-check b). -->
+    <div class="error-state" data-testid="pr-list-load-error">
+      <p>Couldn't load pull requests — check the repository or your access.</p>
+      <button class="btn" (click)="loadPullRequests()">Try again</button>
+    </div>
   } @else if (filteredPRs.length === 0) {
     <div class="empty-state">
       <p>No pull requests found.</p>

@@ -84,5 +84,14 @@
         </div>
       </div>
     </ng-container>
+
+    @if (loadError()) {
+      <!-- Load failure (e.g. 404 after an org-scope miss): an explicit
+               error state instead of a blank page (F3 pre-check b). -->
+      <div class="error-state" data-testid="pr-load-error">
+        <p>Couldn't load this pull request — it may not exist or you may not have access.</p>
+        <button class="btn" (click)="loadPullRequest()">Try again</button>
+      </div>
+    }
   }
 </div>

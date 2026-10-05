@@ -3,36 +3,44 @@ Pull Request Routes
 Pull request management and review triggering endpoints.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import User, Repository, PullRequest, Review
+from app.db.models import PullRequest, Repository, Review, User
 from app.schemas.pull_request import (
-    PullRequestResponse,
     PullRequestListResponse,
+    PullRequestResponse,
     PullRequestWithReviews,
 )
 from app.schemas.review import ReviewResponse
 from app.security.dependencies import get_current_user
-from app.security.roles import require_developer
+from app.security.org_access import OrgAccess, require_pull_request_access
+from app.security.roles import ROLE_DEVELOPER, require_developer
 
 router = APIRouter()
+
+# PR-scoped guards (plan §2, flag F3): reads may be satisfied by the
+# PLATFORM_ADMIN membership bypass (F2); the trigger route is a write —
+# NONE first (403) via the guard and via require_developer stacked below,
+# cross-org / unknown id → the same 404 ("Pull request not found").
+_pr_reader = require_pull_request_access(ROLE_DEVELOPER, write=False)
+_pr_member_write = require_pull_request_access(ROLE_DEVELOPER, write=True)
 
 
 @router.get("/repository/{repository_id}", response_model=PullRequestListResponse)
 async def list_pull_requests(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
-    state: Optional[str] = Query(None, description="Filter by state (open, closed, merged)"),
-    author: Optional[str] = Query(None, description="Filter by author login"),
+    state: str | None = Query(
+        None, description="Filter by state (open, closed, merged)"
+    ),
+    author: str | None = Query(None, description="Filter by author login"),
 ):
     """
     List pull requests for a repository.
@@ -46,31 +54,33 @@ async def list_pull_requests(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found",
         )
-    
+
     # Build query
     query = select(PullRequest).where(PullRequest.repository_id == repository_id)
-    count_query = select(func.count(PullRequest.id)).where(PullRequest.repository_id == repository_id)
-    
+    count_query = select(func.count(PullRequest.id)).where(
+        PullRequest.repository_id == repository_id
+    )
+
     # Apply filters
     if state:
         query = query.where(PullRequest.state == state)
         count_query = count_query.where(PullRequest.state == state)
-    
+
     if author:
         query = query.where(PullRequest.author_login == author)
         count_query = count_query.where(PullRequest.author_login == author)
-    
+
     # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
-    
+
     # Get paginated results
     offset = (page - 1) * per_page
     query = query.offset(offset).limit(per_page).order_by(PullRequest.created_at.desc())
-    
+
     result = await db.execute(query)
     prs = result.scalars().all()
-    
+
     return PullRequestListResponse(
         items=[PullRequestResponse.model_validate(pr) for pr in prs],
         total=total,
@@ -83,11 +93,13 @@ async def list_pull_requests(
 @router.get("/{pull_request_id}", response_model=PullRequestWithReviews)
 async def get_pull_request(
     pull_request_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: OrgAccess = Depends(_pr_reader),  # noqa: B008
 ):
     """
     Get pull request by ID with reviews.
+
+    Org-scoped (flag F3): unknown id and cross-org both 404.
     """
     result = await db.execute(
         select(PullRequest)
@@ -95,18 +107,18 @@ async def get_pull_request(
         .where(PullRequest.id == pull_request_id)
     )
     pr = result.scalar_one_or_none()
-    
+
     if not pr:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pull request not found",
         )
-    
+
     # Get latest review
     latest_review = None
     if pr.reviews:
         latest_review = max(pr.reviews, key=lambda r: r.created_at)
-    
+
     response = PullRequestWithReviews(
         id=str(pr.id),
         repository_id=str(pr.repository_id),
@@ -130,19 +142,23 @@ async def get_pull_request(
         latest_review_id=str(latest_review.id) if latest_review else None,
         latest_review_status=latest_review.status if latest_review else None,
     )
-    
+
     return response
 
 
 @router.post("/{pull_request_id}/review")
 async def trigger_review(
     pull_request_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_developer),  # noqa: B008
+    access: OrgAccess = Depends(_pr_member_write),  # noqa: B008
 ):
     """
     Trigger a code review for a pull request.
     The review will be processed asynchronously.
+
+    Org-scoped (flag F3): member of the PR's org required — unknown id
+    and cross-org both 404; NONE is rejected 403 first.
     """
     result = await db.execute(
         select(PullRequest)
@@ -150,20 +166,20 @@ async def trigger_review(
         .where(PullRequest.id == pull_request_id)
     )
     pr = result.scalar_one_or_none()
-    
+
     if not pr:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pull request not found",
         )
-    
+
     # Check if repository is enabled
     if not pr.repository.enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="CodeSage is disabled for this repository",
         )
-    
+
     # Check for pending review
     pending_review = await db.execute(
         select(Review)
@@ -175,9 +191,10 @@ async def trigger_review(
             status_code=status.HTTP_409_CONFLICT,
             detail="A review is already in progress",
         )
-    
+
     # Create new review
     from datetime import datetime, timezone
+
     review = Review(
         pull_request_id=pr.id,
         user_id=current_user.id,
@@ -187,12 +204,13 @@ async def trigger_review(
     db.add(review)
     await db.commit()
     await db.refresh(review)
-    
+
     # Queue the review job (will be picked up by worker)
     try:
         from app.workers.review_queue import queue_review
+
         await queue_review(str(review.id), trigger="manual")
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Update review status to failed if queue fails
         review.status = "failed"
         review.error_message = "Failed to queue review"
@@ -201,7 +219,7 @@ async def trigger_review(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to queue review",
         )
-    
+
     return {
         "review_id": str(review.id),
         "status": "pending",
@@ -212,13 +230,16 @@ async def trigger_review(
 @router.get("/{pull_request_id}/reviews", response_model=list[ReviewResponse])
 async def list_reviews(
     pull_request_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: OrgAccess = Depends(_pr_reader),  # noqa: B008
 ):
     """
     List all reviews for a pull request.
+
+    Org-scoped (flag F3): unknown id and cross-org both 404.
     """
-    # Verify PR exists
+    # Verify PR exists (the guard already 404'd cross-org — this keeps the
+    # original detail string for an unknown id).
     pr_result = await db.execute(
         select(PullRequest).where(PullRequest.id == pull_request_id)
     )
@@ -227,12 +248,12 @@ async def list_reviews(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pull request not found",
         )
-    
+
     result = await db.execute(
         select(Review)
         .where(Review.pull_request_id == pull_request_id)
         .order_by(Review.created_at.desc())
     )
     reviews = result.scalars().all()
-    
+
     return [ReviewResponse.model_validate(r) for r in reviews]

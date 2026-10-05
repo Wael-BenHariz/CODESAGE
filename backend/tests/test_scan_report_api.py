@@ -10,7 +10,14 @@ import uuid
 from conftest import make_keycloak_token
 
 from app.config import settings
-from app.db.models import GitHubInstallation, PullRequest, Repository, Review
+from app.db.models import (
+    GitHubInstallation,
+    Org,
+    OrgMember,
+    PullRequest,
+    Repository,
+    Review,
+)
 from app.services.normalizers import NormalizedFinding, ScanReport, ToolFailure
 from app.services.scan_report_store import persist_scan_report
 
@@ -29,6 +36,12 @@ async def _seed_review(db, user) -> Review:
     )
     db.add(installation)
     await db.flush()
+
+    # F3 retrofit: reads go through the caller's org membership.
+    org = Org(name="test-owner", account_type="User", installation_id=246810)
+    db.add(org)
+    await db.flush()
+    db.add(OrgMember(org_id=org.id, user_id=user.id, role="DEVELOPER"))
 
     repository = Repository(
         installation_id=installation.id,

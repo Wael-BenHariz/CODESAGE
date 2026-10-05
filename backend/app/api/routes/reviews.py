@@ -1,27 +1,49 @@
 """
 Review Routes
 Review status and comment management endpoints.
+
+Org-scoped (plan Step 7 / flag F3): every route here resolves the
+review's org through ``review -> PR -> repo -> installation -> org`` and
+applies the §2 capability model — cross-org callers get the same 404 as
+an unknown id. The staged-posting mutations (summary edit, dismiss,
+restore, post) additionally carry the F2 carve-out: PLATFORM_ADMIN must
+be an org member too.
 """
 
-from typing import Annotated, Optional
+from datetime import datetime, timezone
+from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import Review, ReviewComment, ScanFindingRow, ScanReportRow, User
+from app.db.models import (
+    GitHubInstallation,
+    Org,
+    OrgMember,
+    PullRequest,
+    Repository,
+    Review,
+    ReviewComment,
+    ScanFindingRow,
+    ScanReportRow,
+    User,
+)
 from app.schemas.review import (
-    ReviewResponse,
-    ReviewWithComments,
-    ReviewStatus,
-    ReviewListResponse,
     ReviewCommentResponse,
+    ReviewListResponse,
+    ReviewResponse,
+    ReviewStatus,
+    ReviewWithComments,
+    SummaryUpdate,
 )
 from app.schemas.scan_report import ScanReportResponse
 from app.security.dependencies import get_current_user
-from app.security.roles import require_developer
+from app.security.org_access import ReviewAccess, require_review_access
+from app.security.roles import ROLE_DEVELOPER, ROLE_PLATFORM_ADMIN, require_developer
+from app.services.review_posting import ReviewPostError, post_review_to_github
 from app.services.scan_report_store import finding_from_row
 
 router = APIRouter()
@@ -35,18 +57,36 @@ _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 # name emits a deprecation warning on every call); 422 for older versions.
 _UNPROCESSABLE_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
+# Review-scoped guards (plan §2 capability model, Step 7):
+#   reads            → org member; PLATFORM_ADMIN may bypass membership (F2)
+#   legacy mutations → member (require_developer stacked for parity) with the
+#                      same read-style bypass (§3 retrofit row)
+#   staged mutations → member + effective ≥ DEVELOPER and NO PLATFORM_ADMIN
+#                      bypass (F2 carve-out: summary edit / dismiss / restore /
+#                      post — a platform admin must be an org member to touch
+#                      a customer's PR)
+_review_reader = require_review_access(ROLE_DEVELOPER, write=False)
+_review_member_write = require_review_access(ROLE_DEVELOPER, write=True)
+_review_writer = require_review_access(
+    ROLE_DEVELOPER, write=True, platform_admin_bypass=False
+)
+
 
 @router.get("", response_model=ReviewListResponse)
 async def list_reviews(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
-    status_filter: Optional[str] = Query(None, description="Filter by status"),
-    pull_request_id: Optional[str] = Query(None, description="Filter by pull request"),
+    status_filter: str | None = Query(None, description="Filter by status"),
+    pull_request_id: str | None = Query(None, description="Filter by pull request"),
 ):
     """
-    List all reviews (admin only).
+    List reviews visible to the caller.
+
+    Org-scoped (flag F3): a member sees the reviews of their orgs;
+    PLATFORM_ADMIN sees everything. Reviews whose repo never got an org
+    row are visible to nobody else (see scripts/review_access_precheck.py).
     """
     # Build query
     query = select(Review)
@@ -60,6 +100,28 @@ async def list_reviews(
     if pull_request_id:
         query = query.where(Review.pull_request_id == pull_request_id)
         count_query = count_query.where(Review.pull_request_id == pull_request_id)
+
+    # F3 retrofit: org membership filter — reviews whose PR chains into an
+    # org the caller belongs to. PLATFORM_ADMIN bypasses (F2 read).
+    if current_user.role != ROLE_PLATFORM_ADMIN:
+        member_org_prs = (
+            select(PullRequest.id)
+            .join(Repository, Repository.id == PullRequest.repository_id)
+            .join(
+                GitHubInstallation,
+                GitHubInstallation.id == Repository.installation_id,
+            )
+            .join(Org, Org.installation_id == GitHubInstallation.installation_id)
+            .join(
+                OrgMember,
+                and_(
+                    OrgMember.org_id == Org.id,
+                    OrgMember.user_id == current_user.id,
+                ),
+            )
+        )
+        query = query.where(Review.pull_request_id.in_(member_org_prs))
+        count_query = count_query.where(Review.pull_request_id.in_(member_org_prs))
 
     # Get total count
     total_result = await db.execute(count_query)
@@ -84,24 +146,17 @@ async def list_reviews(
 @router.get("/{review_id}", response_model=ReviewWithComments)
 async def get_review(
     review_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_reader),  # noqa: B008
 ):
     """
     Get review by ID with all comments.
-    """
-    result = await db.execute(
-        select(Review)
-        .options(selectinload(Review.comments))
-        .where(Review.id == review_id)
-    )
-    review = result.scalar_one_or_none()
 
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found",
-        )
+    Org-scoped (flag F3): unknown id and cross-org both 404 with the
+    same detail. ``comments`` carry the ``dismissed*`` flags so the
+    staged posting panel can mark excluded findings.
+    """
+    review = access.review  # already loaded (and authorized) by the guard
 
     return ReviewWithComments(
         id=str(review.id),
@@ -110,6 +165,11 @@ async def get_review(
         status=review.status,
         error_message=review.error_message,
         summary=review.summary,
+        posting_mode=review.posting_mode,
+        posted_at=review.posted_at,
+        edited_summary=review.edited_summary,
+        github_review_id=review.github_review_id,
+        overall_severity=review.overall_severity,
         gemini_model=review.gemini_model,
         tokens_used=review.tokens_used,
         started_at=review.started_at,
@@ -130,6 +190,9 @@ async def get_review(
                 category=c.category,
                 resolved=c.resolved,
                 resolved_at=c.resolved_at,
+                dismissed=c.dismissed,
+                dismissed_by=str(c.dismissed_by) if c.dismissed_by else None,
+                dismissed_at=c.dismissed_at,
                 created_at=c.created_at,
             )
             for c in review.comments
@@ -141,7 +204,7 @@ async def get_review(
 async def get_scan_report(
     review_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    access: Annotated[ReviewAccess, Depends(_review_reader)],
     tool: Annotated[
         str | None,
         Query(description="Only findings from this tool (sonarqube|semgrep)"),
@@ -154,9 +217,10 @@ async def get_scan_report(
     """
     Latest unified static-analysis scan for a review (SonarQube + Semgrep).
 
-    404 for an unknown review or a review that has no scan report yet;
-    422 for filter values outside the vocabulary. ``summary`` always
-    describes the FULL scan — filters only narrow ``findings``.
+    404 for an unknown review, a cross-org review (flag F3) or a review
+    that has no scan report yet; 422 for filter values outside the
+    vocabulary. ``summary`` always describes the FULL scan — filters only
+    narrow ``findings``.
     """
     if tool is not None and tool not in _SCAN_TOOLS:
         raise HTTPException(
@@ -171,13 +235,7 @@ async def get_scan_report(
             ),
         )
 
-    result = await db.execute(select(Review).where(Review.id == review_id))
-    review = result.scalar_one_or_none()
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found",
-        )
+    review = access.review  # loaded and org-checked by the guard (F3)
 
     report_result = await db.execute(
         select(ScanReportRow)
@@ -222,30 +280,23 @@ async def get_scan_report(
 @router.get("/{review_id}/status", response_model=ReviewStatus)
 async def get_review_status(
     review_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_reader),  # noqa: B008
 ):
     """
     Get review processing status.
     Useful for polling review progress.
 
-    Authenticated like ``GET /reviews/{review_id}``: any logged-in user may
-    read a review (reviews are shared across users — no ownership filter).
+    Org-scoped like ``GET /reviews/{review_id}`` (flag F3): unknown id
+    and cross-org both 404 with the same detail.
     """
-    result = await db.execute(select(Review).where(Review.id == review_id))
-    review = result.scalar_one_or_none()
-
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found",
-        )
+    review = access.review  # loaded and org-checked by the guard
 
     # Calculate progress
     progress = None
     if review.status == "processing" and review.started_at:
         # Estimate progress based on time (placeholder)
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timezone
 
         elapsed = (datetime.now(timezone.utc) - review.started_at).total_seconds()
         progress = min(95.0, elapsed / 30 * 100)  # Assume 30 seconds for 100%
@@ -263,20 +314,17 @@ async def get_review_status(
 @router.post("/{review_id}/retry")
 async def retry_review(
     review_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_developer),  # noqa: B008
+    access: ReviewAccess = Depends(_review_member_write),  # noqa: B008
 ):
     """
     Retry a failed review.
-    """
-    result = await db.execute(select(Review).where(Review.id == review_id))
-    review = result.scalar_one_or_none()
 
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found",
-        )
+    Org-scoped (flag F3): unknown id and cross-org both 404; NONE is
+    rejected 403 by ``require_developer`` first.
+    """
+    review = access.review  # loaded and org-checked by the guard
 
     if review.status not in ["failed"]:
         raise HTTPException(
@@ -297,7 +345,7 @@ async def retry_review(
         from app.workers.review_queue import queue_review
 
         await queue_review(review_id, trigger="manual")
-    except Exception:
+    except Exception:  # noqa: BLE001
         review.status = "failed"
         review.error_message = "Failed to queue review"
         await db.commit()
@@ -316,20 +364,16 @@ async def retry_review(
 @router.delete("/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_review(
     review_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_developer),  # noqa: B008
+    access: ReviewAccess = Depends(_review_member_write),  # noqa: B008
 ):
     """
     Delete a review and its comments.
-    """
-    result = await db.execute(select(Review).where(Review.id == review_id))
-    review = result.scalar_one_or_none()
 
-    if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found",
-        )
+    Org-scoped (flag F3): unknown id and cross-org both 404.
+    """
+    review = access.review  # loaded and org-checked by the guard
 
     await db.delete(review)
     await db.commit()
@@ -339,11 +383,15 @@ async def delete_review(
 async def resolve_comment(
     review_id: str,
     comment_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_developer),  # noqa: B008
+    access: ReviewAccess = Depends(_review_member_write),  # noqa: B008
 ):
     """
     Mark a review comment as resolved.
+
+    Org-scoped (flag F3): a cross-org caller 404s on the review guard
+    *before* any comment lookup — an existing comment is never revealed.
     """
     result = await db.execute(
         select(ReviewComment)
@@ -365,3 +413,204 @@ async def resolve_comment(
     await db.commit()
 
     return ReviewCommentResponse.model_validate(comment)
+
+
+# --- Staged posting (plan Step 7) --------------------------------------------
+# Member + effective >= DEVELOPER on all four, and NO PLATFORM_ADMIN
+# bypass (F2 carve-out): a platform admin must be an org member to edit,
+# trim or post a customer's review.
+
+
+@router.patch("/{review_id}/summary")
+async def update_review_summary(
+    review_id: str,
+    payload: SummaryUpdate,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_writer),  # noqa: B008
+):
+    """
+    Edit the staged summary (``reviews.edited_summary``, plan Q3).
+
+    Allowed only while ``posted_at IS NULL`` — once GitHub has the body
+    it is read-only (409). Over-cap payloads are rejected 422 by the
+    schema (``EDITED_SUMMARY_MAX_CHARS``).
+    """
+    review = access.review
+    if review.posted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review already posted to GitHub; the summary is read-only",
+        )
+
+    review.edited_summary = payload.summary
+    await db.commit()
+
+    return {
+        "review_id": str(review.id),
+        "summary": review.summary,
+        "edited_summary": review.edited_summary,
+        "status": review.status,
+        "posted_at": review.posted_at.isoformat() if review.posted_at else None,
+    }
+
+
+async def _set_comment_dismissed(
+    db: AsyncSession,
+    access: ReviewAccess,
+    comment_id: str,
+    *,
+    dismissed: bool,
+) -> ReviewComment:
+    """Shared body of dismiss/restore (idempotent state set, not a toggle)."""
+    result = await db.execute(
+        select(ReviewComment)
+        .where(ReviewComment.id == comment_id)
+        .where(ReviewComment.review_id == access.review.id)
+    )
+    comment = result.scalar_one_or_none()
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comment not found",
+        )
+
+    if dismissed:
+        comment.dismissed = True
+        comment.dismissed_by = access.user.id
+        comment.dismissed_at = datetime.now(timezone.utc)
+    else:
+        comment.dismissed = False
+        comment.dismissed_by = None
+        comment.dismissed_at = None
+    await db.commit()
+    return comment
+
+
+@router.patch("/{review_id}/comments/{comment_id}/dismiss")
+async def dismiss_comment(
+    review_id: str,
+    comment_id: str,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_writer),  # noqa: B008
+):
+    """
+    Dismiss a finding: it is excluded from the staged ``## Findings``
+    body (plan Q3) but stays in the review for auditability.
+    """
+    comment = await _set_comment_dismissed(db, access, comment_id, dismissed=True)
+    return ReviewCommentResponse.model_validate(comment)
+
+
+@router.patch("/{review_id}/comments/{comment_id}/restore")
+async def restore_comment(
+    review_id: str,
+    comment_id: str,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_writer),  # noqa: B008
+):
+    """Undo a dismissal — the finding is back in the staged Findings body."""
+    comment = await _set_comment_dismissed(db, access, comment_id, dismissed=False)
+    return ReviewCommentResponse.model_validate(comment)
+
+
+@router.post("/{review_id}/post")
+async def post_review_now(
+    review_id: str,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_writer),  # noqa: B008
+):
+    """
+    Post a staged review to GitHub now (plan Step 7).
+
+    Race-safe: the row is re-read under ``FOR UPDATE``, so a double click
+    serializes — the second request observes ``posted_at`` and gets 409.
+    Preconditions (checked inside the lock): ``posting_mode == "staged"``,
+    not yet posted, ``status == "ready_to_post"`` — each a 409. On a
+    GitHub failure nothing is posted (``posted_at`` stays NULL), the
+    error detail is persisted to ``error_message`` and the lock is
+    released before answering 502, so the call is retryable.
+    """
+    # populate_existing: the guard already loaded this row into the
+    # identity map (plain SELECT) — without it the FOR UPDATE statement
+    # would fetch the fresh row but hand back the STALE instance, letting
+    # a concurrent second request pass the posted_at pre-check.
+    result = await db.execute(
+        select(Review)
+        .where(Review.id == review_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    review = result.scalar_one_or_none()
+    if review is None:  # deleted between guard and lock
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found",
+        )
+
+    if review.posting_mode != "staged":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Review is not staged for manual posting "
+                f"(posting_mode={review.posting_mode!r}); "
+                "the worker posts it automatically"
+            ),
+        )
+    if review.posted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review already posted to GitHub",
+        )
+    if review.status != "ready_to_post":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Review is not ready to post (status={review.status!r}); "
+                "wait for the worker to finish"
+            ),
+        )
+
+    try:
+        github_review_id = await post_review_to_github(db, review)
+    except ReviewPostError as exc:
+        detail = (
+            f"GitHub post failed ({exc.status_code}): {exc.detail[:800]} — "
+            "nothing was posted, retry after fixing the cause"
+        )
+        review.error_message = detail
+        await db.commit()  # persists the stored detail and releases the lock
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+    except httpx.HTTPError as exc:
+        detail = (
+            f"GitHub post failed ({type(exc).__name__}: {exc}) — "
+            "nothing was posted, retry after fixing the cause"
+        )
+        review.error_message = detail
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
+
+    posted_at = datetime.now(timezone.utc)
+    updated = await db.execute(
+        update(Review)
+        .where(Review.id == review.id, Review.posted_at.is_(None))
+        .values(
+            posted_at=posted_at,
+            github_review_id=github_review_id,
+            error_message=None,
+        )
+        .returning(Review.id)
+    )
+    if updated.scalar_one_or_none() is None:  # lost the race after the lock
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review already posted to GitHub",
+        )
+    await db.commit()
+
+    return {
+        "review_id": str(review_id),
+        "github_review_id": github_review_id,
+        "posted_at": posted_at.isoformat(),
+        "message": "Review posted to GitHub",
+    }
