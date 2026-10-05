@@ -23,7 +23,15 @@ from app.services.scan_report_store import persist_scan_report
 
 API = settings.API_V1_PREFIX
 
-_HEADERS = {"Authorization": f"Bearer {make_keycloak_token()}"}
+
+def _headers() -> dict[str, str]:
+    """Fresh bearer per call.
+
+    Minting at import time (a module-level ``_HEADERS``) baked the token's
+    5-minute ``exp`` to collection time — the file runs last in a full
+    suite and started failing with 401 once the suite crossed ~5 minutes.
+    """
+    return {"Authorization": f"Bearer {make_keycloak_token()}"}
 
 
 async def _seed_review(db, user) -> Review:
@@ -126,7 +134,7 @@ async def test_report_without_token_401(client, db, user):
 
 async def test_unknown_review_404(client):
     resp = await client.get(
-        f"{API}/reviews/{uuid.uuid4()}/scan-report", headers=_HEADERS
+        f"{API}/reviews/{uuid.uuid4()}/scan-report", headers=_headers()
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Review not found"
@@ -134,7 +142,9 @@ async def test_unknown_review_404(client):
 
 async def test_review_without_report_404(client, db, user):
     review = await _seed_review(db, user)
-    resp = await client.get(f"{API}/reviews/{review.id}/scan-report", headers=_HEADERS)
+    resp = await client.get(
+        f"{API}/reviews/{review.id}/scan-report", headers=_headers()
+    )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "No scan report for this review"
 
@@ -143,7 +153,9 @@ async def test_full_report_strongest_first(client, db, user):
     review = await _seed_review(db, user)
     await persist_scan_report(db, review.id, _report("scan-full"))
 
-    resp = await client.get(f"{API}/reviews/{review.id}/scan-report", headers=_HEADERS)
+    resp = await client.get(
+        f"{API}/reviews/{review.id}/scan-report", headers=_headers()
+    )
 
     assert resp.status_code == 200
     body = resp.json()
@@ -172,7 +184,7 @@ async def test_tool_filter_narrows_findings_not_summary(client, db, user):
 
     resp = await client.get(
         f"{API}/reviews/{review.id}/scan-report?tool=semgrep",
-        headers=_HEADERS,
+        headers=_headers(),
     )
 
     assert resp.status_code == 200
@@ -189,7 +201,7 @@ async def test_severity_filter(client, db, user):
 
     resp = await client.get(
         f"{API}/reviews/{review.id}/scan-report?severity=medium",
-        headers=_HEADERS,
+        headers=_headers(),
     )
 
     assert resp.status_code == 200
@@ -204,7 +216,7 @@ async def test_combined_filters(client, db, user):
 
     resp = await client.get(
         f"{API}/reviews/{review.id}/scan-report?tool=semgrep&severity=info",
-        headers=_HEADERS,
+        headers=_headers(),
     )
 
     assert resp.status_code == 200
@@ -219,14 +231,14 @@ async def test_invalid_filters_422(client, db, user):
 
     resp = await client.get(
         f"{API}/reviews/{review.id}/scan-report?tool=clang-tidy",
-        headers=_HEADERS,
+        headers=_headers(),
     )
     assert resp.status_code == 422
     assert "Unknown tool" in resp.json()["detail"]
 
     resp = await client.get(
         f"{API}/reviews/{review.id}/scan-report?severity=catastrophic",
-        headers=_HEADERS,
+        headers=_headers(),
     )
     assert resp.status_code == 422
     assert "Unknown severity" in resp.json()["detail"]
@@ -237,7 +249,9 @@ async def test_latest_report_wins(client, db, user):
     await persist_scan_report(db, review.id, _report("scan-first"))
     await persist_scan_report(db, review.id, _report("scan-second"))
 
-    resp = await client.get(f"{API}/reviews/{review.id}/scan-report", headers=_HEADERS)
+    resp = await client.get(
+        f"{API}/reviews/{review.id}/scan-report", headers=_headers()
+    )
 
     assert resp.status_code == 200
     assert resp.json()["scan_id"] == "scan-second"

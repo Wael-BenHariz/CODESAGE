@@ -9,6 +9,7 @@ from app.api.routes import (
     auth,
     github_repos,
     health,
+    invitations,
     orgs,
     platform,
     pull_requests,
@@ -37,6 +38,12 @@ api_router.include_router(reviews.router, prefix="/reviews", tags=["Reviews"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(settings.router, prefix="/settings", tags=["LLM Settings"])
 api_router.include_router(orgs.router, prefix="/orgs", tags=["Organizations"])
+# Invitations: the org-nested half rides the /orgs prefix; the token-keyed
+# half (public preview + authenticated accept) mounts at /invitations.
+api_router.include_router(invitations.org_router, prefix="/orgs", tags=["Invitations"])
+api_router.include_router(
+    invitations.router, prefix="/invitations", tags=["Invitations"]
+)
 api_router.include_router(
     platform.router, prefix="/platform", tags=["Platform Settings"]
 )

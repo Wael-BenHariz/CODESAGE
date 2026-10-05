@@ -33,6 +33,11 @@ _UNAUTHENTICATED_OK: set[tuple[str, str]] = {
     # Redirect sink: validates a state JWT (STATE_TOKEN_SECRET) and
     # redirects to the frontend — never returns data to the caller.
     ("GET", f"{API}/auth/github/app/callback"),
+    # Invite preview (plan Step 11): the invitee has no session yet; the
+    # handler returns {org_name, role, email_masked} for a pending token
+    # and ONE identical 404 for invalid/expired/revoked/used — no
+    # enumeration of tokens or addresses.
+    ("GET", f"{API}/invitations/{{token}}"),
     # Validates its Bearer token in the handler itself (401 without a
     # valid one) — test_auth_logout.py pins that; no get_current_user
     # dependency exists for the walker to see.

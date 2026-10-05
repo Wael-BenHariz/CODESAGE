@@ -70,6 +70,21 @@ class Settings(BaseSettings):
     REPO_TENANT_INTERNAL_TOKEN: str = "dev-token"
     REPO_TENANT_TIMEOUT_SECONDS: float = 3.0
 
+    # Invitation mail (plan Step 11 / N4): pluggable MailSender.
+    # "console" is the v0.3.0 default — logs subject + body (invite link
+    # included) and never sends. "smtp" delivers through the SMTP_*
+    # settings below; none of them are required until MAIL_BACKEND=smtp.
+    MAIL_BACKEND: str = Field(
+        default="console",
+        description="Invitation mail sender: console (log only) or smtp",
+    )
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@codesage.local"
+    SMTP_TLS: bool = True
+
     # GitHub OAuth
     GITHUB_CLIENT_ID: str = Field(..., description="GitHub OAuth App Client ID")
     GITHUB_CLIENT_SECRET: str = Field(..., description="GitHub OAuth App Client Secret")
@@ -209,6 +224,17 @@ class Settings(BaseSettings):
     def validate_secret_key(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long")
+        return v
+
+    @field_validator("MAIL_BACKEND")
+    @classmethod
+    def validate_mail_backend(cls, v: str) -> str:
+        """Fail startup fast on an unknown sender instead of at first invite."""
+        allowed = {"console", "smtp"}
+        if v not in allowed:
+            raise ValueError(
+                f"MAIL_BACKEND must be one of {sorted(allowed)}, got {v!r}"
+            )
         return v
 
     @field_validator("GITHUB_APP_PRIVATE_KEY")
