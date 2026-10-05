@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { ReviewPanelComponent } from './review-panel.component';
+import { ApiError } from '../../../core/services/api.service';
 import { GithubService } from '../../../core/services/github.service';
 import { ReviewComment, ReviewDetail, ReviewSummary } from '../../../core/models/review.model';
 
@@ -63,13 +64,36 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     github = jasmine.createSpyObj<GithubService>('GithubService', [
       'getPullRequestReviews',
       'getReviewDetail',
-      'triggerReview'
+      'triggerReview',
+      'postReview',
+      'updateReviewSummary',
+      'dismissReviewComment',
+      'restoreReviewComment'
     ]);
     github.getPullRequestReviews.and.returnValue(of([]));
     github.getReviewDetail.and.returnValue(of(detail()));
     github.triggerReview.and.returnValue(
       of({ review_id: 'rev-1', status: 'pending', message: 'queued' })
     );
+    github.postReview.and.returnValue(
+      of({
+        review_id: 'rev-1',
+        github_review_id: 987,
+        posted_at: '2026-01-01T00:06:00Z',
+        message: 'Review posted to GitHub'
+      })
+    );
+    github.updateReviewSummary.and.returnValue(
+      of({
+        review_id: 'rev-1',
+        summary: 'Original summary.',
+        edited_summary: null,
+        status: 'ready_to_post',
+        posted_at: null
+      })
+    );
+    github.dismissReviewComment.and.returnValue(of(comment()));
+    github.restoreReviewComment.and.returnValue(of(comment({ dismissed: false })));
 
     TestBed.configureTestingModule({
       imports: [ReviewPanelComponent],
@@ -171,9 +195,9 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     );
   });
 
-  // --- ready_to_post (badge only — controls come in Step 8) ------------------
+  // --- ready_to_post (staged controls — Step 8) -------------------------------
 
-  it('shows the ready-to-post badge with no post/dismiss controls yet', () => {
+  it('shows the ready-to-post badge with staged controls (Step 8)', () => {
     const comments = [comment({ severity: 'error', body: 'SQL injection risk' })];
     github.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
     github.getReviewDetail.and.returnValue(of(detail({ status: 'ready_to_post' }, comments)));
@@ -182,9 +206,12 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     expect(testid('review-ready-badge')).not.toBeNull();
     expect(testid('review-summary')?.textContent).toContain('Original summary.');
     expect(testid('review-gh-link')).toBeNull();
-    // Step 8 owns the staged-posting controls: the panel has no buttons here.
-    expect(el().querySelectorAll('button').length).toBe(0);
-    // viewer_role is exposed by GET /reviews/{id} for Step 8's gating.
+    // Step 8: banner + edit/dismiss controls for a DEVELOPER+ viewer…
+    expect(testid('staged-banner')).not.toBeNull();
+    expect(testid('open-post')).not.toBeNull();
+    expect(testid('edit-summary')).not.toBeNull();
+    expect(testid('dismiss-finding')).not.toBeNull();
+    // viewer_role is exposed by GET /reviews/{id} for the gating.
     expect(fixture.componentInstance.detail()?.viewer_role).toBe('DEVELOPER');
   });
 
@@ -207,7 +234,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     );
     create();
 
-    expect(testid('review-status')?.textContent).toContain('completed');
+    expect(testid('review-status')?.textContent).toContain('posted');
     expect(testid('review-posted-at')).not.toBeNull();
     expect(testid('review-posted-at')?.textContent?.trim().length).toBeGreaterThan(0);
     const link = testid('review-gh-link') as HTMLAnchorElement;
@@ -380,5 +407,245 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
     expect(testid('review-panel-error')).not.toBeNull();
     expect(testid('review-panel-running')).toBeNull();
+  });
+
+  // --- staged posting controls (plan Step 8) --------------------------------
+
+  describe('staged posting controls (plan Step 8)', () => {
+    const baseComment = (): ReviewComment =>
+      comment({
+        id: 'c-1',
+        severity: 'error',
+        body: 'SQL injection risk',
+        file_path: 'src/a.py',
+        line_number: 5
+      });
+
+    function createReady(
+      over: Partial<ReviewDetail> = {},
+      comments: ReviewComment[] = [baseComment()]
+    ): void {
+      github.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
+      github.getReviewDetail.and.returnValue(
+        of(detail({ status: 'ready_to_post', ...over }, comments))
+      );
+      create();
+    }
+
+    it('opens a confirmation dialog listing findings and the dismissed count', () => {
+      createReady({}, [
+        baseComment(),
+        comment({
+          id: 'c-2',
+          severity: 'info',
+          body: 'Nit',
+          file_path: 'src/b.py',
+          line_number: 9,
+          dismissed: true
+        })
+      ]);
+      expect(testid('staged-banner')).not.toBeNull();
+
+      (testid('open-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(testid('post-dialog')).not.toBeNull();
+      expect(github.postReview).not.toHaveBeenCalled(); // confirming is required
+      const findings = el().querySelectorAll('[data-testid="dialog-finding"]');
+      expect(findings.length).toBe(1); // dismissed findings are excluded
+      expect(findings[0].textContent).toContain('src/a.py:5');
+      expect(testid('dialog-dismissed')?.textContent).toContain('1 dismissed');
+
+      (testid('cancel-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(testid('post-dialog')).toBeNull();
+    });
+
+    it('posts after confirmation and becomes read-only', () => {
+      createReady();
+      (testid('open-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      // The POST triggers a re-fetch — serve the now-posted review.
+      github.getPullRequestReviews.and.returnValue(
+        of([
+          summary({
+            status: 'completed',
+            posted_at: '2026-01-01T00:06:00Z',
+            github_review_id: 777
+          })
+        ])
+      );
+      github.getReviewDetail.and.returnValue(
+        of(
+          detail({
+            status: 'completed',
+            posted_at: '2026-01-01T00:06:00Z',
+            github_review_id: 777
+          })
+        )
+      );
+
+      (testid('confirm-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(github.postReview).toHaveBeenCalledWith('rev-1');
+      expect(testid('post-dialog')).toBeNull();
+      expect(testid('review-status')?.textContent).toContain('posted');
+      expect(testid('review-gh-link')).not.toBeNull();
+      // Controls are read-only after posting.
+      expect(testid('staged-banner')).toBeNull();
+      expect(testid('edit-summary')).toBeNull();
+      expect(testid('dismiss-finding')).toBeNull();
+    });
+
+    it('keeps the dialog open and shows the error when posting fails', () => {
+      createReady();
+      github.postReview.and.returnValue(
+        throwError(
+          () => new ApiError('GitHub post failed (403): bad credentials', 403, 'bad credentials')
+        )
+      );
+      (testid('open-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      (testid('confirm-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(testid('post-dialog')).not.toBeNull();
+      expect(testid('post-error')?.textContent).toContain('GitHub post failed (403)');
+      expect(testid('api-error')).toBeNull(); // the dialog owns the error while open
+
+      // Retryable: a second attempt succeeds.
+      github.postReview.and.returnValue(
+        of({
+          review_id: 'rev-1',
+          github_review_id: 987,
+          posted_at: '2026-01-01T00:07:00Z',
+          message: 'ok'
+        })
+      );
+      github.getPullRequestReviews.and.returnValue(
+        of([
+          summary({
+            status: 'completed',
+            posted_at: '2026-01-01T00:07:00Z',
+            github_review_id: 987
+          })
+        ])
+      );
+      github.getReviewDetail.and.returnValue(
+        of(
+          detail({
+            status: 'completed',
+            posted_at: '2026-01-01T00:07:00Z',
+            github_review_id: 987
+          })
+        )
+      );
+      (testid('confirm-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(github.postReview).toHaveBeenCalledTimes(2);
+      expect(testid('post-dialog')).toBeNull();
+      expect(testid('review-status')?.textContent).toContain('posted');
+    });
+
+    it('gates every control off for a NONE viewer but keeps the content', () => {
+      createReady({ viewer_role: 'NONE' });
+
+      expect(testid('staged-banner')).toBeNull();
+      expect(testid('open-post')).toBeNull();
+      expect(testid('edit-summary')).toBeNull();
+      expect(testid('dismiss-finding')).toBeNull();
+      expect(testid('review-summary')).not.toBeNull(); // read-only, not hidden
+    });
+
+    it('edits the summary: prefill, dirty gating, save', () => {
+      createReady();
+      (testid('edit-summary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      const textarea = testid('summary-textarea') as HTMLTextAreaElement;
+      expect(textarea.value).toBe('Original summary.');
+      expect(textarea.getAttribute('maxlength')).toBe('60000'); // client-side cap
+      expect((testid('save-summary') as HTMLButtonElement).disabled).toBeTrue(); // clean
+
+      textarea.value = 'Edited by hand.';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(testid('summary-dirty')).not.toBeNull();
+      expect((testid('save-summary') as HTMLButtonElement).disabled).toBeFalse();
+
+      github.updateReviewSummary.and.returnValue(
+        of({
+          review_id: 'rev-1',
+          summary: 'Original summary.',
+          edited_summary: 'Edited by hand.',
+          status: 'ready_to_post',
+          posted_at: null
+        })
+      );
+      (testid('save-summary') as HTMLButtonElement).click();
+
+      expect(github.updateReviewSummary).toHaveBeenCalledWith('rev-1', 'Edited by hand.');
+      fixture.detectChanges();
+      expect(testid('summary-textarea')).toBeNull(); // editor closed
+      expect(testid('review-summary')?.textContent).toContain('Edited by hand.');
+    });
+
+    it('warns before discarding a dirty summary edit', () => {
+      createReady();
+      (testid('edit-summary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const textarea = testid('summary-textarea') as HTMLTextAreaElement;
+      textarea.value = 'dirty';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      const confirmSpy = spyOn(window, 'confirm').and.returnValue(false);
+      (testid('cancel-summary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(testid('summary-textarea')).not.toBeNull(); // kept editing
+
+      confirmSpy.and.returnValue(true);
+      (testid('cancel-summary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(testid('summary-textarea')).toBeNull(); // discarded
+    });
+
+    it('dismisses a finding into the muted state and restores it back', () => {
+      createReady();
+      github.dismissReviewComment.and.returnValue(of({ ...baseComment(), dismissed: true }));
+      (testid('dismiss-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(github.dismissReviewComment).toHaveBeenCalledWith('rev-1', 'c-1');
+      expect(testid('comment-dismissed')).not.toBeNull();
+      expect(testid('dismiss-finding')).toBeNull();
+      expect(testid('restore-finding')).not.toBeNull();
+
+      github.restoreReviewComment.and.returnValue(of(baseComment()));
+      (testid('restore-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(github.restoreReviewComment).toHaveBeenCalledWith('rev-1', 'c-1');
+      expect(testid('comment-dismissed')).toBeNull();
+      expect(testid('dismiss-finding')).not.toBeNull();
+      expect(testid('restore-finding')).toBeNull();
+    });
+
+    it('surfaces a dismiss API failure visibly and leaves the button usable', () => {
+      createReady();
+      github.dismissReviewComment.and.returnValue(
+        throwError(() => new ApiError('Comment not found', 404, 'Comment not found'))
+      );
+      (testid('dismiss-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(testid('api-error')?.textContent).toContain('Comment not found');
+      expect(testid('comment-dismissed')).toBeNull(); // state did not change
+      expect((testid('dismiss-finding') as HTMLButtonElement).disabled).toBeFalse();
+    });
   });
 });

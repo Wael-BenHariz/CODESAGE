@@ -4,14 +4,29 @@
     @if (state() === 'detail' && !isRunning() && !isFailed()) {
       <span
         class="status-badge"
-        [class.ready]="runStatus() === 'ready_to_post'"
+        [class.ready]="!isPosted() && runStatus() === 'ready_to_post'"
         [class.posted]="isPosted()"
         data-testid="review-status"
       >
-        {{ runStatus() === 'ready_to_post' ? 'ready to post' : 'completed' }}
+        {{
+          isPosted() ? 'posted' : runStatus() === 'ready_to_post' ? 'ready to post' : 'completed'
+        }}
       </span>
     }
   </div>
+
+  <!-- Staged banner: nothing reaches GitHub until posted (plan Step 8). -->
+  @if (canEdit()) {
+    <div class="staged-banner" data-testid="staged-banner">
+      <span>Staged — this review is not on GitHub yet.</span>
+      <button class="btn-small primary" data-testid="open-post" (click)="openPostDialog()">
+        Post to GitHub
+      </button>
+    </div>
+  }
+  @if (actionError() && !postDialogOpen()) {
+    <div class="api-error" role="alert" data-testid="api-error">{{ actionError() }}</div>
+  }
 
   @if (state() === 'loading') {
     <div class="panel-state" data-testid="review-panel-loading">
@@ -79,9 +94,60 @@
         }
       </div>
 
-      @if (summaryText()) {
-        <p class="review-summary" data-testid="review-summary">{{ summaryText() }}</p>
-      }
+      <div class="summary-block">
+        @if (!editingSummary()) {
+          @if (summaryText()) {
+            <p class="review-summary" data-testid="review-summary">{{ summaryText() }}</p>
+          }
+          @if (canEdit()) {
+            <button
+              class="btn-small summary-edit-btn"
+              data-testid="edit-summary"
+              (click)="startEditSummary()"
+            >
+              Edit summary
+            </button>
+          }
+        } @else {
+          <label class="summary-label" for="review-summary-editor">Summary</label>
+          <textarea
+            id="review-summary-editor"
+            class="summary-editor"
+            data-testid="summary-textarea"
+            rows="6"
+            [value]="summaryDraft()"
+            (input)="onSummaryInput($event)"
+            [attr.maxlength]="summaryMaxChars"
+            [disabled]="savingSummary()"
+          ></textarea>
+          <div class="summary-meta">
+            <span data-testid="summary-counter"
+              >{{ summaryDraft().length }} / {{ summaryMaxChars }}</span
+            >
+            @if (summaryDirty()) {
+              <span class="dirty" data-testid="summary-dirty">unsaved changes</span>
+            }
+          </div>
+          <div class="summary-actions">
+            <button
+              class="btn-small primary"
+              data-testid="save-summary"
+              [disabled]="!summaryDirty() || savingSummary()"
+              (click)="saveSummary()"
+            >
+              {{ savingSummary() ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              class="btn-small"
+              data-testid="cancel-summary"
+              [disabled]="savingSummary()"
+              (click)="cancelEditSummary()"
+            >
+              Cancel
+            </button>
+          </div>
+        }
+      </div>
 
       @if (fileGroups().length === 0) {
         <div class="panel-empty" data-testid="review-panel-empty">
@@ -117,6 +183,29 @@
                       @if (comment.dismissed) {
                         <span class="dismissed-tag" data-testid="comment-dismissed">dismissed</span>
                       }
+                      @if (canEdit()) {
+                        <span class="comment-actions">
+                          @if (comment.dismissed) {
+                            <button
+                              class="btn-mini"
+                              data-testid="restore-finding"
+                              [disabled]="pendingCommentId() === comment.id"
+                              (click)="restoreFinding(comment)"
+                            >
+                              {{ pendingCommentId() === comment.id ? 'Restoring…' : 'Restore' }}
+                            </button>
+                          } @else {
+                            <button
+                              class="btn-mini"
+                              data-testid="dismiss-finding"
+                              [disabled]="pendingCommentId() === comment.id"
+                              (click)="dismissFinding(comment)"
+                            >
+                              {{ pendingCommentId() === comment.id ? 'Dismissing…' : 'Dismiss' }}
+                            </button>
+                          }
+                        </span>
+                      }
                     </div>
                     <!-- Interpolation escapes HTML — no innerHTML anywhere (Q3). -->
                     <p class="comment-body">{{ comment.body }}</p>
@@ -147,5 +236,57 @@
         </div>
       }
     }
+  }
+  <!-- Post confirmation: exactly what will go to GitHub (plan Step 8). -->
+  @if (postDialogOpen()) {
+    <div
+      class="post-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Post review to GitHub"
+      data-testid="post-dialog"
+    >
+      <h4>Post review to GitHub?</h4>
+      <p class="dialog-sub">
+        {{ pendingFindings().length }} finding(s) will be posted as one summary review on pull
+        request #{{ number() }}.
+      </p>
+      <div class="dialog-findings" data-testid="dialog-findings">
+        <ul>
+          @for (finding of pendingFindings(); track finding.id) {
+            <li data-testid="dialog-finding">
+              <span class="sev-mini" [ngClass]="'sev-' + finding.severity.toLowerCase()">
+                {{ finding.severity }}
+              </span>
+              <span class="dialog-finding-loc">{{ locationLabel(finding) }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+      <p class="dialog-dismissed" data-testid="dialog-dismissed">
+        {{ dismissedCount() }} dismissed finding(s) will be excluded.
+      </p>
+      @if (actionError()) {
+        <p class="dialog-error" data-testid="post-error">{{ actionError() }}</p>
+      }
+      <div class="dialog-actions">
+        <button
+          class="btn-small"
+          data-testid="cancel-post"
+          [disabled]="posting()"
+          (click)="closePostDialog()"
+        >
+          Cancel
+        </button>
+        <button
+          class="btn-small primary"
+          data-testid="confirm-post"
+          [disabled]="posting()"
+          (click)="confirmPost()"
+        >
+          {{ posting() ? 'Posting…' : 'Post to GitHub' }}
+        </button>
+      </div>
+    </div>
   }
 </section>

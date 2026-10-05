@@ -3,7 +3,7 @@ import { ApiService } from './api.service';
 import { Observable, map, tap } from 'rxjs';
 import { Repository, RepositoryStats } from '../models/repository.model';
 import { PullRequest } from '../models/pull-request.model';
-import { ReviewDetail, ReviewSummary } from '../models/review.model';
+import { ReviewComment, ReviewDetail, ReviewSummary } from '../models/review.model';
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -166,5 +166,43 @@ export class GithubService {
   /** Full review detail: summary + comments with enrichment and viewer_role. */
   getReviewDetail(reviewId: string): Observable<ReviewDetail> {
     return this.api.get<ReviewDetail>(`/reviews/${reviewId}`);
+  }
+
+  // --- Staged posting controls (plan Step 8) --------------------------------
+  // All four: member + effective role >= DEVELOPER on the backend side;
+  // the panel gates them on viewer_role and review state (cosmetic).
+
+  /** Save an edited staged summary (`edited_summary`; unposted reviews only). */
+  updateReviewSummary(
+    reviewId: string,
+    summary: string
+  ): Observable<{
+    review_id: string;
+    summary: string | null;
+    edited_summary: string | null;
+    status: string;
+    posted_at: string | null;
+  }> {
+    return this.api.patch(`/reviews/${reviewId}/summary`, { summary });
+  }
+
+  /** Dismiss a finding — excluded from the posted Findings body. */
+  dismissReviewComment(reviewId: string, commentId: string): Observable<ReviewComment> {
+    return this.api.patch(`/reviews/${reviewId}/comments/${commentId}/dismiss`, {});
+  }
+
+  /** Undo a dismissal — the finding returns to the staged body. */
+  restoreReviewComment(reviewId: string, commentId: string): Observable<ReviewComment> {
+    return this.api.patch(`/reviews/${reviewId}/comments/${commentId}/restore`, {});
+  }
+
+  /** Post the staged review to GitHub now (409 = already posted / not ready). */
+  postReview(reviewId: string): Observable<{
+    review_id: string;
+    github_review_id: number;
+    posted_at: string;
+    message: string;
+  }> {
+    return this.api.post(`/reviews/${reviewId}/post`, {});
   }
 }

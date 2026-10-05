@@ -103,6 +103,219 @@
     font-size: 12px;
   }
 
+  // --- Step 8: staged posting controls ---------------------------------------
+
+  .staged-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px dashed #ecc94b;
+    border-radius: 4px;
+    background: rgba(236, 201, 75, 0.06);
+    font-size: 12px;
+    color: #ecc94b;
+  }
+
+  .api-error {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #f56565;
+    border-radius: 4px;
+    background: rgba(245, 101, 101, 0.08);
+    color: #f56565;
+    font-size: 12px;
+    word-break: break-word;
+  }
+
+  .summary-block {
+    margin-bottom: 8px;
+
+    .summary-edit-btn {
+      margin-top: 4px;
+    }
+
+    .summary-label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a0aec0;
+      margin-bottom: 6px;
+    }
+
+    .summary-editor {
+      width: 100%;
+      box-sizing: border-box;
+      background: #050505;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      color: #e5e5e5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 10px;
+      resize: vertical;
+
+      &:focus {
+        outline: none;
+        border-color: #00e87b;
+      }
+
+      &:disabled {
+        opacity: 0.6;
+      }
+    }
+
+    .summary-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      color: #718096;
+      margin-top: 4px;
+
+      .dirty {
+        color: #ecc94b;
+      }
+    }
+
+    .summary-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+  }
+
+  .comment-actions {
+    margin-left: auto;
+  }
+
+  .btn-mini {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid #2a2a2a;
+    background: transparent;
+    color: #a0aec0;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      border-color: #00e87b;
+      color: #00e87b;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+
+  .post-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 20px;
+    background: #111111;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    font-family: 'JetBrains Mono', monospace;
+
+    h4 {
+      margin: 0;
+      font-size: 14px;
+      color: #e5e5e5;
+    }
+
+    .dialog-sub {
+      margin: 0;
+      font-size: 12px;
+      color: #a0a0a0;
+    }
+
+    .dialog-findings {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #1a1a1a;
+      border-radius: 4px;
+      background: #0a0a0a;
+
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: #a0a0a0;
+        word-break: break-all;
+      }
+    }
+
+    .sev-mini {
+      flex-shrink: 0;
+      font-size: 9px;
+      text-transform: uppercase;
+      padding: 1px 5px;
+      border-radius: 3px;
+      border: 1px solid #4a5568;
+      color: #a0aec0;
+
+      &.sev-error {
+        color: #f56565;
+        border-color: #f56565;
+      }
+
+      &.sev-warning {
+        color: #ecc94b;
+        border-color: #ecc94b;
+      }
+
+      &.sev-suggestion {
+        color: #4299e1;
+        border-color: #4299e1;
+      }
+    }
+
+    .dialog-dismissed {
+      margin: 0;
+      font-size: 11px;
+      color: #718096;
+    }
+
+    .dialog-error {
+      margin: 0;
+      font-size: 12px;
+      color: #f56565;
+      word-break: break-word;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  }
+
   .posted-row {
     display: flex;
     flex-wrap: wrap;

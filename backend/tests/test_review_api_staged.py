@@ -688,6 +688,8 @@ async def test_post_success_marks_review_and_builds_staged_body(
     assert got["posted_at"] is not None
     assert got["github_review_id"] == 987654321
     assert got["error_message"] is None
+    # Terminal state matches the worker's automatic post (Step 8).
+    assert got["status"] == "completed"
 
     # The GitHub body: edited summary as base, Findings over the kept
     # comment only, sanitized (@mention neutralised, severity header).

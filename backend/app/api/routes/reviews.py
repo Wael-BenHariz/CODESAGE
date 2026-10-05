@@ -607,6 +607,9 @@ async def post_review_now(
         update(Review)
         .where(Review.id == review.id, Review.posted_at.is_(None))
         .values(
+            # Same terminal state as the worker's automatic post: a review
+            # GitHub already has is completed, never "ready_to_post" again.
+            status="completed",
             posted_at=posted_at,
             github_review_id=github_review_id,
             error_message=None,
