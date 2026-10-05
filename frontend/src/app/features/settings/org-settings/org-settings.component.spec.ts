@@ -5,6 +5,7 @@ import { of, throwError } from 'rxjs';
 import { OrgSettingsComponent } from './org-settings.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiError } from '../../../core/services/api.service';
+import { InvitationService } from '../../../core/services/invitation.service';
 import {
   OrgSettings,
   OrgSettingsService,
@@ -16,6 +17,7 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
   let fixture: ComponentFixture<OrgSettingsComponent>;
   let component: OrgSettingsComponent;
   let orgSvc: jasmine.SpyObj<OrgSettingsService>;
+  let invitations: jasmine.SpyObj<InvitationService>;
   let roleSignal: WritableSignal<{ role: string } | null>;
 
   const orgSettings: OrgSettings = {
@@ -81,10 +83,16 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     orgSvc.getPlatformSettings.and.returnValue(of(platformSettings));
     orgSvc.savePlatformSettings.and.returnValue(of(platformSettings));
 
+    // Embedded child (Step 12) — stubbed so the org settings tests never
+    // need HttpClient (it only reads InvitationService).
+    invitations = jasmine.createSpyObj<InvitationService>('InvitationService', ['list']);
+    invitations.list.and.returnValue(of([]));
+
     TestBed.configureTestingModule({
       imports: [OrgSettingsComponent],
       providers: [
         { provide: OrgSettingsService, useValue: orgSvc },
+        { provide: InvitationService, useValue: invitations },
         // The component only reads currentUser()?.role.
         { provide: AuthService, useValue: { currentUser: roleSignal } }
       ]

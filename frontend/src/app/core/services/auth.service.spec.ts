@@ -203,6 +203,19 @@ describe('AuthService (Keycloak-backed)', () => {
       auth.switchAccount();
       expect(keycloak.logout).toHaveBeenCalledTimes(1);
     });
+
+    it('honors a custom returnUrl — the invite page comes back signed out', () => {
+      localStorage.setItem(environment.userKey, JSON.stringify(fakeUser));
+      keycloak.isLoggedIn.and.returnValue(true);
+      const auth = TestBed.inject(AuthService);
+      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUser);
+
+      auth.switchAccount('/invite/accept?token=abc');
+
+      expect(keycloak.logout.calls.mostRecent().args[0]).toBe(
+        `${window.location.origin}/invite/accept?token=abc`
+      );
+    });
   });
 
   describe('loadUser()', () => {

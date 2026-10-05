@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { OrgInvitationsComponent } from '../org-invitations/org-invitations.component';
 import {
   AGENT_DOMAINS,
   CeilingPatch,
@@ -131,7 +132,7 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-org-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, OrgInvitationsComponent],
   templateUrl: './org-settings.component.html',
   styleUrl: './org-settings.component.scss'
 })

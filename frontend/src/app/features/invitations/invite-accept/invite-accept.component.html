@@ -1,0 +1,129 @@
+<div class="invite-page">
+  <header class="page-header">
+    <h1>Accept invitation</h1>
+    <p class="page-subtitle">Join an organization to review its pull requests.</p>
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state-note" data-testid="invite-loading">Loading invitation…</p>
+    }
+
+    @case ('invalid') {
+      <div class="card" data-testid="invite-invalid">
+        <p>This invitation link is invalid, expired, or has already been used.</p>
+        <p class="state-note">Ask an organization admin to send you a fresh invite.</p>
+      </div>
+    }
+
+    @case ('error') {
+      <div class="banner error" role="alert" data-testid="invite-load-error">
+        <span>{{ loadError() }}</span>
+        <button class="btn btn-secondary" type="button" (click)="load()" data-testid="invite-retry">
+          Retry
+        </button>
+      </div>
+    }
+
+    @case ('ready') {
+      <div class="card" data-testid="invite-preview">
+        <dl class="invite-details">
+          <div>
+            <dt>Organization</dt>
+            <dd data-testid="invite-org">{{ preview()!.org_name }}</dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd data-testid="invite-role">{{ preview()!.role }}</dd>
+          </div>
+          <div>
+            <dt>Invited</dt>
+            <dd data-testid="invite-masked-email">{{ preview()!.email_masked }}</dd>
+          </div>
+        </dl>
+
+        @if (!auth.isAuthenticated()) {
+          <p class="state-note">Sign in with GitHub to accept this invitation.</p>
+          <button
+            class="btn btn-primary"
+            type="button"
+            (click)="signInToAccept()"
+            data-testid="invite-signin"
+          >
+            Sign in to accept
+          </button>
+        } @else if (emailMismatch() && !mismatchAcknowledged()) {
+          <div class="banner error" role="alert" data-testid="invite-mismatch">
+            <span>
+              This invitation was sent to {{ preview()!.email_masked }}, but you are signed in with
+              a different account.
+            </span>
+          </div>
+          <div class="actions">
+            <button
+              class="btn btn-primary"
+              type="button"
+              (click)="acknowledgeMismatch()"
+              data-testid="invite-continue"
+            >
+              Continue anyway
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              (click)="switchAccount()"
+              data-testid="invite-switch"
+            >
+              Sign in with a different account
+            </button>
+          </div>
+        } @else {
+          @if (acceptError(); as err) {
+            <div class="banner error" role="alert" data-testid="invite-accept-error">
+              {{ err }}
+            </div>
+          }
+          <div class="actions">
+            <button
+              class="btn btn-primary"
+              type="button"
+              [disabled]="accepting()"
+              (click)="accept()"
+              data-testid="invite-accept-btn"
+            >
+              {{ accepting() ? 'Accepting…' : 'Accept invitation' }}
+            </button>
+            @if (emailMismatch()) {
+              <button
+                class="btn btn-secondary"
+                type="button"
+                (click)="switchAccount()"
+                data-testid="invite-switch"
+              >
+                Sign in with a different account
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    @case ('joined') {
+      <div class="card success-card" data-testid="invite-joined">
+        <p>
+          You joined <strong>{{ result()!.org_name }}</strong> as
+          <strong data-testid="invite-joined-role">{{ result()!.role }}</strong
+          >.
+        </p>
+        @if (result()!.email_mismatch) {
+          <p class="state-note" data-testid="invite-mismatch-note">
+            The invitation was addressed to a different email address than this account.
+          </p>
+        }
+        <a routerLink="/dashboard" class="btn btn-primary" data-testid="invite-dashboard">
+          Go to dashboard
+        </a>
+      </div>
+    }
+  }
+</div>

@@ -86,16 +86,19 @@ export class AuthService {
 
   /**
    * Switch account: end the current Keycloak SSO session (server-side session
-   * invalidated, local profile dropped) and land on the login page so the
-   * next login() starts from a clean slate.
+   * invalidated, local profile dropped) and land on `returnUrl` (default: the
+   * login page) so the next login() starts from a clean slate. The invite
+   * accept page passes its own URL so a different account comes back to the
+   * same invitation, signed out.
    */
-  switchAccount(): void {
+  switchAccount(returnUrl: string = '/login'): void {
     if (this.sessionClosed) {
       return;
     }
     this.sessionClosed = true;
     this.clearSession();
-    this.keycloak.logout(`${window.location.origin}/login`).catch(() => {
+    const target = returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/login';
+    this.keycloak.logout(`${window.location.origin}${target}`).catch(() => {
       this.router.navigate(['/login']);
     });
   }

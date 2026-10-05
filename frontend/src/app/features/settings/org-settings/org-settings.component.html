@@ -199,5 +199,20 @@
         </div>
       </section>
     }
+
+    @if (selectedOrgId; as currentOrgId) {
+      <section class="settings-section">
+        <h2>Member invitations</h2>
+        <p class="section-subtitle">
+          Invite teammates as DEVELOPER or REVIEWER — existing roles are never downgraded by an
+          invitation.
+        </p>
+        @for (orgId of [currentOrgId]; track orgId) {
+          <!-- @for-track remounts the child when the selected org changes,
+               so its ngOnInit always loads the right org. -->
+          <app-org-invitations [orgId]="orgId" [canManage]="canEdit('org')" />
+        }
+      </section>
+    }
   }
 </div>

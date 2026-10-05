@@ -21,6 +21,16 @@ export const routes: Routes = [
       )
   },
   {
+    // No guard: the invitee has no session yet (plan Step 12). The page
+    // previews the token publicly, then either asks for sign-in (returning
+    // here) or shows an explicit Accept button — never auto-accepts.
+    path: 'invite/accept',
+    loadComponent: () =>
+      import('./features/invitations/invite-accept/invite-accept.component').then(
+        m => m.InviteAcceptComponent
+      )
+  },
+  {
     path: 'dashboard',
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
