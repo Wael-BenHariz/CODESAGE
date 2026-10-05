@@ -52,6 +52,73 @@ Source of truth for the surrounding audit: `docs/FRONTEND_GAP_MATRIX.md`.
 - **Decision (plan Step 8):** remove the fake checkboxes, or render them
   disabled with a "not available yet" label. They must not pretend to save.
 
+## 5. Pull-request lookup by number — `GET /pull-requests/repository/{id}?number=`
+
+- **Wanted by:** plan Step 2 (the PR-detail URL is `owner/repo/pulls/{n}`,
+  but the backend keys pull requests by UUID only).
+- **What exists today:** `GET /pull-requests/{uuid}` (detail) and
+  `GET /pull-requests/repository/{repository_id}` (paginated list with
+  `state`/`author` filters) — no by-number route.
+- **UI built instead:** resolve owner/name → repo UUID (gap 6), scan the
+  repo's PR list pages for the number (100 rows/page, capped at 30 pages =
+  3 000 PRs), session-cache the id; not found (or past the cap) ends in a
+  genuine backend 404 via a nil UUID so the interceptor shows the generic
+  not-found page instead of a blank screen.
+- **Suggested backend:** `GET /pull-requests/repository/{repository_id}/number/{number}`
+  or a `?number=` query filter (true 404 when absent).
+
+## 6. Exact repository lookup by owner/name — `GET /repositories/by-name/{owner}/{repo}`
+
+- **Wanted by:** plan Step 2 (repository-detail, PR list and PR detail URLs
+  carry `owner`/`repo`, while every repository route takes a UUID).
+- **What exists today:** `GET /repositories?search=` is a fuzzy `ilike` on
+  name/full_name and returns neighbours (`acme/api-v2` for `acme/api`).
+- **UI built instead:** `search=owner/name&per_page=100` + an exact
+  case-insensitive `full_name` match client-side, session-cached per
+  repository; no match → genuine backend 404 via a nil UUID (rule 5:
+  404 → generic not-found page, never a synthesized client error).
+- **Suggested backend:** exact-match lookup endpoint that 404s directly.
+
+## 7. Review status on PR list rows — `PullRequestResponse`
+
+- **Wanted by:** the existing PR-list review badge (`pr.reviewStatus.status`).
+- **What exists today:** list rows (`PullRequestResponse`) carry **no** review
+  fields; only the detail (`PullRequestWithReviews`) adds `reviews_count`,
+  `latest_review_id`, `latest_review_status`.
+- **UI built instead:** list rows map `reviewStatus: null` (badge hidden —
+  never a guess), the detail maps the pointer (`status` + `reviewId`, unknown
+  vocabulary → `unknown`). Counts are not part of either shape (gap 8).
+
+## 8. PR stats: comment/issue counts (derived from `GET /reviews/{id}`)
+
+- **Wanted by:** plan Step 2 (stats bar on the PR detail page — the old UI
+  read `reviewStatus.commentCount/issueCount`, fields no endpoint ever
+  returned; the `ReviewSummary` stats schema in `backend/app/schemas/review.py`
+  is dead code — no route serves it).
+- **What exists today:** `PullRequestWithReviews` carries only
+  `reviews_count`/`latest_review_id`/`latest_review_status`. The only real
+  count source is `GET /reviews/{review_id}` → `comments_count` + the full
+  `comments` list (the route returns **all** comments — no pagination, so
+  `comments_count == len(comments)`).
+- **UI built instead (agreed with the product owner):** the stats bar and the
+  review panel share ONE cached `GET /reviews/{latest_review_id}` call per PR
+  page load:
+  - **Comments** = `comments_count` exactly as the API returns it.
+  - **Open issues** = comments with `dismissed = false`, derived client-side,
+    labelled "open issues" (the backend has no issue count).
+  - Scan-report findings are never counted in either tile (different source)
+    and the two sources are never summed. If the backend ever paginates
+    `comments`, the list length stops being complete → "open issues" must
+    render `n/a` instead.
+  - Failure → tiles show `—` + a retry (never `0`; a zero only ever means a
+    real zero); a 404 shows no partial stats (interceptor → not-found page);
+    no review → no extra request at all.
+  - Mutations (dismiss/restore/edit summary/post/validate) invalidate the
+    shared cache so the tiles and the panel's own numbers update together.
+- **Suggested backend:** add `comments_count` + `open_issues_count` (comments
+  with `dismissed = false`) to `PullRequestWithReviews` — that would remove
+  the extra request per PR page.
+
 ---
 
 ## Decisions / facts to confirm with the product owner

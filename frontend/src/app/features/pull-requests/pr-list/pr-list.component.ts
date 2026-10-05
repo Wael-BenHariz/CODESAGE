@@ -46,7 +46,7 @@ export class PrListComponent implements OnInit {
   loadPullRequests(): void {
     this.loadError.set(false);
     this.isLoading.set(true);
-    this.github.getPullRequests(`${this.owner()}/${this.repo()}`).subscribe({
+    this.github.getPullRequests(this.owner(), this.repo()).subscribe({
       next: prs => {
         this.pullRequests.set(prs);
         this.isLoading.set(false);

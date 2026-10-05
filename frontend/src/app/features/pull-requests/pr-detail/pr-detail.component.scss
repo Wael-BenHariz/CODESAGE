@@ -247,6 +247,21 @@
   color: #666666;
 }
 
+/* Retry shown when the shared review-stats request failed (never a 0). */
+.stat-retry {
+  align-self: center;
+  font-size: 11px;
+  padding: 4px 10px;
+  color: #999999;
+  background: transparent;
+  border-color: #2a2a2a;
+
+  &:hover:not(:disabled) {
+    color: #e0e0e0;
+    border-color: #444444;
+  }
+}
+
 .card {
   background: #111111;
   border: 1px solid #1e1e1e;

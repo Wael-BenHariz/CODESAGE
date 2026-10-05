@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
-import { ApiService } from './api.service';
+import { ApiError, ApiService } from './api.service';
 import { RepositoryService } from './repository.service';
 import { Repository } from '../models/repository.model';
 import { RepositoryListDto, toRepository } from './mappers/repository.mapper';
@@ -85,5 +85,60 @@ describe('RepositoryService (/repositories group)', () => {
     expect(api.post).toHaveBeenCalledWith('/repositories/repo-1/enable', {});
     expect(api.post).toHaveBeenCalledWith('/repositories/repo-1/disable', {});
     expect(api.delete).toHaveBeenCalledWith('/repositories/repo-1');
+  });
+
+  it('resolves owner/name → UUID via search + exact match, cached case-insensitively', () => {
+    const neighbour = { ...dto, id: 'repo-2', full_name: 'acme/api-v2' };
+    const list: RepositoryListDto = {
+      items: [neighbour, dto],
+      total: 2,
+      page: 1,
+      per_page: 100,
+      pages: 1
+    };
+    api.get.and.returnValue(of(list));
+
+    let id = '';
+    service.resolveId('acme', 'api').subscribe(v => (id = v));
+
+    expect(api.get).toHaveBeenCalledWith('/repositories', { search: 'acme/api', per_page: 100 });
+    // The fuzzy search also returned acme/api-v2 — the exact match must not.
+    expect(id).toBe('repo-1');
+
+    // Session cache, lowercased key: no second search request.
+    service.resolveId('Acme', 'API').subscribe();
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('owner/name not found → genuine backend 404 via the nil UUID (rule 5)', () => {
+    // Order: empty search → nil-UUID request fails with the backend's 404.
+    api.get.and.returnValues(
+      of({ items: [], total: 0, page: 1, per_page: 100, pages: 0 }),
+      throwError(() => new ApiError('Repository not found', 404, 'Repository not found'))
+    );
+
+    let caught: unknown;
+    service.resolveId('ghost', 'repo').subscribe({ error: err => (caught = err) });
+
+    expect(api.get).toHaveBeenCalledWith('/repositories/00000000-0000-0000-0000-000000000000');
+    expect(caught instanceof ApiError).toBeTrue();
+    expect((caught as ApiError).status).toBe(404);
+  });
+
+  it('getRepository resolves owner/name → GET /repositories/{uuid} (phantom path removed)', () => {
+    // Order: owner/name search (hit) → GET /repositories/{uuid}.
+    api.get.and.returnValues(
+      of({ items: [dto], total: 1, page: 1, per_page: 100, pages: 1 }),
+      of(dto)
+    );
+
+    let repo!: Repository;
+    service.getRepository('acme', 'api').subscribe(r => (repo = r));
+
+    expect(api.get).toHaveBeenCalledWith('/repositories', { search: 'acme/api', per_page: 100 });
+    expect(api.get).toHaveBeenCalledWith('/repositories/repo-1');
+    expect(repo.fullName).toBe('acme/api');
+    // Regression guard: /repositories/{owner}/{repo} never existed on the API.
+    expect(api.get).not.toHaveBeenCalledWith('/repositories/acme/api');
   });
 });

@@ -1,6 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 
 import { PrListComponent } from './pr-list.component';
 import { PullRequestService } from '../../../core/services/pull-request.service';
@@ -8,7 +8,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { OrgSettingsService } from '../../../core/services/org-settings.service';
 import { PullRequest } from '../../../core/models/pull-request.model';
 
-describe('PrListComponent — load error state (F3 pre-check b)', () => {
+describe('PrListComponent — four states + call contract (plan Step 2)', () => {
   let fixture: ComponentFixture<PrListComponent>;
   let github: jasmine.SpyObj<PullRequestService>;
 
@@ -87,5 +87,36 @@ describe('PrListComponent — load error state (F3 pre-check b)', () => {
     expect(fixture.componentInstance.loadError()).toBeFalse();
     expect(el().querySelectorAll('.pr-item').length).toBe(1);
     expect(github.getPullRequests).toHaveBeenCalledTimes(2);
+  });
+
+  // --- four-state coverage (plan Step 2) ------------------------------------
+
+  it('shows the loading state while the request is in flight', () => {
+    github.getPullRequests.and.returnValue(NEVER);
+    create();
+
+    expect(el().querySelector('[data-testid="pr-list-loading"]')).not.toBeNull();
+    expect(fixture.componentInstance.isLoading()).toBeTrue();
+    expect(el().querySelector('[data-testid="pr-list-load-error"]')).toBeNull();
+    expect(el().textContent).not.toContain('No pull requests found');
+  });
+
+  it('renders the PR rows from the mapped model on success', () => {
+    github.getPullRequests.and.returnValue(of([pr]));
+    create();
+
+    expect(el().querySelector('[data-testid="pr-list-loading"]')).toBeNull();
+    expect(fixture.componentInstance.isLoading()).toBeFalse();
+    expect(el().querySelectorAll('.pr-item').length).toBe(1);
+    expect(el().querySelector('.pr-title')?.textContent).toContain('Fix the thing');
+    expect(el().textContent).toContain('#7');
+    expect(el().textContent).toContain('by octocat');
+  });
+
+  it('passes the owner and repo as separate args (phantom combined path removed)', () => {
+    github.getPullRequests.and.returnValue(of([pr]));
+    create();
+
+    expect(github.getPullRequests).toHaveBeenCalledWith('acme', 'demo');
   });
 });
