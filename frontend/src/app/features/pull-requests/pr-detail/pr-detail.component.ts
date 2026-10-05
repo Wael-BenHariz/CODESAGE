@@ -2,20 +2,21 @@ import { Component, OnInit, computed, inject, input, signal } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
-import { GithubService } from '../../../core/services/github.service';
+import { PullRequestService } from '../../../core/services/pull-request.service';
 import { navVisibility } from '../../../core/guards/role.guard';
 import { PullRequest } from '../../../core/models/pull-request.model';
 import { ReviewPanelComponent } from '../review-panel/review-panel.component';
+import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-pr-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, ReviewPanelComponent],
+  imports: [SiteHeaderComponent, CommonModule, RouterLink, ReviewPanelComponent],
   templateUrl: './pr-detail.component.html',
   styleUrl: './pr-detail.component.scss'
 })
 export class PrDetailComponent implements OnInit {
-  private readonly github = inject(GithubService);
+  private readonly github = inject(PullRequestService);
   private readonly auth = inject(AuthService);
 
   /** Cosmetic write gating for the review trigger (backend stays authoritative). */

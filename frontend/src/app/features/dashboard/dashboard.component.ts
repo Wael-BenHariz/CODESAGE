@@ -1,28 +1,28 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
-import { GithubService } from '../../core/services/github.service';
-import { navVisibility } from '../../core/guards/role.guard';
+import { GithubAppService } from '../../core/services/github-app.service';
+import { RepositoryService } from '../../core/services/repository.service';
 import { Repository } from '../../core/models/repository.model';
 import { User } from '../../core/models/user.model';
+import { SiteHeaderComponent } from '../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, SiteHeaderComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
 })
 export class DashboardComponent implements OnInit {
   private readonly auth = inject(AuthService);
-  private readonly github = inject(GithubService);
+  private readonly github = inject(GithubAppService);
+  private readonly repoApi = inject(RepositoryService);
 
   user = signal<User | null>(null);
   repositories = signal<Repository[]>([]);
   isLoading = signal(true);
-  /** Cosmetic write/admin gating for header nav entries (backend stays authoritative). */
-  readonly nav = computed(() => navVisibility(this.auth.currentUser()?.role));
   stats = signal({
     totalRepos: 0,
     enabledRepos: 0,
@@ -38,7 +38,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private loadDashboard(): void {
-    this.github.getRepositories().subscribe({
+    this.repoApi.getRepositories().subscribe({
       next: (repos: Repository[]) => {
         this.repositories.set(repos);
         this.stats.set({
@@ -53,13 +53,5 @@ export class DashboardComponent implements OnInit {
         this.isLoading.set(false);
       }
     });
-  }
-
-  logout(): void {
-    this.auth.logout();
-  }
-
-  switchAccount(): void {
-    this.auth.switchAccount();
   }
 }

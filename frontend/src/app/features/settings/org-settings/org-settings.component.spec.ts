@@ -1,5 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { WritableSignal, signal } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { OrgSettingsComponent } from './org-settings.component';
@@ -91,6 +92,9 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     TestBed.configureTestingModule({
       imports: [OrgSettingsComponent],
       providers: [
+        // <app-site-header> carries routerLink directives → the router's
+        // ActivatedRoute must exist in the test injector.
+        provideRouter([]),
         { provide: OrgSettingsService, useValue: orgSvc },
         { provide: InvitationService, useValue: invitations },
         // The component only reads currentUser()?.role.

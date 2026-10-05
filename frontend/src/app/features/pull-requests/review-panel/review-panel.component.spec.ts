@@ -4,7 +4,8 @@ import { Subject, of, throwError } from 'rxjs';
 
 import { ReviewPanelComponent } from './review-panel.component';
 import { ApiError } from '../../../core/services/api.service';
-import { GithubService } from '../../../core/services/github.service';
+import { PullRequestService } from '../../../core/services/pull-request.service';
+import { ReviewService } from '../../../core/services/review.service';
 import {
   CommentValidation,
   ReviewComment,
@@ -14,7 +15,8 @@ import {
 
 describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () => {
   let fixture: ComponentFixture<ReviewPanelComponent>;
-  let github: jasmine.SpyObj<GithubService>;
+  let pullRequests: jasmine.SpyObj<PullRequestService>;
+  let reviewApi: jasmine.SpyObj<ReviewService>;
 
   const summary = (over: Partial<ReviewSummary> = {}): ReviewSummary => ({
     id: 'rev-1',
@@ -67,22 +69,24 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   });
 
   beforeEach(() => {
-    github = jasmine.createSpyObj<GithubService>('GithubService', [
+    pullRequests = jasmine.createSpyObj<PullRequestService>('PullRequestService', [
       'getPullRequestReviews',
+      'triggerReview'
+    ]);
+    reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', [
       'getReviewDetail',
-      'triggerReview',
       'postReview',
       'updateReviewSummary',
       'dismissReviewComment',
       'restoreReviewComment',
       'validateReviewFinding'
     ]);
-    github.getPullRequestReviews.and.returnValue(of([]));
-    github.getReviewDetail.and.returnValue(of(detail()));
-    github.triggerReview.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(of([]));
+    reviewApi.getReviewDetail.and.returnValue(of(detail()));
+    pullRequests.triggerReview.and.returnValue(
       of({ review_id: 'rev-1', status: 'pending', message: 'queued' })
     );
-    github.postReview.and.returnValue(
+    reviewApi.postReview.and.returnValue(
       of({
         review_id: 'rev-1',
         github_review_id: 987,
@@ -90,7 +94,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
         message: 'Review posted to GitHub'
       })
     );
-    github.updateReviewSummary.and.returnValue(
+    reviewApi.updateReviewSummary.and.returnValue(
       of({
         review_id: 'rev-1',
         summary: 'Original summary.',
@@ -99,12 +103,16 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
         posted_at: null
       })
     );
-    github.dismissReviewComment.and.returnValue(of(comment()));
-    github.restoreReviewComment.and.returnValue(of(comment({ dismissed: false })));
+    reviewApi.dismissReviewComment.and.returnValue(of(comment()));
+    reviewApi.restoreReviewComment.and.returnValue(of(comment({ dismissed: false })));
 
     TestBed.configureTestingModule({
       imports: [ReviewPanelComponent],
-      providers: [provideRouter([]), { provide: GithubService, useValue: github }]
+      providers: [
+        provideRouter([]),
+        { provide: PullRequestService, useValue: pullRequests },
+        { provide: ReviewService, useValue: reviewApi }
+      ]
     });
   });
 
@@ -129,7 +137,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   // --- none state ------------------------------------------------------------
 
   it('shows the call to action when the PR has no review yet', () => {
-    github.getPullRequestReviews.and.returnValue(of([]));
+    pullRequests.getPullRequestReviews.and.returnValue(of([]));
     create();
 
     expect(testid('review-panel-none')).not.toBeNull();
@@ -138,19 +146,19 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     expect(cta.textContent).toContain('Run AI Review');
 
     cta.click();
-    expect(github.triggerReview).toHaveBeenCalledWith('pr-1');
+    expect(pullRequests.triggerReview).toHaveBeenCalledWith('pr-1');
     // After triggering, the panel reloads to show the pending review.
-    expect(github.getPullRequestReviews).toHaveBeenCalledTimes(2);
+    expect(pullRequests.getPullRequestReviews).toHaveBeenCalledTimes(2);
   });
 
   it('hides the CTA for viewers without write access and reports a failed trigger', () => {
-    github.getPullRequestReviews.and.returnValue(of([]));
-    github.triggerReview.and.returnValue(throwError(() => ({ status: 403 })));
+    pullRequests.getPullRequestReviews.and.returnValue(of([]));
+    pullRequests.triggerReview.and.returnValue(throwError(() => ({ status: 403 })));
     create(false);
 
     expect(testid('review-panel-none')).not.toBeNull();
     expect(testid('review-cta')).toBeNull();
-    expect(github.triggerReview).not.toHaveBeenCalled();
+    expect(pullRequests.triggerReview).not.toHaveBeenCalled();
 
     // A trigger failure surfaces as an inline error, not a silent no-op.
     create(true);
@@ -163,8 +171,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   // --- pending / processing ----------------------------------------------------
 
   it('shows a spinner while the latest review is pending', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'pending' })]));
-    github.getReviewDetail.and.returnValue(of(detail({ status: 'pending' })));
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'pending' })]));
+    reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'pending' })));
     create();
 
     expect(testid('review-panel-running')).not.toBeNull();
@@ -173,8 +181,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   });
 
   it('shows a spinner while the latest review is processing', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'processing' })]));
-    github.getReviewDetail.and.returnValue(of(detail({ status: 'processing' })));
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'processing' })]));
+    reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'processing' })));
     create();
 
     expect(testid('review-panel-running')).not.toBeNull();
@@ -184,8 +192,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   // --- failed ----------------------------------------------------------------
 
   it('shows the failure message when the review failed', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'failed' })]));
-    github.getReviewDetail.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'failed' })]));
+    reviewApi.getReviewDetail.and.returnValue(
       of(
         detail({
           status: 'failed',
@@ -206,8 +214,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
   it('shows the ready-to-post badge with staged controls (Step 8)', () => {
     const comments = [comment({ severity: 'error', body: 'SQL injection risk' })];
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
-    github.getReviewDetail.and.returnValue(of(detail({ status: 'ready_to_post' }, comments)));
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
+    reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'ready_to_post' }, comments)));
     create();
 
     expect(testid('review-ready-badge')).not.toBeNull();
@@ -225,12 +233,12 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   // --- posted ------------------------------------------------------------------
 
   it('shows posted_at and the GitHub review link for a posted review', () => {
-    github.getPullRequestReviews.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(
       of([
         summary({ status: 'completed', posted_at: '2026-01-01T00:06:00Z', github_review_id: 555 })
       ])
     );
-    github.getReviewDetail.and.returnValue(
+    reviewApi.getReviewDetail.and.returnValue(
       of(
         detail({
           status: 'completed',
@@ -253,8 +261,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   // --- zero findings -----------------------------------------------------------
 
   it('shows the empty state when the review has no findings', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
-    github.getReviewDetail.and.returnValue(of(detail({ status: 'completed' }, [])));
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+    reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'completed' }, [])));
     create();
 
     expect(testid('review-panel-empty')).not.toBeNull();
@@ -295,8 +303,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
         body: 'Careful'
       })
     ];
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
-    github.getReviewDetail.and.returnValue(of(detail({ status: 'completed' }, comments)));
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+    reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'completed' }, comments)));
     create();
 
     // Files ordered by their strongest finding: b.py (error) before a.py.
@@ -333,8 +341,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
   it('renders hostile comment text as plain text (no HTML injection)', () => {
     const hostile = '<img src=x onerror="alert(1)">';
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
-    github.getReviewDetail.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+    reviewApi.getReviewDetail.and.returnValue(
       of(
         detail({ status: 'completed' }, [
           comment({ severity: 'warning', body: hostile, snippet: '<script>steal()</script>' })
@@ -351,8 +359,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   });
 
   it('mutes dismissed findings without hiding them', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
-    github.getReviewDetail.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+    reviewApi.getReviewDetail.and.returnValue(
       of(
         detail({ status: 'completed' }, [
           comment({ id: 'c-1', severity: 'error', body: 'Kept', dismissed: false }),
@@ -372,8 +380,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   });
 
   it('prefers edited_summary over summary', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
-    github.getReviewDetail.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
+    reviewApi.getReviewDetail.and.returnValue(
       of(
         detail({
           status: 'ready_to_post',
@@ -391,25 +399,25 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   // --- load error + retry -------------------------------------------------------
 
   it('shows an explicit error state and retries from it', () => {
-    github.getPullRequestReviews.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(
       throwError(() => ({ status: 404, message: 'Pull request not found' }))
     );
     create();
 
     expect(testid('review-panel-error')).not.toBeNull();
 
-    github.getPullRequestReviews.and.returnValue(of([]));
+    pullRequests.getPullRequestReviews.and.returnValue(of([]));
     (testid('review-retry') as HTMLButtonElement).click();
     fixture.detectChanges();
 
     expect(testid('review-panel-error')).toBeNull();
     expect(testid('review-panel-none')).not.toBeNull();
-    expect(github.getPullRequestReviews).toHaveBeenCalledTimes(2);
+    expect(pullRequests.getPullRequestReviews).toHaveBeenCalledTimes(2);
   });
 
   it('errors when the review detail itself cannot be loaded', () => {
-    github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
-    github.getReviewDetail.and.returnValue(throwError(() => ({ status: 500 })));
+    pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+    reviewApi.getReviewDetail.and.returnValue(throwError(() => ({ status: 500 })));
     create();
 
     expect(testid('review-panel-error')).not.toBeNull();
@@ -432,8 +440,10 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       over: Partial<ReviewDetail> = {},
       comments: ReviewComment[] = [baseComment()]
     ): void {
-      github.getPullRequestReviews.and.returnValue(of([summary({ status: 'ready_to_post' })]));
-      github.getReviewDetail.and.returnValue(
+      pullRequests.getPullRequestReviews.and.returnValue(
+        of([summary({ status: 'ready_to_post' })])
+      );
+      reviewApi.getReviewDetail.and.returnValue(
         of(detail({ status: 'ready_to_post', ...over }, comments))
       );
       create();
@@ -457,7 +467,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       fixture.detectChanges();
 
       expect(testid('post-dialog')).not.toBeNull();
-      expect(github.postReview).not.toHaveBeenCalled(); // confirming is required
+      expect(reviewApi.postReview).not.toHaveBeenCalled(); // confirming is required
       const findings = el().querySelectorAll('[data-testid="dialog-finding"]');
       expect(findings.length).toBe(1); // dismissed findings are excluded
       expect(findings[0].textContent).toContain('src/a.py:5');
@@ -474,7 +484,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       fixture.detectChanges();
 
       // The POST triggers a re-fetch — serve the now-posted review.
-      github.getPullRequestReviews.and.returnValue(
+      pullRequests.getPullRequestReviews.and.returnValue(
         of([
           summary({
             status: 'completed',
@@ -483,7 +493,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
           })
         ])
       );
-      github.getReviewDetail.and.returnValue(
+      reviewApi.getReviewDetail.and.returnValue(
         of(
           detail({
             status: 'completed',
@@ -496,7 +506,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       (testid('confirm-post') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(github.postReview).toHaveBeenCalledWith('rev-1');
+      expect(reviewApi.postReview).toHaveBeenCalledWith('rev-1');
       expect(testid('post-dialog')).toBeNull();
       expect(testid('review-status')?.textContent).toContain('posted');
       expect(testid('review-gh-link')).not.toBeNull();
@@ -508,7 +518,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
     it('keeps the dialog open and shows the error when posting fails', () => {
       createReady();
-      github.postReview.and.returnValue(
+      reviewApi.postReview.and.returnValue(
         throwError(
           () => new ApiError('GitHub post failed (403): bad credentials', 403, 'bad credentials')
         )
@@ -523,7 +533,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('api-error')).toBeNull(); // the dialog owns the error while open
 
       // Retryable: a second attempt succeeds.
-      github.postReview.and.returnValue(
+      reviewApi.postReview.and.returnValue(
         of({
           review_id: 'rev-1',
           github_review_id: 987,
@@ -531,7 +541,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
           message: 'ok'
         })
       );
-      github.getPullRequestReviews.and.returnValue(
+      pullRequests.getPullRequestReviews.and.returnValue(
         of([
           summary({
             status: 'completed',
@@ -540,7 +550,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
           })
         ])
       );
-      github.getReviewDetail.and.returnValue(
+      reviewApi.getReviewDetail.and.returnValue(
         of(
           detail({
             status: 'completed',
@@ -552,7 +562,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       (testid('confirm-post') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(github.postReview).toHaveBeenCalledTimes(2);
+      expect(reviewApi.postReview).toHaveBeenCalledTimes(2);
       expect(testid('post-dialog')).toBeNull();
       expect(testid('review-status')?.textContent).toContain('posted');
     });
@@ -583,7 +593,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('summary-dirty')).not.toBeNull();
       expect((testid('save-summary') as HTMLButtonElement).disabled).toBeFalse();
 
-      github.updateReviewSummary.and.returnValue(
+      reviewApi.updateReviewSummary.and.returnValue(
         of({
           review_id: 'rev-1',
           summary: 'Original summary.',
@@ -594,7 +604,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       );
       (testid('save-summary') as HTMLButtonElement).click();
 
-      expect(github.updateReviewSummary).toHaveBeenCalledWith('rev-1', 'Edited by hand.');
+      expect(reviewApi.updateReviewSummary).toHaveBeenCalledWith('rev-1', 'Edited by hand.');
       fixture.detectChanges();
       expect(testid('summary-textarea')).toBeNull(); // editor closed
       expect(testid('review-summary')?.textContent).toContain('Edited by hand.');
@@ -623,20 +633,20 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
     it('dismisses a finding into the muted state and restores it back', () => {
       createReady();
-      github.dismissReviewComment.and.returnValue(of({ ...baseComment(), dismissed: true }));
+      reviewApi.dismissReviewComment.and.returnValue(of({ ...baseComment(), dismissed: true }));
       (testid('dismiss-finding') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(github.dismissReviewComment).toHaveBeenCalledWith('rev-1', 'c-1');
+      expect(reviewApi.dismissReviewComment).toHaveBeenCalledWith('rev-1', 'c-1');
       expect(testid('comment-dismissed')).not.toBeNull();
       expect(testid('dismiss-finding')).toBeNull();
       expect(testid('restore-finding')).not.toBeNull();
 
-      github.restoreReviewComment.and.returnValue(of(baseComment()));
+      reviewApi.restoreReviewComment.and.returnValue(of(baseComment()));
       (testid('restore-finding') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(github.restoreReviewComment).toHaveBeenCalledWith('rev-1', 'c-1');
+      expect(reviewApi.restoreReviewComment).toHaveBeenCalledWith('rev-1', 'c-1');
       expect(testid('comment-dismissed')).toBeNull();
       expect(testid('dismiss-finding')).not.toBeNull();
       expect(testid('restore-finding')).toBeNull();
@@ -644,7 +654,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
     it('surfaces a dismiss API failure visibly and leaves the button usable', () => {
       createReady();
-      github.dismissReviewComment.and.returnValue(
+      reviewApi.dismissReviewComment.and.returnValue(
         throwError(() => new ApiError('Comment not found', 404, 'Comment not found'))
       );
       (testid('dismiss-finding') as HTMLButtonElement).click();
@@ -689,8 +699,8 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       });
 
     function createWithRole(viewer_role: string, comments: ReviewComment[]): void {
-      github.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
-      github.getReviewDetail.and.returnValue(
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+      reviewApi.getReviewDetail.and.returnValue(
         of(detail({ status: 'completed', viewer_role }, comments))
       );
       create();
@@ -720,13 +730,13 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
     it('optimistically shows my pending verdict and settles with the server row', () => {
       const response = new Subject<CommentValidation>();
-      github.validateReviewFinding.and.returnValue(response);
+      reviewApi.validateReviewFinding.and.returnValue(response);
       createWithRole('REVIEWER', [plainComment()]);
 
       (testid('confirm-finding') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(github.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
+      expect(reviewApi.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
         verdict: 'confirmed',
         severity_override: null,
         note: null
@@ -752,7 +762,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     });
 
     it('sends the severity override + trimmed note draft with the verdict', () => {
-      github.validateReviewFinding.and.returnValue(
+      reviewApi.validateReviewFinding.and.returnValue(
         of(validationRow({ severity_override: 'warning', note: 'check authz' }))
       );
       createWithRole('REVIEWER', [plainComment()]);
@@ -768,7 +778,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       (testid('fp-finding') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(github.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
+      expect(reviewApi.validateReviewFinding).toHaveBeenCalledWith('rev-1', 'c-1', {
         verdict: 'false_positive',
         severity_override: 'warning',
         note: 'check authz'
@@ -782,7 +792,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
 
     it('rolls back the optimistic verdict and surfaces the API error', () => {
       const response = new Subject<CommentValidation>();
-      github.validateReviewFinding.and.returnValue(response);
+      reviewApi.validateReviewFinding.and.returnValue(response);
       createWithRole('REVIEWER', [judgedComment()]); // existing verdict by kc-reviewer-a
 
       (testid('fp-finding') as HTMLButtonElement).click();

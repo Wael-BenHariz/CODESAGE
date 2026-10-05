@@ -2,19 +2,20 @@ import { Component, OnInit, computed, inject, signal, input } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
-import { GithubService } from '../../../core/services/github.service';
+import { RepositoryService } from '../../../core/services/repository.service';
 import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
+import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-repository-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [SiteHeaderComponent, CommonModule, RouterLink],
   templateUrl: './repository-detail.component.html',
   styleUrl: './repository-detail.component.scss'
 })
 export class RepositoryDetailComponent implements OnInit {
-  private readonly github = inject(GithubService);
+  private readonly github = inject(RepositoryService);
   private readonly auth = inject(AuthService);
 
   /** Cosmetic write gating for the enable/disable toggle (backend stays authoritative). */

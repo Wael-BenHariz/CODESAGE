@@ -1,9 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree } from '@angular/router';
 import { KeycloakAuthGuard, KeycloakService } from 'keycloak-angular';
-import { firstValueFrom } from 'rxjs';
 
-import { OrgSettingsService } from '../services/org-settings.service';
+import { AuthContextService } from '../services/auth-context.service';
 
 /**
  * Every authenticated role — matches the backend's "reads: any role" rule
@@ -122,10 +121,22 @@ export function navVisibility(role: string | null | undefined): {
  * This is what lets a DEVELOPER-claim user who is the seeded admin of
  * their org reach the org settings page. The lookup fails closed, and the
  * backend re-runs the identical effective-role check on every request.
+ *
+ * Role source preference (plan Step 1, rule 4): the effective role the
+ * backend reports for the caller (`GET /auth/me` → `user.role`, derived
+ * server-side from the same JWT) is used when the profile has already
+ * loaded; otherwise the guard derives the role itself from the JWT via
+ * `deriveRole`, which mirrors `security/roles.py` exactly. No await on the
+ * profile fetch — a cold-start navigation must never block on a second
+ * request, and both sources compute the same value for the same token.
+ *
+ * Denial target: `/forbidden` (rule 5's UI-level 403) — a page that explains
+ * the dead end and offers a route every role can open, instead of silently
+ * bouncing to /repositories.
  */
 @Injectable({ providedIn: 'root' })
 export class RoleGuard extends KeycloakAuthGuard {
-  private readonly orgs = inject(OrgSettingsService);
+  private readonly context = inject(AuthContextService);
 
   constructor(router: Router, keycloakAngular: KeycloakService) {
     super(router, keycloakAngular);
@@ -147,7 +158,18 @@ export class RoleGuard extends KeycloakAuthGuard {
       parsed != null
         ? ((parsed['preferred_username'] ?? parsed['sub']) as string | undefined)
         : undefined;
-    if (required.length === 0 || required.includes(deriveRole(this.roles, viaGitHub, subject))) {
+
+    // Rule 4: prefer the role the backend reports (GET /auth/me); fall back
+    // to deriving it from the JWT with the exact backend vocabulary. The
+    // backend role goes through the same one-release compat map so a stale
+    // legacy value can't widen or shrink the route list unexpectedly.
+    const backendRole = this.context.backendRole();
+    const effective =
+      backendRole != null && backendRole !== ''
+        ? COMPAT_MAP[backendRole.toUpperCase()] ?? backendRole.toUpperCase()
+        : deriveRole(this.roles, viaGitHub, subject);
+
+    if (required.length === 0 || required.includes(effective)) {
       return true;
     }
 
@@ -156,15 +178,20 @@ export class RoleGuard extends KeycloakAuthGuard {
     }
 
     // Authenticated but the effective role is not allowed here (e.g. NONE
-    // hitting /dashboard) — fall back to the read-only home every role can
-    // open instead of bouncing between restricted routes.
-    return this.router.createUrlTree(['/repositories']);
+    // hitting /dashboard) — rule 5: render the forbidden page with a way
+    // back, rather than silently bouncing between routes.
+    return this.router.createUrlTree(['/forbidden']);
   }
 
-  /** Membership elevation (admin routes only) — any error denies access. */
+  /**
+   * Membership elevation (admin routes only) — any error denies access.
+   * Shares AuthContext's cached `GET /orgs` result with the header org
+   * switcher (first denial fetches, later navigations reuse it; an error
+   * resets the cache so the next attempt retries).
+   */
   private async hasOrgAdminMembership(): Promise<boolean> {
     try {
-      const orgs = await firstValueFrom(this.orgs.listOrgs());
+      const orgs = await this.context.ensureOrgs();
       return orgs.some(org => org.role === 'ORG_ADMIN');
     } catch {
       return false;

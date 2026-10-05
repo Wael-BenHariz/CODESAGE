@@ -7,11 +7,11 @@ import { of } from 'rxjs';
 
 import { GithubCallbackComponent } from './github-callback.component';
 import { AuthService } from '../../../core/services/auth.service';
-import { GithubService } from '../../../core/services/github.service';
+import { GithubAppService } from '../../../core/services/github-app.service';
 import { environment } from '@env/environment';
 
 describe('GithubCallbackComponent — install callback (Keycloak session)', () => {
-  let github: jasmine.SpyObj<GithubService>;
+  let github: jasmine.SpyObj<GithubAppService>;
   let navigateSpy: jasmine.Spy;
   let paramValues: Record<string, string | null>;
   let auth: AuthService;
@@ -20,7 +20,7 @@ describe('GithubCallbackComponent — install callback (Keycloak session)', () =
     localStorage.removeItem(environment.userKey);
     paramValues = { success: 'true' };
 
-    github = jasmine.createSpyObj<GithubService>('GithubService', ['getInstallStatus']);
+    github = jasmine.createSpyObj<GithubAppService>('GithubAppService', ['getInstallStatus']);
     github.getInstallStatus.and.returnValue(of({ installed: true, installation_id: 42 }));
 
     TestBed.configureTestingModule({
@@ -29,7 +29,7 @@ describe('GithubCallbackComponent — install callback (Keycloak session)', () =
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
-        { provide: GithubService, useValue: github },
+        { provide: GithubAppService, useValue: github },
         // AuthService (injected by the component) depends on KeycloakService.
         {
           provide: KeycloakService,

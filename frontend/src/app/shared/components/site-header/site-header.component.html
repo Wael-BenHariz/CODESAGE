@@ -1,0 +1,64 @@
+<header class="site-header" data-testid="site-header">
+  <div class="header-left">
+    <a [routerLink]="can('write') ? '/dashboard' : '/repositories'" class="logo">
+      <span class="logo-mark" aria-hidden="true">▣</span>
+      <span class="logo-text">CodeSage</span>
+    </a>
+    <nav class="nav" aria-label="Main navigation">
+      @if (can('write')) {
+        <a routerLink="/dashboard" routerLinkActive="active" class="nav-link">Dashboard</a>
+      }
+      <a
+        routerLink="/repositories"
+        routerLinkActive="active"
+        class="nav-link"
+        data-testid="nav-repositories"
+      >
+        Repositories
+      </a>
+      @if (can('write')) {
+        <a routerLink="/settings" routerLinkActive="active" class="nav-link">Settings</a>
+      }
+      @if (can('org:settings')) {
+        <a
+          routerLink="/settings/org"
+          routerLinkActive="active"
+          class="nav-link"
+          data-testid="nav-org-settings"
+        >
+          Organization
+        </a>
+      }
+    </nav>
+  </div>
+
+  <div class="header-right">
+    @if (orgs.length > 1) {
+      <label class="org-switch">
+        <span class="visually-hidden">Active organization</span>
+        <select
+          [value]="activeOrgId"
+          (change)="switchOrg($event)"
+          data-testid="org-switcher"
+          aria-label="Active organization"
+        >
+          @for (org of orgs; track org.id) {
+            <option [value]="org.id">{{ org.name }}</option>
+          }
+        </select>
+      </label>
+    }
+    @if (auth.currentUser(); as user) {
+      <div class="user-menu">
+        @if (user.avatarUrl) {
+          <img [src]="user.avatarUrl" [alt]="user.login" class="user-avatar" />
+        }
+        <span class="user-name">{{ user.login }}</span>
+        <button type="button" class="btn btn-ghost" (click)="switchAccount()">
+          Switch Account
+        </button>
+        <button type="button" class="btn btn-ghost" (click)="logout()">Logout</button>
+      </div>
+    }
+  </div>
+</header>

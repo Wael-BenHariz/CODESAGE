@@ -1,31 +1,5 @@
 <div class="dashboard">
-  <header class="header">
-    <div class="header-left">
-      <a href="/" class="logo">
-        <span class="logo-mark">▣</span>
-        <span class="logo-text">CodeSage</span>
-      </a>
-      <nav class="nav">
-        @if (nav().write) {
-          <a routerLink="/dashboard" routerLinkActive="active" class="nav-link">Dashboard</a>
-        }
-        <a routerLink="/repositories" routerLinkActive="active" class="nav-link">Repositories</a>
-        @if (nav().write) {
-          <a routerLink="/settings" routerLinkActive="active" class="nav-link">Settings</a>
-        }
-      </nav>
-    </div>
-    <div class="header-right">
-      @if (user()) {
-        <div class="user-menu">
-          <img [src]="user()!.avatarUrl" [alt]="user()!.login" class="user-avatar" />
-          <span class="user-name">{{ user()!.login }}</span>
-          <button class="btn btn-ghost" (click)="switchAccount()">Switch Account</button>
-          <button class="btn btn-ghost" (click)="logout()">Logout</button>
-        </div>
-      }
-    </div>
-  </header>
+  <app-site-header />
 
   <main class="main">
     <div class="welcome">

@@ -1,9 +1,10 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, throwError } from 'rxjs';
+import { Observable, map, tap, catchError, throwError } from 'rxjs';
 import { KeycloakService } from 'keycloak-angular';
 import { User } from '../models/user.model';
+import { UserResponseDto, toUser } from './mappers/user.mapper';
 import { environment } from '@env/environment';
 
 /**
@@ -133,15 +134,17 @@ export class AuthService {
   }
 
   /**
-   * GET /auth/me — (re)loads the profile. The role in the response always
+   * `GET /auth/me` — (re)loads the profile. The role in the response always
    * reflects the current JWT: the backend derives it from the token on every
-   * request, never from the database.
+   * request, never from the database. The payload is mapped through
+   * `user.mapper` (snake_case `UserResponse` → camelCase `User`).
    */
   loadUser(): Observable<User> {
     this._isLoading.set(true);
     this._error.set(null);
 
-    return this.http.get<User>(`${environment.apiUrl}/auth/me`).pipe(
+    return this.http.get<UserResponseDto>(`${environment.apiUrl}/auth/me`).pipe(
+      map(toUser),
       tap(user => {
         this._currentUser.set(user);
         this.setUser(user);
@@ -159,12 +162,23 @@ export class AuthService {
   }
 
   updateProfile(updates: Partial<User>): Observable<User> {
-    return this.http.patch<User>(`${environment.apiUrl}/users/me`, updates).pipe(
+    return this.http.patch<UserResponseDto>(`${environment.apiUrl}/users/me`, updates).pipe(
+      map(toUser),
       tap(user => {
         this._currentUser.set(user);
         this.setUser(user);
       })
     );
+  }
+
+  /**
+   * `GET /auth/github/app/install-url` — signed GitHub App installation
+   * URL. The `state` claim is a JWT signed with STATE_TOKEN_SECRET so the
+   * `/auth/github/app/callback` endpoint can identify the installing user —
+   * never construct the GitHub URL manually.
+   */
+  getInstallUrl(): Observable<{ url: string }> {
+    return this.http.get<{ url: string }>(`${environment.apiUrl}/auth/github/app/install-url`);
   }
 
   private getStoredUser(): User | null {

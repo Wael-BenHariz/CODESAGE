@@ -3,12 +3,14 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { PrListComponent } from './pr-list.component';
-import { GithubService } from '../../../core/services/github.service';
+import { PullRequestService } from '../../../core/services/pull-request.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { OrgSettingsService } from '../../../core/services/org-settings.service';
 import { PullRequest } from '../../../core/models/pull-request.model';
 
 describe('PrListComponent — load error state (F3 pre-check b)', () => {
   let fixture: ComponentFixture<PrListComponent>;
-  let github: jasmine.SpyObj<GithubService>;
+  let github: jasmine.SpyObj<PullRequestService>;
 
   const pr: PullRequest = {
     id: 'pr-1',
@@ -29,13 +31,16 @@ describe('PrListComponent — load error state (F3 pre-check b)', () => {
   };
 
   beforeEach(() => {
-    github = jasmine.createSpyObj<GithubService>('GithubService', ['getPullRequests']);
+    github = jasmine.createSpyObj<PullRequestService>('PullRequestService', ['getPullRequests']);
 
     TestBed.configureTestingModule({
       imports: [PrListComponent],
       providers: [
         provideRouter([]), // the component template uses RouterLink
-        { provide: GithubService, useValue: github }
+        { provide: PullRequestService, useValue: github },
+        // <app-site-header> → AuthContextService (no session in tests).
+        { provide: AuthService, useValue: { currentUser: () => null } },
+        { provide: OrgSettingsService, useValue: { listOrgs: () => of([]) } }
       ]
     });
   });

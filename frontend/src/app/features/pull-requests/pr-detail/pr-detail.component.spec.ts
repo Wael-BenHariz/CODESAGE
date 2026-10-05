@@ -5,12 +5,15 @@ import { of, throwError } from 'rxjs';
 
 import { PrDetailComponent } from './pr-detail.component';
 import { AuthService } from '../../../core/services/auth.service';
-import { GithubService } from '../../../core/services/github.service';
+import { PullRequestService } from '../../../core/services/pull-request.service';
+import { ReviewService } from '../../../core/services/review.service';
+import { OrgSettingsService } from '../../../core/services/org-settings.service';
 import { PullRequest } from '../../../core/models/pull-request.model';
 
 describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
   let fixture: ComponentFixture<PrDetailComponent>;
-  let github: jasmine.SpyObj<GithubService>;
+  let pullRequests: jasmine.SpyObj<PullRequestService>;
+  let reviewApi: jasmine.SpyObj<ReviewService>;
   let roleSignal: WritableSignal<{ role: string } | null>;
 
   const pr: PullRequest = {
@@ -33,15 +36,15 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
 
   beforeEach(() => {
     roleSignal = signal({ role: 'DEVELOPER' });
-    github = jasmine.createSpyObj<GithubService>('GithubService', [
+    pullRequests = jasmine.createSpyObj<PullRequestService>('PullRequestService', [
       'getPullRequest',
       'triggerReview',
-      'getPullRequestReviews',
-      'getReviewDetail'
+      'getPullRequestReviews'
     ]);
+    reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', ['getReviewDetail']);
     // The embedded review panel loads on PR success — default to "no reviews".
-    github.getPullRequestReviews.and.returnValue(of([]));
-    github.getReviewDetail.and.returnValue(
+    pullRequests.getPullRequestReviews.and.returnValue(of([]));
+    reviewApi.getReviewDetail.and.returnValue(
       of({
         id: 'rev-1',
         pull_request_id: 'pr-1',
@@ -61,7 +64,7 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
         viewer_role: 'DEVELOPER'
       })
     );
-    github.triggerReview.and.returnValue(
+    pullRequests.triggerReview.and.returnValue(
       of({ review_id: 'rev-1', status: 'pending', message: 'queued' })
     );
 
@@ -69,7 +72,10 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
       imports: [PrDetailComponent],
       providers: [
         provideRouter([]), // the component template uses RouterLink
-        { provide: GithubService, useValue: github },
+        { provide: PullRequestService, useValue: pullRequests },
+        { provide: ReviewService, useValue: reviewApi },
+        // <app-site-header> → AuthContextService needs the org list API.
+        { provide: OrgSettingsService, useValue: { listOrgs: () => of([]) } },
         // The component only reads currentUser()?.role.
         { provide: AuthService, useValue: { currentUser: roleSignal } }
       ]
@@ -89,7 +95,7 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
   }
 
   it('renders an explicit error state instead of a blank page when the load fails', () => {
-    github.getPullRequest.and.returnValue(
+    pullRequests.getPullRequest.and.returnValue(
       throwError(() => ({ status: 404, message: 'Pull request not found' }))
     );
     create();
@@ -102,23 +108,23 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
   });
 
   it('retries the load from the error state and renders the PR on success', () => {
-    github.getPullRequest.and.returnValue(
+    pullRequests.getPullRequest.and.returnValue(
       throwError(() => ({ status: 404, message: 'Pull request not found' }))
     );
     create();
 
-    github.getPullRequest.and.returnValue(of(pr));
+    pullRequests.getPullRequest.and.returnValue(of(pr));
     (el().querySelector('[data-testid="pr-load-error"] button') as HTMLButtonElement).click();
     fixture.detectChanges(); // the retry is synchronous; refresh the DOM
 
     expect(fixture.componentInstance.loadError()).toBeFalse();
     expect(el().querySelector('[data-testid="pr-load-error"]')).toBeNull();
     expect(el().querySelector('h1')?.textContent).toContain('Fix the thing');
-    expect(github.getPullRequest).toHaveBeenCalledTimes(2);
+    expect(pullRequests.getPullRequest).toHaveBeenCalledTimes(2);
   });
 
   it('renders the PR detail when the load succeeds (no error state)', () => {
-    github.getPullRequest.and.returnValue(of(pr));
+    pullRequests.getPullRequest.and.returnValue(of(pr));
     create();
 
     expect(el().querySelector('[data-testid="pr-load-error"]')).toBeNull();

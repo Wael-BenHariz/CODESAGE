@@ -1,0 +1,79 @@
+// Shared layout for the /not-found and /forbidden pages — dark theme, same
+// palette as the rest of the app (page background #0a0a0a, accent #00e87b).
+
+:host {
+  display: block;
+}
+
+.error-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 16px;
+  background: #0a0a0a;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.error-code {
+  font-size: 64px;
+  font-weight: 800;
+  color: #1e1e1e;
+  margin: 0;
+}
+
+.error-page h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  color: #e5e5e5;
+  margin: 8px 0 12px;
+}
+
+.error-copy {
+  max-width: 460px;
+  color: #666666;
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #00e87b;
+  color: #0a0a0a;
+  border: 1px solid #00e87b;
+
+  &:hover {
+    background: #00c96a;
+  }
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #a0a0a0;
+  border: 1px solid #2a2a2a;
+
+  &:hover {
+    background: #1a1a1a;
+    color: #e5e5e5;
+  }
+}

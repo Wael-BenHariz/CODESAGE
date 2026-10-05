@@ -1,7 +1,8 @@
 import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiError } from '../../../core/services/api.service';
-import { GithubService } from '../../../core/services/github.service';
+import { PullRequestService } from '../../../core/services/pull-request.service';
+import { ReviewService } from '../../../core/services/review.service';
 import {
   CommentValidation,
   ReviewComment,
@@ -86,7 +87,8 @@ function withValidation(
   styleUrl: './review-panel.component.scss'
 })
 export class ReviewPanelComponent implements OnInit {
-  private readonly github = inject(GithubService);
+  private readonly pullRequests = inject(PullRequestService);
+  private readonly reviewApi = inject(ReviewService);
 
   /** Client-side cap for the summary editor (backend rejects over-cap too). */
   readonly summaryMaxChars = SUMMARY_MAX_CHARS;
@@ -128,7 +130,7 @@ export class ReviewPanelComponent implements OnInit {
     this.state.set('loading');
     this.triggerError.set(false);
     this.actionError.set(null);
-    this.github.getPullRequestReviews(this.prId()).subscribe({
+    this.pullRequests.getPullRequestReviews(this.prId()).subscribe({
       next: reviews => {
         const latest = reviews[0]; // the endpoint orders created_at desc
         if (!latest) {
@@ -136,7 +138,7 @@ export class ReviewPanelComponent implements OnInit {
           this.state.set('none');
           return;
         }
-        this.github.getReviewDetail(latest.id).subscribe({
+        this.reviewApi.getReviewDetail(latest.id).subscribe({
           next: detail => {
             this.detail.set(detail);
             this.state.set('detail');
@@ -158,7 +160,7 @@ export class ReviewPanelComponent implements OnInit {
       return;
     }
     this.isTriggering.set(true);
-    this.github.triggerReview(this.prId()).subscribe({
+    this.pullRequests.triggerReview(this.prId()).subscribe({
       next: () => {
         this.isTriggering.set(false);
         this.load(); // the pending review now exists → spinner state
@@ -273,7 +275,7 @@ export class ReviewPanelComponent implements OnInit {
     }
     this.posting.set(true);
     this.actionError.set(null);
-    this.github.postReview(detail.id).subscribe({
+    this.reviewApi.postReview(detail.id).subscribe({
       next: () => {
         this.posting.set(false);
         this.postDialogOpen.set(false);
@@ -325,7 +327,7 @@ export class ReviewPanelComponent implements OnInit {
     }
     this.savingSummary.set(true);
     this.actionError.set(null);
-    this.github.updateReviewSummary(detail.id, draft).subscribe({
+    this.reviewApi.updateReviewSummary(detail.id, draft).subscribe({
       next: response => {
         this.savingSummary.set(false);
         this.detail.update(current =>
@@ -358,8 +360,8 @@ export class ReviewPanelComponent implements OnInit {
     this.pendingCommentId.set(comment.id);
     this.actionError.set(null);
     const request = dismissed
-      ? this.github.dismissReviewComment(detail.id, comment.id)
-      : this.github.restoreReviewComment(detail.id, comment.id);
+      ? this.reviewApi.dismissReviewComment(detail.id, comment.id)
+      : this.reviewApi.restoreReviewComment(detail.id, comment.id);
     request.subscribe({
       next: updated => {
         this.pendingCommentId.set(null);
@@ -480,7 +482,7 @@ export class ReviewPanelComponent implements OnInit {
         : current
     );
 
-    this.github.validateReviewFinding(detail.id, comment.id, payload).subscribe({
+    this.reviewApi.validateReviewFinding(detail.id, comment.id, payload).subscribe({
       next: validation => {
         this.validatingCommentId.set(null);
         // Server row is the truth: it replaces the pending row (and any

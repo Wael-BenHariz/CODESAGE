@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ActivatedRoute, Router } from '@angular/router';
-import { GithubService } from '../../../core/services/github.service';
+import { GithubAppService } from '../../../core/services/github-app.service';
 import { AuthService } from '../../../core/services/auth.service';
 
 type CallbackState = 'processing' | 'success' | 'error';
@@ -17,7 +17,7 @@ type CallbackState = 'processing' | 'success' | 'error';
 export class GithubCallbackComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly github = inject(GithubService);
+  private readonly github = inject(GithubAppService);
   private readonly auth = inject(AuthService);
 
   statusMessage = signal('Finalizing GitHub App installation...');

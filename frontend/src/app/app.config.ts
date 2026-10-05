@@ -13,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { routes } from './app.routes';
 import { environment } from '@env/environment';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
+import { ErrorInterceptor } from './core/interceptors/error.interceptor';
 
 /** Shape returned by GET /api/v1/auth/keycloak/config. */
 export interface KeycloakAppConfig {
@@ -82,6 +83,16 @@ export const appConfig: ApplicationConfig = {
     {
       provide: HTTP_INTERCEPTORS,
       useClass: KeycloakBearerInterceptor,
+      multi: true
+    },
+    // Global 403/404 handling — MUST be provided LAST: Angular's reduceRight
+    // chain makes the last-registered interceptor the INNERMOST one, so it
+    // sees the raw error first and rethrows it outward (401 still reaches
+    // AuthInterceptor, component error handlers still run). See
+    // error.interceptor.ts.
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: ErrorInterceptor,
       multi: true
     },
     provideAnimations()

@@ -91,7 +91,22 @@ export const routes: Routes = [
     data: { roles: ADMIN_ROLES }
   },
   {
+    // Generic 404 (rule 5) — also the wildcard target below, so an unknown
+    // client-side URL renders the page instead of silently bouncing home.
+    path: 'not-found',
+    loadComponent: () =>
+      import('./features/errors/not-found/not-found.component').then(m => m.NotFoundComponent)
+  },
+  {
+    // Role-guard denial target (rule 5's "forbidden"). Unguarded: a
+    // NONE-role user lands here from the guard and must not redirect-loop.
+    path: 'forbidden',
+    loadComponent: () =>
+      import('./features/errors/forbidden/forbidden.component').then(m => m.ForbiddenComponent)
+  },
+  {
     path: '**',
-    redirectTo: ''
+    loadComponent: () =>
+      import('./features/errors/not-found/not-found.component').then(m => m.NotFoundComponent)
   }
 ];

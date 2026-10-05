@@ -19,6 +19,22 @@ const fakeUser: User = {
   role: 'DEVELOPER'
 };
 
+/**
+ * The same profile in its REAL wire shape (`UserResponse`, snake_case —
+ * what `GET /auth/me` actually returns). HTTP responses flush this DTO;
+ * `toUser` maps it onto the camelCase `fakeUser` above.
+ */
+const fakeUserDto = {
+  id: 'u-1',
+  login: 'octocat',
+  email: 'octo@example.com',
+  name: 'Octo Cat',
+  avatar_url: 'https://example.com/avatar.png',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+  role: 'DEVELOPER'
+};
+
 function clearAuthStorage(): void {
   localStorage.removeItem(environment.userKey);
   sessionStorage.clear();
@@ -87,7 +103,7 @@ describe('AuthService (Keycloak-backed)', () => {
       expect(auth.currentUser()?.login).toBe('octocat');
 
       // The background refresh carries the role derived from the current JWT.
-      const fresh: User = { ...fakeUser, role: 'REVIEWER' };
+      const fresh = { ...fakeUserDto, role: 'REVIEWER' };
       const req = httpMock.expectOne(`${environment.apiUrl}/auth/me`);
       req.flush(fresh);
       expect(auth.currentUser()?.role).toBe('REVIEWER');
@@ -143,7 +159,7 @@ describe('AuthService (Keycloak-backed)', () => {
       localStorage.setItem(environment.userKey, JSON.stringify(fakeUser));
       keycloak.isLoggedIn.and.returnValue(true);
       const auth = TestBed.inject(AuthService);
-      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUser); // constructor refresh
+      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUserDto); // constructor refresh
 
       auth.logout();
 
@@ -165,7 +181,7 @@ describe('AuthService (Keycloak-backed)', () => {
     it('clears local state and navigates to /login even when the server call errors', () => {
       keycloak.isLoggedIn.and.returnValue(true);
       const auth = TestBed.inject(AuthService);
-      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUser); // constructor refresh
+      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUserDto); // constructor refresh
 
       auth.logout();
 
@@ -192,7 +208,7 @@ describe('AuthService (Keycloak-backed)', () => {
       localStorage.setItem(environment.userKey, JSON.stringify(fakeUser));
       keycloak.isLoggedIn.and.returnValue(true);
       const auth = TestBed.inject(AuthService);
-      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUser); // constructor refresh
+      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUserDto); // constructor refresh
 
       auth.switchAccount();
 
@@ -208,7 +224,7 @@ describe('AuthService (Keycloak-backed)', () => {
       localStorage.setItem(environment.userKey, JSON.stringify(fakeUser));
       keycloak.isLoggedIn.and.returnValue(true);
       const auth = TestBed.inject(AuthService);
-      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUser);
+      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUserDto);
 
       auth.switchAccount('/invite/accept?token=abc');
 
@@ -224,10 +240,13 @@ describe('AuthService (Keycloak-backed)', () => {
       let loaded: User | undefined;
       auth.loadUser().subscribe(u => (loaded = u));
 
-      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUser);
+      httpMock.expectOne(`${environment.apiUrl}/auth/me`).flush(fakeUserDto);
 
       expect(loaded?.login).toBe('octocat');
       expect(auth.currentUser()?.role).toBe('DEVELOPER');
+      // Regression: GET /auth/me returns snake_case `avatar_url` — the
+      // mapper must surface it as camelCase `avatarUrl`.
+      expect(auth.currentUser()?.avatarUrl).toBe('https://example.com/avatar.png');
       expect(localStorage.getItem(environment.userKey)).not.toBeNull();
     });
 

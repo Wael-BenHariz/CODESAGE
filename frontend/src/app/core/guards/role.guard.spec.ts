@@ -18,6 +18,7 @@ import {
   navVisibility
 } from './role.guard';
 import { OrgSettingsService } from '../services/org-settings.service';
+import { AuthService } from '../services/auth.service';
 import { routes } from '../../app.routes';
 
 describe('role lists', () => {
@@ -160,6 +161,11 @@ describe('RoleGuard', () => {
   let router: Router;
   let keycloak: jasmine.SpyObj<KeycloakService>;
   let orgSvc: jasmine.SpyObj<OrgSettingsService>;
+  /**
+   * Fake GET /auth/me profile — `null` by default (profile not loaded yet,
+   * guard falls back to the JWT exactly as before).
+   */
+  let backendUser: { role: string } | null = null;
 
   const state = (url: string) => ({ url }) as RouterStateSnapshot;
 
@@ -172,7 +178,12 @@ describe('RoleGuard', () => {
    * and an optional parsed-token claim map (`tokenParsed` — used for the
    * GitHub identity claims the guard inspects).
    */
-  function configure(sessionRoles: string[], tokenParsed: Record<string, unknown> = {}): void {
+  function configure(
+    sessionRoles: string[],
+    tokenParsed: Record<string, unknown> = {},
+    backendRole: string | null = null
+  ): void {
+    backendUser = backendRole != null ? { role: backendRole } : null;
     keycloak = jasmine.createSpyObj<KeycloakService>('KeycloakService', [
       'isLoggedIn',
       'getUserRoles',
@@ -190,7 +201,10 @@ describe('RoleGuard', () => {
       providers: [
         provideRouter([]),
         { provide: KeycloakService, useValue: keycloak },
-        { provide: OrgSettingsService, useValue: orgSvc }
+        { provide: OrgSettingsService, useValue: orgSvc },
+        // AuthContextService (injected by the guard) reads the backend role
+        // from GET /auth/me — null unless a test passes `backendRole`.
+        { provide: AuthService, useValue: { currentUser: () => backendUser } }
       ]
     });
     router = TestBed.inject(Router);
@@ -242,11 +256,11 @@ describe('RoleGuard', () => {
     expect(await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings'))).toBeTrue();
   });
 
-  it('bounces NONE off a write-protected route to the read-only home', async () => {
+  it('bounces NONE off a write-protected route to the forbidden page', async () => {
     configure(['NONE']);
     const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
 
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   it('bounces a session carrying only legacy GUEST + DEVELOPER (compat → NONE)', async () => {
@@ -255,14 +269,14 @@ describe('RoleGuard', () => {
     configure(['GUEST', 'DEVELOPER']);
     const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
 
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   it('mirrors the backend when the token carries no recognized roles (→ NONE)', async () => {
     // Authenticated Keycloak session whose realm roles are only defaults
     // (empty list here) and NO GitHub claims: backend derive_role falls back
-    // to NONE, so the guard must bounce off the write route — exactly like an
-    // explicit NONE, keeping both sides identical.
+    // to NONE, so the guard must bounce off the write route to /forbidden —
+    // exactly like an explicit NONE, keeping both sides identical.
     configure([]);
     // configure() sets isLoggedIn from sessionRoles.length — force the
     // authenticated-but-roleless state this scenario needs.
@@ -270,7 +284,7 @@ describe('RoleGuard', () => {
 
     const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
 
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   it('allows a GitHub-brokered default-roles session on write routes (F1)', async () => {
@@ -291,7 +305,7 @@ describe('RoleGuard', () => {
     configure(['GUEST'], { githubId: 75458407 });
     const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
 
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   // --- org-membership elevation (plan §2: effective = max(JWT, org_members)) --
@@ -317,7 +331,7 @@ describe('RoleGuard', () => {
     );
 
     const result = await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'));
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   it('fails closed when the org lookup errors on an admin route', async () => {
@@ -325,7 +339,7 @@ describe('RoleGuard', () => {
     orgSvc.listOrgs.and.returnValue(throwError(() => new Error('network down')));
 
     const result = await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'));
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   it('consults memberships only for admin routes (deny path of WRITE_ROLES)', async () => {
@@ -335,7 +349,7 @@ describe('RoleGuard', () => {
     );
 
     const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
-    expect(result).toEqual(router.parseUrl('/repositories'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
     expect(orgSvc.listOrgs).not.toHaveBeenCalled();
   });
 
@@ -345,5 +359,38 @@ describe('RoleGuard', () => {
       await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
     ).toBeTrue();
     expect(orgSvc.listOrgs).not.toHaveBeenCalled();
+  });
+
+  // --- rule 4: prefer the role reported by GET /auth/me -------------------
+
+  it('prefers the backend /auth/me role over re-deriving from the JWT', async () => {
+    // JWT says DEVELOPER (no admin qualification), the backend profile says
+    // ORG_ADMIN — the guard must take the backend value without consulting
+    // org memberships (the lookup never runs).
+    configure(['DEVELOPER'], {}, 'ORG_ADMIN');
+
+    expect(
+      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+    ).toBeTrue();
+    expect(orgSvc.listOrgs).not.toHaveBeenCalled();
+  });
+
+  it('honors a backend-reported NONE downgrade even when the JWT has roles', async () => {
+    // The backend is the source of truth for the effective role: a profile
+    // reporting the read-only sentinel must not reach write routes.
+    configure(['DEVELOPER'], {}, 'NONE');
+
+    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    expect(result).toEqual(router.parseUrl('/forbidden'));
+  });
+
+  it('falls back to the JWT derivation while the profile has not loaded', async () => {
+    // backendRole = null (profile still in flight) — derive from the token,
+    // mirroring security/roles.py, exactly like before the profile arrives.
+    configure(['ORG_ADMIN']);
+
+    expect(
+      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+    ).toBeTrue();
   });
 });
