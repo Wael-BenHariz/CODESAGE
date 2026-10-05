@@ -7,6 +7,8 @@ import {
   CommentValidation,
   ReviewComment,
   ReviewDetail,
+  ScanFinding,
+  ScanReport,
   ValidationSeverity,
   ValidationVerdict
 } from '../../../core/models/review.model';
@@ -34,6 +36,106 @@ const RUNNING_STATUSES = ['pending', 'processing', 'in_progress'];
 
 /** Mirrors backend `EDITED_SUMMARY_MAX_CHARS` (app/services/review_posting.py). */
 const SUMMARY_MAX_CHARS = 60_000;
+
+/** Client-side render cap for scan-only findings — huge scans must not flood the panel. */
+const SCAN_LIST_CAP = 50;
+
+/**
+ * Group key joining a review comment back to its source static-analysis
+ * finding: tool + rule_id + file_path (the columns migration 015 copies onto
+ * comments). `\x1f` separators so concatenated fields can never collide —
+ * same convention as the backend fingerprint().
+ */
+function scanGroupKey(tool: string, ruleId: string, filePath: string): string {
+  return `${tool}\x1f${ruleId}\x1f${filePath}`;
+}
+
+/**
+ * Index scan findings by their source rule (tool + rule_id + file_path),
+ * several findings per key (same rule hit at different lines).
+ */
+export function indexScanFindings(findings: ScanFinding[]): Map<string, ScanFinding[]> {
+  const index = new Map<string, ScanFinding[]>();
+  for (const finding of findings) {
+    const key = scanGroupKey(finding.tool, finding.rule_id, finding.file_path);
+    const bucket = index.get(key);
+    if (bucket) {
+      bucket.push(finding);
+    } else {
+      index.set(key, [finding]);
+    }
+  }
+  return index;
+}
+
+/**
+ * The scan finding a comment came from — line-first (same rule at the same
+ * line), then a line-less finding; a file-level comment (line null) matches
+ * any finding of its rule. `null` = the comment carries no source-rule
+ * columns (LLM-only comment) or the scan no longer has it (the scan report
+ * is a snapshot — a rule deleted upstream must not break rendering).
+ */
+export function matchScanFinding(
+  comment: ReviewComment,
+  index: Map<string, ScanFinding[]>
+): ScanFinding | null {
+  if (!comment.tool || !comment.rule_id) {
+    return null;
+  }
+  const bucket = index.get(scanGroupKey(comment.tool, comment.rule_id, comment.file_path));
+  if (!bucket || bucket.length === 0) {
+    return null;
+  }
+  if (comment.line_number !== null) {
+    const exact = bucket.find(finding => finding.line_start === comment.line_number);
+    if (exact) {
+      return exact;
+    }
+  }
+  return (
+    bucket.find(finding => finding.line_start === null) ??
+    (comment.line_number === null ? bucket[0] : null)
+  );
+}
+
+/**
+ * Findings of the scan that NO review comment covers (plan Step 3: they are
+ * listed separately — never merged into the comments or the stats tiles).
+ * A finding is covered when a comment shares its source rule and their lines
+ * are compatible (equal, or one side line-less).
+ */
+export function uncoveredScanFindings(
+  comments: ReviewComment[],
+  findings: ScanFinding[]
+): ScanFinding[] {
+  const commentGroups = new Map<string, ReviewComment[]>();
+  for (const comment of comments) {
+    if (!comment.tool || !comment.rule_id) {
+      continue;
+    }
+    const key = scanGroupKey(comment.tool, comment.rule_id, comment.file_path);
+    const bucket = commentGroups.get(key);
+    if (bucket) {
+      bucket.push(comment);
+    } else {
+      commentGroups.set(key, [comment]);
+    }
+  }
+  return findings.filter(finding => {
+    const bucket = commentGroups.get(
+      scanGroupKey(finding.tool, finding.rule_id, finding.file_path)
+    );
+    if (!bucket) {
+      return true;
+    }
+    return !bucket.some(
+      comment =>
+        comment.line_number === null ||
+        finding.line_start === null ||
+        comment.line_number === finding.line_start
+    );
+  });
+}
 
 /** Human-readable text for a failed staged action (ApiError carries FastAPI detail). */
 function actionErrorMessage(err: unknown): string {
@@ -105,6 +207,12 @@ export class ReviewPanelComponent implements OnInit {
   readonly isTriggering = signal(false);
   readonly triggerError = signal(false);
 
+  // --- Static-analysis report (plan Step 3) ---------------------------------
+  /** The review's scan report; null while loading, absent (404) or failed. */
+  readonly scanReport = signal<ScanReport | null>(null);
+  /** Transient scan-report failure (non-404) — muted note; comments unaffected. */
+  readonly scanLoadFailed = signal(false);
+
   // --- Staged posting controls (plan Step 8) --------------------------------
   /** Last API failure (post / summary / dismiss / restore) — surfaced visibly. */
   readonly actionError = signal<string | null>(null);
@@ -130,6 +238,8 @@ export class ReviewPanelComponent implements OnInit {
     this.state.set('loading');
     this.triggerError.set(false);
     this.actionError.set(null);
+    this.scanReport.set(null);
+    this.scanLoadFailed.set(false);
     this.pullRequests.getPullRequestReviews(this.prId()).subscribe({
       next: reviews => {
         const latest = reviews[0]; // the endpoint orders created_at desc
@@ -138,15 +248,41 @@ export class ReviewPanelComponent implements OnInit {
           this.state.set('none');
           return;
         }
-        this.reviewApi.getReviewDetail(latest.id).subscribe({
+        const reviewId = latest.id;
+        this.reviewApi.getReviewDetail(reviewId).subscribe({
           next: detail => {
             this.detail.set(detail);
             this.state.set('detail');
           },
           error: () => this.state.set('error')
         });
+        // Parallel, failure-isolated: the scan report only enriches — its
+        // absence or failure must never take the comments down with it.
+        this.loadScanReport(reviewId);
       },
       error: () => this.state.set('error')
+    });
+  }
+
+  /**
+   * Fetch the scan report for enrichment. 404 = "no scan report yet" —
+   * expected, silent (the interceptor lets it through, no navigation);
+   * any other failure only flips the muted `scanLoadFailed` note.
+   */
+  private loadScanReport(reviewId: string): void {
+    this.reviewApi.getScanReport(reviewId).subscribe({
+      next: report => {
+        if (report.review_id !== reviewId) {
+          return; // stale response — a newer load() supersedes it
+        }
+        this.scanReport.set(report);
+      },
+      error: (err: unknown) => {
+        if (err instanceof ApiError && err.status === 404) {
+          return; // absence, not a failure — no note, no navigation
+        }
+        this.scanLoadFailed.set(true);
+      }
     });
   }
 
@@ -248,6 +384,32 @@ export class ReviewPanelComponent implements OnInit {
   readonly dismissedCount = computed(
     () => (this.detail()?.comments ?? []).filter(comment => comment.dismissed).length
   );
+
+  // --- Scan-report enrichment (plan Step 3) ---------------------------------
+
+  /** Findings grouped by source rule (tool + rule + file) — null before load. */
+  readonly scanIndex = computed(() => {
+    const report = this.scanReport();
+    return report ? indexScanFindings(report.findings) : null;
+  });
+
+  /** Scan findings no review comment covers — listed separately, never merged. */
+  readonly uncoveredFindings = computed(() => {
+    const report = this.scanReport();
+    if (!report) {
+      return [];
+    }
+    return uncoveredScanFindings(this.detail()?.comments ?? [], report.findings);
+  });
+
+  /** Render slice of `uncoveredFindings` (client-side cap; counts stay exact). */
+  readonly visibleUncovered = computed(() => this.uncoveredFindings().slice(0, SCAN_LIST_CAP));
+
+  /** The comment's source finding (OWASP / fix suggestion), or null. */
+  scanFindingFor(comment: ReviewComment): ScanFinding | null {
+    const index = this.scanIndex();
+    return index ? matchScanFinding(comment, index) : null;
+  }
 
   readonly summaryDirty = computed(
     () => this.summaryDraft() !== (this.detail()?.edited_summary ?? this.detail()?.summary ?? '')

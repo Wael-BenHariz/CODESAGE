@@ -3,6 +3,11 @@ import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 
 import { ReviewPanelComponent } from './review-panel.component';
+import {
+  indexScanFindings,
+  matchScanFinding,
+  uncoveredScanFindings
+} from './review-panel.component';
 import { ApiError } from '../../../core/services/api.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
@@ -10,7 +15,9 @@ import {
   CommentValidation,
   ReviewComment,
   ReviewDetail,
-  ReviewSummary
+  ReviewSummary,
+  ScanFinding,
+  ScanReport
 } from '../../../core/models/review.model';
 
 describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () => {
@@ -68,6 +75,40 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     ...over
   });
 
+  /** Real `NormalizedFinding` fixture (services/normalizers/schema.py). */
+  const scanFinding = (over: Partial<ScanFinding> = {}): ScanFinding => ({
+    id: 'f-1',
+    tool: 'semgrep',
+    rule_id: 'python.lang.security.audit.sqli',
+    title: 'SQL injection',
+    message: 'User input flows into a query.',
+    severity: 'high',
+    category: 'vulnerability',
+    file_path: 'src/a.py',
+    line_start: 10,
+    line_end: 12,
+    snippet: null,
+    cwe: ['CWE-89'],
+    owasp: ['A03:2021-Injection'],
+    references: [],
+    also_detected_by: [],
+    fix_suggestion: 'Use a parameterized query.',
+    raw: {},
+    ...over
+  });
+
+  /** Real `ScanReportResponse` fixture (schemas/scan_report.py). */
+  const scanReport = (over: Partial<ScanReport> = {}): ScanReport => ({
+    scan_id: 'scan-1',
+    review_id: 'rev-1',
+    tools_run: ['sonarqube', 'semgrep'],
+    tools_failed: [],
+    summary: { total: 0, by_severity: {}, by_tool: {} },
+    findings: [],
+    created_at: '2026-01-01T00:05:00Z',
+    ...over
+  });
+
   beforeEach(() => {
     pullRequests = jasmine.createSpyObj<PullRequestService>('PullRequestService', [
       'getPullRequestReviews',
@@ -75,6 +116,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     ]);
     reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', [
       'getReviewDetail',
+      'getScanReport',
       'postReview',
       'updateReviewSummary',
       'dismissReviewComment',
@@ -83,6 +125,9 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     ]);
     pullRequests.getPullRequestReviews.and.returnValue(of([]));
     reviewApi.getReviewDetail.and.returnValue(of(detail()));
+    // Default: a report with no findings → no visible enrichment, so the
+    // pre-Step-3 state tests stay byte-identical.
+    reviewApi.getScanReport.and.returnValue(of(scanReport()));
     pullRequests.triggerReview.and.returnValue(
       of({ review_id: 'rev-1', status: 'pending', message: 'queued' })
     );
@@ -806,6 +851,205 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('verdict-who')?.textContent).toContain('kc-reviewer-a');
       expect(testid('api-error')?.textContent).toContain('Verdict rejected (403)');
       expect((testid('fp-finding') as HTMLButtonElement).disabled).toBeFalse();
+    });
+  });
+
+  // --- scan-report enrichment (plan Step 3) ---------------------------------
+
+  describe('scan-report enrichment (plan Step 3)', () => {
+    it('renders the tools_failed header with the failing tool and reason', () => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getScanReport.and.returnValue(
+        of(
+          scanReport({
+            tools_run: ['semgrep'],
+            tools_failed: [{ tool: 'sonarqube', error: 'scanner timed out' }]
+          })
+        )
+      );
+      create();
+
+      const notice = testid('scan-tools-failed');
+      expect(notice).not.toBeNull();
+      expect(notice?.textContent).toContain('Static analysis incomplete');
+      expect(notice?.textContent).toContain('sonarqube: scanner timed out');
+    });
+
+    it('stays silent when the review has no scan report yet (404 = absence)', () => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getScanReport.and.returnValue(
+        throwError(() => new ApiError('No scan report for this review', 404, 'no scan'))
+      );
+      create();
+
+      expect(testid('scan-tools-failed')).toBeNull();
+      expect(testid('scan-unavailable')).toBeNull();
+      // The review itself still renders — no navigation, no broken panel.
+      expect(testid('review-summary')).not.toBeNull();
+      expect(testid('review-panel-empty')).not.toBeNull();
+    });
+
+    it('shows a muted note when the scan report fails transiently (non-404)', () => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getScanReport.and.returnValue(
+        throwError(() => new ApiError('Server error', 500, 'boom'))
+      );
+      create();
+
+      expect(testid('scan-unavailable')).not.toBeNull();
+      expect(testid('scan-tools-failed')).toBeNull();
+      expect(testid('review-summary')).not.toBeNull(); // comments unaffected
+    });
+
+    it('joins OWASP tags and the fix suggestion into the matched comment', () => {
+      const enriched = comment({
+        tool: 'semgrep',
+        rule_id: 'python.lang.security.audit.sqli',
+        file_path: 'src/a.py',
+        line_number: 10,
+        line_start: 10,
+        line_end: 12
+      });
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({}, [enriched])));
+      reviewApi.getScanReport.and.returnValue(of(scanReport({ findings: [scanFinding()] })));
+      create();
+
+      expect(testid('comment-owasp')?.textContent).toContain('A03:2021-Injection');
+      expect(testid('comment-fix')?.textContent).toContain('Use a parameterized query.');
+    });
+
+    it('lists scan findings no comment covers — separately, with exact counts', () => {
+      const matched = comment({
+        tool: 'semgrep',
+        rule_id: 'rule.matched',
+        file_path: 'src/a.py',
+        line_number: 10
+      });
+      const orphans = [1, 2].map(n =>
+        scanFinding({
+          id: `f-orphan-${n}`,
+          rule_id: `rule.orphan.${n}`,
+          file_path: `src/b${n}.py`,
+          line_start: n,
+          fix_suggestion: `Fix ${n}`
+        })
+      );
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({}, [matched])));
+      reviewApi.getScanReport.and.returnValue(
+        of(
+          scanReport({
+            findings: [scanFinding({ id: 'f-covered', rule_id: 'rule.matched' }), ...orphans]
+          })
+        )
+      );
+      create();
+
+      expect(testid('scan-only-findings')).not.toBeNull();
+      expect(testid('scan-only-count')?.textContent?.trim()).toBe('2');
+      const rows = el().querySelectorAll('[data-testid="scan-finding"]');
+      expect(rows.length).toBe(2); // the covered finding is NOT listed
+      expect(testid('scan-fix')?.textContent).toContain('Fix 1');
+      // The covered comment shows its own enrichment instead.
+      expect(testid('comment-owasp')).not.toBeNull();
+      expect(testid('comment-fix')).not.toBeNull();
+    });
+
+    it('a report whose findings are all covered renders no standalone section', () => {
+      const matched = comment({
+        tool: 'semgrep',
+        rule_id: 'python.lang.security.audit.sqli',
+        line_number: 10
+      });
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({}, [matched])));
+      reviewApi.getScanReport.and.returnValue(of(scanReport({ findings: [scanFinding()] })));
+      create();
+
+      expect(testid('scan-only-findings')).toBeNull();
+    });
+
+    it('caps the standalone list at 50 rows but keeps the exact total', () => {
+      const findings = Array.from({ length: 55 }, (_, i) =>
+        scanFinding({
+          id: `f-${i}`,
+          rule_id: `rule.${i}`,
+          file_path: `src/x${i}.py`,
+          line_start: i
+        })
+      );
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getScanReport.and.returnValue(of(scanReport({ findings })));
+      create();
+
+      expect(el().querySelectorAll('[data-testid="scan-finding"]').length).toBe(50);
+      expect(testid('scan-only-count')?.textContent?.trim()).toBe('55');
+      expect(testid('scan-more')?.textContent).toContain('5 more');
+    });
+
+    it('a report with no findings and no failures adds nothing to the panel', () => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({}, [comment()])));
+      reviewApi.getScanReport.and.returnValue(of(scanReport()));
+      create();
+
+      expect(testid('scan-tools-failed')).toBeNull();
+      expect(testid('scan-unavailable')).toBeNull();
+      expect(testid('scan-only-findings')).toBeNull();
+      expect(testid('review-comment')).not.toBeNull(); // comments intact
+    });
+  });
+
+  // --- pure join helpers (unit, no fixture needed) --------------------------
+
+  describe('scan join helpers (pure functions)', () => {
+    const index = indexScanFindings([scanFinding()]);
+
+    it('matches a comment to its source finding by source rule + line', () => {
+      const hit = matchScanFinding(
+        comment({ tool: 'semgrep', rule_id: scanFinding().rule_id, line_number: 10 }),
+        index
+      );
+      expect(hit?.id).toBe('f-1');
+    });
+
+    it('returns null for a comment with no source-rule columns (LLM-only)', () => {
+      expect(matchScanFinding(comment(), index)).toBeNull(); // tool/rule are null
+    });
+
+    it('does not match a different line of the same rule', () => {
+      const hit = matchScanFinding(
+        comment({ tool: 'semgrep', rule_id: scanFinding().rule_id, line_number: 99 }),
+        index
+      );
+      expect(hit).toBeNull();
+    });
+
+    it('a file-level comment (line null) matches its rule anywhere', () => {
+      const hit = matchScanFinding(
+        comment({ tool: 'semgrep', rule_id: scanFinding().rule_id, line_number: null }),
+        index
+      );
+      expect(hit?.id).toBe('f-1');
+    });
+
+    it('uncovers only findings no comment covers (line-compatible)', () => {
+      const findings = [
+        scanFinding({ id: 'f-line' }),
+        scanFinding({ id: 'f-other', rule_id: 'rule.other' })
+      ];
+      const everything = uncoveredScanFindings(
+        [comment({ tool: 'semgrep', rule_id: 'rule.unrelated', line_number: 10 })],
+        findings
+      );
+      expect(everything.map(f => f.id)).toEqual(['f-line', 'f-other']);
+
+      const rest = uncoveredScanFindings(
+        [comment({ tool: 'semgrep', rule_id: scanFinding().rule_id, line_number: 10 })],
+        findings
+      );
+      expect(rest.map(f => f.id)).toEqual(['f-other']);
     });
   });
 });

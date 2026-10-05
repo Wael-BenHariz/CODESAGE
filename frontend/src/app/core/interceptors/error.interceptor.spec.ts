@@ -89,6 +89,15 @@ describe('ErrorInterceptor', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
+  it('keeps scan-report 404s in place (a review with no scan yet is absence)', () => {
+    const err = flushError(404, '/api/v1/reviews/rev-1/scan-report');
+
+    // "No scan report yet" is an expected 404 — the panel renders the review
+    // without enrichment; the review detail request guards access instead.
+    expect(err.status).toBe(404);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
   it('passes 2xx responses through untouched', () => {
     let body: unknown = null;
     http.get('/api/v1/ok').subscribe(res => (body = res));

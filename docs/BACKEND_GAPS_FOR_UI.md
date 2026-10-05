@@ -119,6 +119,34 @@ Source of truth for the surrounding audit: `docs/FRONTEND_GAP_MATRIX.md`.
   with `dismissed = false`) to `PullRequestWithReviews` — that would remove
   the extra request per PR page.
 
+## 9. Scan enrichment on comments (OWASP / fix suggestion) + scan-report 404
+
+- **Wanted by:** plan Step 3 (review-panel enrichment from
+  `GET /reviews/{id}/scan-report`: `tools_failed` header, OWASP tags, fix
+  suggestions, and scan findings no comment covers).
+- **What exists today:** the comment enrichment columns (migration 015) carry
+  `tool`, `rule_id`, `cwe`, `line_start/line_end`, `snippet`,
+  `also_detected_by` — but **not** `owasp` or `fix_suggestion`; those live
+  only on the scan-report findings. Also, the scan-report route 404s with
+  two meanings: cross-organisation/unknown review ("Review not found") and
+  an expected absence ("No scan report for this review" — reviews whose
+  scans both failed, or pre-migration rows).
+- **UI built instead:** the panel fetches the report in parallel with the
+  review detail (failure-isolated), joins findings back to comments by
+  source rule — `tool + rule_id + file_path`, line-first with a line-less
+  fallback — and renders OWASP chips + the fix suggestion per comment;
+  findings no comment covers are listed separately (capped at 50 rendered,
+  exact count shown) and are never merged into the comments or the stats
+  tiles. The frontend's ErrorInterceptor allows `…/scan-report` 404s to
+  pass through (absence = no enrichment, no navigation); access is still
+  guarded by `GET /reviews/{id}`. The join is heuristic: if a comment ever
+  carries a shifted `line_number`, its enrichment is skipped rather than
+  guessed.
+- **Suggested backend:** add `owasp` + `fix_suggestion` to the comment
+  enrichment columns (migration 015 follow-up), and return `200` with an
+  empty report (or a distinct status) for "no scan yet" so absence and
+  access-denied stop sharing `404`.
+
 ---
 
 ## Decisions / facts to confirm with the product owner

@@ -78,3 +78,57 @@ export interface ReviewDetail extends ReviewSummary {
   /** Caller's effective org role — cosmetic; the backend stays authoritative. */
   viewer_role: string;
 }
+
+// --- Scan report (GET /reviews/{id}/scan-report, plan Step 3) ----------------
+// Wire shapes from backend `ScanReportResponse` (schemas/scan_report.py) and
+// `NormalizedFinding` / `ToolFailure` (services/normalizers/schema.py).
+
+/** A tool that did not deliver results for the scan, and why. */
+export interface ScanToolFailure {
+  tool: string;
+  error: string;
+}
+
+/** Unified scan severity scale (backend `Severity` literal). */
+export type ScanSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+
+/** One static-analysis finding, in the project's unified vocabulary. */
+export interface ScanFinding {
+  id: string;
+  tool: string;
+  rule_id: string;
+  title: string;
+  message: string;
+  severity: ScanSeverity;
+  category: string;
+  file_path: string;
+  line_start: number | null;
+  line_end: number | null;
+  snippet: string | null;
+  cwe: string[];
+  owasp: string[];
+  references: string[];
+  /** Other tools that found the SAME defect (cross-tool dedup). */
+  also_detected_by: string[];
+  fix_suggestion: string | null;
+  /** Original tool payload, kept verbatim by the backend — never rendered. */
+  raw: Record<string, unknown>;
+}
+
+/** `summary` always describes the FULL scan (findings may be filtered). */
+export interface ScanReportSummary {
+  total?: number;
+  by_severity?: Record<string, number>;
+  by_tool?: Record<string, number>;
+}
+
+/** One review's latest static-analysis scan (migrations 010/011 tables). */
+export interface ScanReport {
+  scan_id: string;
+  review_id: string;
+  tools_run: string[];
+  tools_failed: ScanToolFailure[];
+  summary: ScanReportSummary;
+  findings: ScanFinding[];
+  created_at: string;
+}

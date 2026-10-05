@@ -570,6 +570,213 @@
       }
     }
   }
+
+  // --- Static-analysis report (plan Step 3) ---------------------------------
+
+  .scan-notice {
+    margin: 12px 0;
+    padding: 8px 12px;
+    background: rgba(236, 201, 75, 0.07);
+    border: 1px solid rgba(236, 201, 75, 0.35);
+    border-radius: 4px;
+    font-size: 12px;
+    color: #ecc94b;
+
+    strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 16px;
+    }
+
+    li {
+      color: #a0aec0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      word-break: break-word;
+    }
+  }
+
+  .scan-unavailable {
+    margin: 12px 0;
+    font-size: 12px;
+    color: #718096;
+  }
+
+  .owasp-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .owasp-chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid #2a2a2a;
+    border-radius: 3px;
+    color: #a0aec0;
+  }
+
+  .fix-suggestion {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(66, 153, 225, 0.06);
+    border-left: 2px solid #4299e1;
+    border-radius: 0 4px 4px 0;
+
+    .fix-label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #4299e1;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #cbd5e0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+
+  .scan-only {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #1e1e1e;
+  }
+
+  .scan-only-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #a0aec0;
+  }
+
+  .scan-only-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 1px 7px;
+    border: 1px solid #2a2a2a;
+    border-radius: 999px;
+    color: #a0aec0;
+  }
+
+  .scan-only-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .scan-finding {
+    padding: 10px 12px;
+    background: #111111;
+    border: 1px solid #1e1e1e;
+    border-radius: 4px;
+  }
+
+  .scan-finding-badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+
+    .tool-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border: 1px solid #2a2a2a;
+      border-radius: 3px;
+      color: #a0a0a0;
+      text-transform: uppercase;
+    }
+  }
+
+  .scan-sev {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #4a5568;
+    color: #a0aec0;
+
+    &.scan-sev-critical {
+      color: #f56565;
+      border-color: #f56565;
+    }
+
+    &.scan-sev-high {
+      color: #ed8936;
+      border-color: #ed8936;
+    }
+
+    &.scan-sev-medium {
+      color: #ecc94b;
+      border-color: #ecc94b;
+    }
+
+    &.scan-sev-low {
+      color: #4299e1;
+      border-color: #4299e1;
+    }
+    /* `scan-sev-info` needs no rule — the base styles above are identical. */
+  }
+
+  .scan-category {
+    font-size: 10px;
+    color: #718096;
+  }
+
+  .scan-finding-title {
+    margin: 0 0 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e5e5;
+  }
+
+  .scan-finding-msg {
+    margin: 0;
+    font-size: 12px;
+    color: #a0aec0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .scan-finding-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #718096;
+  }
+
+  .scan-more {
+    font-size: 11px;
+    color: #718096;
+    padding: 4px 2px;
+  }
 }
 
 @keyframes review-panel-spin {

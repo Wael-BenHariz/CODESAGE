@@ -71,10 +71,25 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
       'triggerReview',
       'getPullRequestReviews'
     ]);
-    reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', ['getReviewDetail']);
+    reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', [
+      'getReviewDetail',
+      'getScanReport'
+    ]);
     // The component subscribes to the invalidation stream (readonly prop —
     // createSpyObj only spies methods, so attach the Subject by hand).
     Object.assign(reviewApi, { reviewDetailInvalidated$: invalidations$.asObservable() });
+    // Default scan report: no findings/failures → adds nothing to the panel.
+    reviewApi.getScanReport.and.returnValue(
+      of({
+        scan_id: 'scan-1',
+        review_id: 'rev-1',
+        tools_run: [],
+        tools_failed: [],
+        summary: {},
+        findings: [],
+        created_at: '2026-01-01T00:05:00Z'
+      })
+    );
     // The embedded review panel loads on PR success — default to "no reviews".
     pullRequests.getPullRequestReviews.and.returnValue(of([]));
     reviewApi.getReviewDetail.and.returnValue(
@@ -413,10 +428,23 @@ describe('PrDetailComponent — shared review cache (one request per page load)'
     fixture.componentRef.setInput('number', 7);
     fixture.detectChanges(); // PR + reviews list load; both consumers ask for rev-1
 
-    // Exactly ONE open request — the second consumer joined the shared one.
+    // Exactly ONE detail request — the second consumer joined the shared one.
     const open = httpMock.match(req => req.url.endsWith('/reviews/rev-1'));
     expect(open.length).toBe(1);
+    // The panel's parallel enrichment fetch (plan Step 3) — one of those, too.
+    const scans = httpMock.match(req => req.url.endsWith('/scan-report'));
+    expect(scans.length).toBe(1);
+
     open[0].flush(detailBody);
+    scans[0].flush({
+      scan_id: 'scan-1',
+      review_id: 'rev-1',
+      tools_run: [],
+      tools_failed: [],
+      summary: {},
+      findings: [],
+      created_at: '2026-01-01T00:05:00Z'
+    });
     fixture.detectChanges();
 
     const el = fixture.nativeElement as HTMLElement;

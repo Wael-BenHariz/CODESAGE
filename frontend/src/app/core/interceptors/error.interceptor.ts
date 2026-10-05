@@ -42,8 +42,12 @@ export class ErrorInterceptor implements HttpInterceptor {
    *   tokens all answer 404 and share one in-place message).
    * - `/auth/…` — session bootstrap (a redirect during APP_INITIALIZER
    *   would cancel app startup).
+   * - `…/scan-report` — a review with no static scan yet legitimately 404s
+   *   ("no scan report"); the review panel treats it as an absent report and
+   *   renders its comments without enrichment (plan Step 3). Access to the
+   *   review itself is still guarded by `GET /reviews/{id}`.
    */
-  private static readonly ALLOW_404 = ['/invitations/', '/auth/'];
+  private static readonly ALLOW_404 = ['/invitations/', '/auth/', '/scan-report'];
 
   intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     return next.handle(req).pipe(

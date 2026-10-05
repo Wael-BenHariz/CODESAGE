@@ -171,4 +171,37 @@ describe('ReviewService — /reviews group (plan Steps 7b–10)', () => {
     expect(api.get).toHaveBeenCalledTimes(3);
     expect(events).toEqual([]); // pollers drive their own refetch
   });
+
+  // --- scan-report cache (plan Step 3) --------------------------------------
+
+  it('fetches the scan report from GET /reviews/{id}/scan-report', () => {
+    api.get.and.returnValue(of({}));
+
+    service.getScanReport('rev-9').subscribe();
+
+    expect(api.get).toHaveBeenCalledWith('/reviews/rev-9/scan-report');
+  });
+
+  it('shares and caches the scan report across subscribers (immutable data)', () => {
+    api.get.and.returnValue(of({ scan_id: 'scan-1' }));
+
+    service.getScanReport('rev-9').subscribe();
+    service.getScanReport('rev-9').subscribe();
+
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed scan-report request evicts the cache so the retry refetches', () => {
+    api.get.and.returnValues(
+      throwError(() => new ApiError('scanner down', 500, null)),
+      of({ scan_id: 'scan-2' })
+    );
+
+    service.getScanReport('rev-9').subscribe({ error: () => undefined });
+    let ok: unknown;
+    service.getScanReport('rev-9').subscribe(v => (ok = v));
+
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(ok).toEqual({ scan_id: 'scan-2' });
+  });
 });

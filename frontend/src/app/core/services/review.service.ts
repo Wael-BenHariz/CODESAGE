@@ -6,6 +6,7 @@ import {
   CommentValidation,
   ReviewComment,
   ReviewDetail,
+  ScanReport,
   ValidationSeverity,
   ValidationVerdict
 } from '../models/review.model';
@@ -27,6 +28,8 @@ export class ReviewService {
 
   /** Session cache of `GET /reviews/{id}` observables — see getReviewDetail(). */
   private readonly detailCache = new Map<string, Observable<ReviewDetail>>();
+  /** Session cache of `GET /reviews/{id}/scan-report` — see getScanReport(). */
+  private readonly scanCache = new Map<string, Observable<ScanReport>>();
   private readonly invalidations = new Subject<string>();
 
   /**
@@ -56,6 +59,31 @@ export class ReviewService {
         shareReplay({ bufferSize: 1, refCount: false })
       );
     this.detailCache.set(reviewId, shared$);
+    return shared$;
+  }
+
+  /**
+   * `GET /reviews/{id}/scan-report` — static-analysis results for one review
+   * (tools run/failed + unified findings), cached per review id: a scan
+   * report is immutable after creation, so the session cache never
+   * invalidates; a failed request evicts the entry (retry refetches).
+   *
+   * 404 means "this review has no scan report yet" — an EXPECTED absence the
+   * ErrorInterceptor must not navigate on (the interceptor lets
+   * `…/scan-report` 404s through; the panel treats them as "no report").
+   */
+  getScanReport(reviewId: string): Observable<ScanReport> {
+    const cached = this.scanCache.get(reviewId);
+    if (cached) {
+      return cached;
+    }
+    const shared$ = this.api
+      .get<ScanReport>(`/reviews/${reviewId}/scan-report`)
+      .pipe(
+        tap({ error: () => this.scanCache.delete(reviewId) }),
+        shareReplay({ bufferSize: 1, refCount: false })
+      );
+    this.scanCache.set(reviewId, shared$);
     return shared$;
   }
 

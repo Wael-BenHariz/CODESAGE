@@ -94,6 +94,26 @@
         }
       </div>
 
+      <!-- Static analysis header (plan Step 3): failures are stated up
+           front; a report that could not load only notes it — the review
+           comments below are the source of truth and stay untouched. -->
+      @if (scanReport(); as scan) {
+        @if (scan.tools_failed.length > 0) {
+          <div class="scan-notice" role="status" data-testid="scan-tools-failed">
+            <strong>Static analysis incomplete</strong>
+            <ul>
+              @for (failure of scan.tools_failed; track failure.tool) {
+                <li>{{ failure.tool }}: {{ failure.error }}</li>
+              }
+            </ul>
+          </div>
+        }
+      } @else if (scanLoadFailed()) {
+        <p class="scan-unavailable" data-testid="scan-unavailable">
+          Static analysis report unavailable — review comments below are unaffected.
+        </p>
+      }
+
       <div class="summary-block">
         @if (!editingSummary()) {
           @if (summaryText()) {
@@ -228,6 +248,25 @@
                         comment.snippet
                       }}</pre>
                     }
+                    <!-- Scan-report enrichment (plan Step 3): OWASP tags and
+                         the source finding's fix suggestion, joined by
+                         source rule. Interpolation only — scanner text is
+                         untrusted like any other server output. -->
+                    @if (scanFindingFor(comment); as finding) {
+                      @if (finding.owasp.length > 0) {
+                        <div class="owasp-chips" data-testid="comment-owasp">
+                          @for (owasp of finding.owasp; track owasp) {
+                            <span class="owasp-chip">{{ owasp }}</span>
+                          }
+                        </div>
+                      }
+                      @if (finding.fix_suggestion) {
+                        <div class="fix-suggestion" data-testid="comment-fix">
+                          <span class="fix-label">Suggested fix</span>
+                          <p>{{ finding.fix_suggestion }}</p>
+                        </div>
+                      }
+                    }
                     <!-- Reviewer verdicts (plan Step 10): visible to every
                          viewer; the controls only render for role >= REVIEWER.
                          Interpolation escapes notes — never innerHTML. -->
@@ -311,6 +350,70 @@
               </ul>
             </div>
           }
+        </div>
+      }
+
+      <!-- Static findings no comment covers (plan Step 3): a separate list —
+           never merged into the review comments, never counted in the stats
+           tiles (different source, per the Q1 decision). -->
+      @if (visibleUncovered().length > 0) {
+        <div class="scan-only" data-testid="scan-only-findings">
+          <h4 class="scan-only-title">
+            Static findings not in review comments
+            <span class="scan-only-count" data-testid="scan-only-count">
+              {{ uncoveredFindings().length }}
+            </span>
+          </h4>
+          <ul class="scan-only-list">
+            @for (finding of visibleUncovered(); track finding.id) {
+              <li class="scan-finding" data-testid="scan-finding">
+                <div class="scan-finding-badges">
+                  <span class="scan-sev" [ngClass]="'scan-sev-' + finding.severity">
+                    {{ finding.severity }}
+                  </span>
+                  <span class="tool-badge">{{ finding.tool }}</span>
+                  @if (finding.category) {
+                    <span class="scan-category">{{ finding.category }}</span>
+                  }
+                </div>
+                @if (finding.title && finding.title !== finding.message) {
+                  <p class="scan-finding-title">{{ finding.title }}</p>
+                }
+                <p class="scan-finding-msg">{{ finding.message }}</p>
+                <div class="scan-finding-meta">
+                  <span data-testid="scan-finding-loc">
+                    {{ finding.file_path
+                    }}{{ finding.line_start !== null ? ':' + finding.line_start : '' }}
+                  </span>
+                  @if (finding.rule_id) {
+                    <span class="rule-id">{{ finding.rule_id }}</span>
+                  }
+                  @if (finding.cwe.length > 0) {
+                    <span class="cwe">{{ finding.cwe.join(', ') }}</span>
+                  }
+                </div>
+                @if (finding.owasp.length > 0) {
+                  <div class="owasp-chips">
+                    @for (owasp of finding.owasp; track owasp) {
+                      <span class="owasp-chip">{{ owasp }}</span>
+                    }
+                  </div>
+                }
+                @if (finding.fix_suggestion) {
+                  <div class="fix-suggestion" data-testid="scan-fix">
+                    <span class="fix-label">Suggested fix</span>
+                    <p>{{ finding.fix_suggestion }}</p>
+                  </div>
+                }
+              </li>
+            }
+            @if (uncoveredFindings().length > visibleUncovered().length) {
+              <li class="scan-more" data-testid="scan-more">
+                …and {{ uncoveredFindings().length - visibleUncovered().length }} more static
+                findings not shown.
+              </li>
+            }
+          </ul>
         </div>
       }
     }
