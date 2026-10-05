@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: codesage-frontend:latest
-          imagePullPolicy: Never   # imported into k3s, not from a registry
+          image: 127.0.0.1:5000/codesage/frontend:v0.3.0
+          imagePullPolicy: IfNotPresent   # registries.yaml mirrors 127.0.0.1:5000
           ports:
             - containerPort: 80
               name: http

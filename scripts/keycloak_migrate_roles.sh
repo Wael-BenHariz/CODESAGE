@@ -272,10 +272,21 @@ apply_role() {
 }
 
 apply_group() { # <group-name-without-slash> <realm-role>
-  local g="$1" role="$2" gid rid
+  local g="$1" role="$2" gid rid probe
   gid="$(path_to_id "/$g")"
   if [[ -z "$gid" ]]; then
-    gid="$(kc create groups -s "name=$g" | json_lines id)"
+    kc create groups -s "name=$g" >/dev/null 2>&1
+    # kcadm logs "Created new group with id '...'" through its logger
+    # (stderr) — resolve the id from a fresh GET instead of parsing the
+    # create output, which never reaches stdout.
+    while IFS= read -r probe; do
+      [[ -n "$probe" ]] || continue
+      if [[ "$(kc get "groups/$probe" | group_info | cut -f1)" == "/$g" ]]; then
+        gid="$probe"
+        break
+      fi
+    done <<<"$(kc_try get groups | json_lines id)"
+    [[ -n "$gid" ]] || die "group /$g was created but its id could not be resolved"
     CREATED_GROUP_ID["/$g"]="$gid"
     GROUP_PATH[$gid]="/$g"
     GROUP_ROLE[$gid]=""
@@ -284,7 +295,7 @@ apply_group() { # <group-name-without-slash> <realm-role>
   rid="$(role_id "$role")"
   [[ -n "$rid" ]] || die "role $role missing before binding /$g"
   if ! [[ " ${GROUP_ROLE[$gid]:-} " == *" $role "* ]]; then
-    kc_body create "groups/$gid/realm-role-mappings/realm" -f - >/dev/null <<JSON
+    kc_body create "groups/$gid/role-mappings/realm" -f - >/dev/null <<JSON
 [{"id": "$rid", "name": "$role"}]
 JSON
     GROUP_ROLE[$gid]="${GROUP_ROLE[$gid]:-} $role"
@@ -303,7 +314,7 @@ apply_group "developers" "DEVELOPER"
 for uid in "${!PLAN_ADD_GROUP[@]}"; do
   gid="$(path_to_id "${PLAN_ADD_GROUP[$uid]}")"
   [[ -n "$gid" ]] || die "group ${PLAN_ADD_GROUP[$uid]} missing during apply"
-  kc create "users/$uid/groups/$gid" >/dev/null
+  kc update "users/$uid/groups/$gid" >/dev/null   # KC24: PUT adds (POST 404s), idempotent
   echo "user $uid added to ${PLAN_ADD_GROUP[$uid]}"
 done
 for uid in "${!PLAN_LEAVE_GROUP[@]}"; do

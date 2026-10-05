@@ -6,6 +6,7 @@ System health and status endpoints.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, status
+from sqlalchemy import text
 
 from app.db import engine
 
@@ -34,19 +35,22 @@ async def readiness_check():
         "database": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    
+
     # Check database connectivity
     try:
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            # SQLAlchemy 2.x only executes executable objects — a bare
+            # string raises ObjectNotExecutableError, which made this
+            # probe report database: false unconditionally.
+            await conn.execute(text("SELECT 1"))
             checks["database"] = True
-    except Exception:
+    except Exception:  # noqa: BLE001 — probes must never crash
         checks["database"] = False
         return {
             "status": "not_ready",
             "checks": checks,
         }
-    
+
     return {
         "status": "ready",
         "checks": checks,

@@ -6,12 +6,12 @@ set -e
 #   TAG=v0.3.0 bash infrastructure/k8s/scripts/build-and-deploy.sh
 #
 # Image strategy (semgrep release, plan section 2.4):
-#   - backend / worker / semgrep-service are pinned to
+#   - backend / worker / frontend / semgrep-service are pinned to
 #     127.0.0.1:5000/codesage/<name>:$TAG — never :latest. They are pushed
 #     to the local registry AND imported into k3s containerd under the same
 #     refs, so the imagePullPolicy: IfNotPresent manifests resolve locally
 #     whether or not /etc/rancher/k3s/registries.yaml declares the registry.
-#   - frontend / repo-tenant keep their existing :latest conventions.
+#   - repo-tenant keeps its existing :latest convention.
 #
 # Image import strategy:
 #   - docker daemon reachable -> docker build + `k3s ctr images import`
@@ -22,10 +22,9 @@ TAG="${TAG:-v0.2.1-semgrep}"
 BACKEND_IMG="127.0.0.1:5000/codesage/backend:${TAG}"
 WORKER_IMG="127.0.0.1:5000/codesage/worker:${TAG}"
 SEMGREP_IMG="127.0.0.1:5000/codesage/semgrep-service:${TAG}"
+FRONTEND_IMG="127.0.0.1:5000/codesage/frontend:${TAG}"
 
-TIMESTAMP=$(date +%Y%m%d%H%M%S)
-FRONTEND_TAG="codesage-frontend:${TIMESTAMP}"
-REPO_TENANT_TAG="codesage-repo-tenant-service:${TIMESTAMP}"
+REPO_TENANT_TAG="codesage-repo-tenant-service:latest"
 
 USE_DOCKER=0
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -41,7 +40,7 @@ if [ "$USE_DOCKER" -eq 0 ]; then
   BUILD_BACKEND=(sudo nerdctl build --namespace k8s.io -t "$BACKEND_IMG" -f backend/Dockerfile ./backend)
   BUILD_WORKER=(sudo nerdctl build --namespace k8s.io -t "$WORKER_IMG" -f backend/Dockerfile.worker ./backend)
   BUILD_SEMGREP=(sudo nerdctl build --namespace k8s.io -t "$SEMGREP_IMG" -f services/semgrep-service/Dockerfile ./services/semgrep-service)
-  BUILD_FRONTEND=(sudo nerdctl build --namespace k8s.io -t codesage-frontend:latest -f frontend/Dockerfile ./frontend)
+  BUILD_FRONTEND=(sudo nerdctl build --namespace k8s.io -t "$FRONTEND_IMG" -t codesage-frontend:latest -f frontend/Dockerfile ./frontend)
   # Both tags are required: the Deployment runs
   # 127.0.0.1:5000/codesage-repo-tenant-service:latest (pullPolicy Never).
   BUILD_REPO_TENANT=(sudo nerdctl build --namespace k8s.io -t codesage-repo-tenant-service:latest -t 127.0.0.1:5000/codesage-repo-tenant-service:latest -f repo-tenant-service/Dockerfile ./repo-tenant-service)
@@ -49,7 +48,7 @@ else
   BUILD_BACKEND=(docker build -t "$BACKEND_IMG" -f backend/Dockerfile ./backend)
   BUILD_WORKER=(docker build -t "$WORKER_IMG" -f backend/Dockerfile.worker ./backend)
   BUILD_SEMGREP=(docker build -t "$SEMGREP_IMG" -f services/semgrep-service/Dockerfile ./services/semgrep-service)
-  BUILD_FRONTEND=(docker build -t "$FRONTEND_TAG" -f frontend/Dockerfile ./frontend)
+  BUILD_FRONTEND=(docker build -t "$FRONTEND_IMG" -t codesage-frontend:latest -f frontend/Dockerfile ./frontend)
   BUILD_REPO_TENANT=(docker build -t "$REPO_TENANT_TAG" -f repo-tenant-service/Dockerfile ./repo-tenant-service)
 fi
 
@@ -64,9 +63,6 @@ echo "=== Building semgrep-service image ($SEMGREP_IMG) ==="
 
 echo "=== Building frontend image ==="
 "${BUILD_FRONTEND[@]}"
-if [ "$USE_DOCKER" -eq 1 ]; then
-  docker tag "$FRONTEND_TAG" codesage-frontend:latest
-fi
 
 echo "=== Building repo-tenant-service image ==="
 "${BUILD_REPO_TENANT[@]}"
@@ -85,7 +81,7 @@ if [ "$USE_DOCKER" -eq 1 ]; then
   if docker ps -a --format '{{.Names}}' | grep -qx local-registry; then
     docker start local-registry >/dev/null || true
   fi
-  for img in "$BACKEND_IMG" "$WORKER_IMG" "$SEMGREP_IMG"; do
+  for img in "$BACKEND_IMG" "$WORKER_IMG" "$SEMGREP_IMG" "$FRONTEND_IMG"; do
     if ! docker push "$img"; then
       echo "WARNING: push of $img failed (continuing — import below)" >&2
     fi
@@ -98,8 +94,7 @@ if [ "$USE_DOCKER" -eq 1 ]; then
     # the containerd import is unnecessary (sudo-free runs).
     echo "registries.yaml found - skipping import (kubelet pulls from the registry)"
   else
-    docker save "$BACKEND_IMG" "$WORKER_IMG" "$SEMGREP_IMG" | sudo k3s ctr images import -
-    docker save codesage-frontend:latest | sudo k3s ctr images import -
+    docker save "$BACKEND_IMG" "$WORKER_IMG" "$SEMGREP_IMG" "$FRONTEND_IMG" | sudo k3s ctr images import -
     docker save codesage-repo-tenant-service:latest 127.0.0.1:5000/codesage-repo-tenant-service:latest | sudo k3s ctr images import -
   fi
 fi

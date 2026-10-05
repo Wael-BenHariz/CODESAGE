@@ -19,6 +19,14 @@ from app.redis import close_redis
 
 logger = logging.getLogger(__name__)
 
+# The API process had no root handler, so every `app.*` INFO line (webhook
+# queued/ignored/skipped decisions, the console-mail invitation link) was
+# dropped before reaching uvicorn's output. Mirrors app/workers/main.py.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
