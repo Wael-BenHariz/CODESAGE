@@ -6,6 +6,12 @@ list the gap here, ask before adding backend routes.
 
 Source of truth for the surrounding audit: `docs/FRONTEND_GAP_MATRIX.md`.
 
+**Status after plan Steps 0–12 (frontend v0.3.1):** every "UI built instead"
+below shipped as described — the gaps are still open on the backend side and
+would remove the documented workarounds if closed. Screens inventory:
+`docs/FRONTEND_SCREENS.md`. The manual E2E table for v0.3.1 is **pending**
+(deferred by decision; see `docs/FRONTEND_SCREENS.md` §Verification status).
+
 ---
 
 ## 1. Org members list — `GET /orgs/{org_id}/members`
@@ -49,8 +55,10 @@ Source of truth for the surrounding audit: `docs/FRONTEND_GAP_MATRIX.md`.
 - **What exists today:** nothing — `review_triggers`, `min_severity_to_post`
   etc. are **org** settings (`/orgs/{id}/settings`), and there is no email
   notification preference anywhere.
-- **Decision (plan Step 8):** remove the fake checkboxes, or render them
-  disabled with a "not available yet" label. They must not pretend to save.
+- **Shipped (plan Step 8):** the checkboxes render **disabled** with an
+  explicit "Not available yet — …nothing here is saved." label (per section:
+  preferences / email) and their decorative `checked` state was removed;
+  nothing pretends to save.
 
 ## 5. Pull-request lookup by number — `GET /pull-requests/repository/{id}?number=`
 
@@ -147,11 +155,34 @@ Source of truth for the surrounding audit: `docs/FRONTEND_GAP_MATRIX.md`.
   empty report (or a distinct status) for "no scan yet" so absence and
   access-denied stop sharing `404`.
 
+## 10. Review → PR page link — identifiers on `ReviewResponse`
+
+- **Wanted by:** plan Step 10 (the dashboard's "recent reviews" section —
+  rows should link to the PR detail page they belong to).
+- **What exists today:** `ReviewResponse` carries only `pull_request_id`
+  (UUID) — no repository owner/name and no PR number. Even resolving each
+  row through `GET /pull-requests/{uuid}` (member-guarded, +1 call per row)
+  would yield the number but still not the `owner/repo` URL segment, so a
+  link would additionally need a repository lookup per row.
+- **UI built instead:** recent-review rows render status, severity, relative
+  time and the error text — non-clickable, rather than guessing a URL or
+  issuing an N+1 lookup fan-out.
+- **Suggested backend:** add `repository_full_name` + `pull_request_number`
+  to `ReviewResponse` (both already known server-side at review creation).
+
 ---
 
 ## Decisions / facts to confirm with the product owner
 
-### LLM precedence (plan Step 8 — confirm wording before it reaches the UI)
+### LLM precedence (plan Step 8 — **confirmed**; wording shipped in the UI)
+
+**Confirmed with the product owner during Step 8** and written into the
+settings page as-is (`settings.component.html`,
+`data-testid="llm-precedence"`): "Which model a review uses: the GitHub App
+installation owner's personal model (set above) → the organization's AI model
+→ the platform default. An organization can only contribute a model name — it
+never changes your provider or API key — and its model applies only when the
+installation owner has working personal credentials."
 
 Code: `app/workers/review_processor.py` (`_effective_model`, review-time call
 site) + `app/services/llm_client.py` (`resolve_llm_client`).
@@ -172,7 +203,5 @@ The rule as implemented:
    i.e. the personal config that matters is that user's, not necessarily the
    PR author's.
 
-Pending confirmation: is the above the wording we want to show users
-("your personal model wins; otherwise your organization's AI model; otherwise
-the platform default — and your organization can never change your provider
-or key")?
+The confirmed UI wording above matches rule 1–3 as implemented; no open
+questions remain in this section.

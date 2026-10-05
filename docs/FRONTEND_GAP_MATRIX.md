@@ -1,4 +1,10 @@
-# Frontend ↔ Backend API Coverage Matrix (v0.3.0)
+# Frontend ↔ Backend API Coverage Matrix (v0.3.0 audit → v0.3.1 final)
+
+> **Final state (plan Steps 0–12, `feat/frontend-api-coverage`).** The tables
+> below are the Step-0 audit; statuses were updated as each step shipped and
+> the totals now reflect the released frontend v0.3.1. Final screens/routes
+> inventory: `docs/FRONTEND_SCREENS.md`. Still-missing backend endpoints:
+> `docs/BACKEND_GAPS_FOR_UI.md`.
 
 Audit produced from the code itself: backend routes from
 `backend/app/api/routes/*` + `backend/app/api/__init__.py` (verified against an
@@ -43,16 +49,16 @@ the PLATFORM_ADMIN read/settings carve-out does **not** apply to that route.
 | `GET /users/me`        | any-auth | → `CurrentUser`                    | — (the UI uses `/auth/me`, same data) | —                      | missing |
 | `PATCH /users/me`      | any-auth | `UserUpdate` → `UserResponse`      | `AuthService.updateProfile()`         | **no screen calls it** | missing |
 | `DELETE /users/me`     | any-auth | → 204                              | —                                     | no account screen      | missing |
-| `GET /users`           | PA       | page/per_page → `UserListResponse` | —                                     | — (Step 9)             | missing |
-| `GET /users/{user_id}` | PA       | → `UserResponse`                   | —                                     | — (Step 9)             | missing |
+| `GET /users`           | PA       | page/per_page → `UserListResponse` | `UserService.listUsers()`             | platform (Step 9)      | done    |
+| `GET /users/{user_id}` | PA       | → `UserResponse`                   | `UserService.getUser()` (no caller)   | — (list covers the table) | missing |
 
 ### Repositories (`/repositories`) — 11
 
 | Endpoint                                | Guard      | Request → Response                                      | Frontend service method                         | Screen                                                                    | Status  |
 | --------------------------------------- | ---------- | ------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- | ------- |
 | `GET /repositories`                     | any-auth   | page/per_page/enabled/search → `RepositoryListResponse` | `GithubService.getRepositories()`               | repository-list, dashboard                                                | done    |
-| `GET /repositories/{id}`                | any-auth   | → `RepositoryResponse`                                  | —                                               | — (Step 2 resolver)                                                       | missing |
-| `GET /repositories/{id}/detail`         | any-auth   | → `RepositoryDetail` (+`total_prs`, `total_reviews`)    | —                                               | — (Step 2)                                                                | missing |
+| `GET /repositories/{id}`                | any-auth   | → `RepositoryResponse`                                  | `RepositoryService.getRepository()` (owner/name resolver) | repository-detail (Step 2)                                          | done    |
+| `GET /repositories/{id}/detail`         | any-auth   | → `RepositoryDetail` (+`total_prs`, `total_reviews`)    | —                                               | — (detail builds counts from the PR/review lists)                      | missing |
 | `PATCH /repositories/{id}`              | DEVELOPER+ | `RepositoryUpdate` → `RepositoryResponse`               | —                                               | no edit screen                                                            | missing |
 | `POST /repositories/{id}/enable`        | DEVELOPER+ | → `RepositoryResponse`                                  | `GithubService.enableRepository()`              | repository-list, repository-detail                                        | done    |
 | `POST /repositories/{id}/disable`       | DEVELOPER+ | → `RepositoryResponse`                                  | `GithubService.disableRepository()`             | repository-list, repository-detail                                        | done    |
@@ -74,8 +80,8 @@ the PLATFORM_ADMIN read/settings carve-out does **not** apply to that route.
 
 | Endpoint                                        | Guard                    | Request → Response                                                      | Frontend service method                            | Screen                  | Status     |
 | ----------------------------------------------- | ------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------- | ----------------------- | ---------- |
-| `GET /pull-requests/repository/{repository_id}` | any-auth (repo 404)      | page/per_page/state/author → `PullRequestListResponse`                  | **called as `GET /repositories/{repoId}/pulls`**   | pr-list                 | **broken** |
-| `GET /pull-requests/{pull_request_id}`          | member                   | → `PullRequestWithReviews` (`reviews_count`, `latest_review_id/status`) | **called as `GET /pulls/{owner}/{repo}/{number}`** | pr-detail               | **broken** |
+| `GET /pull-requests/repository/{repository_id}` | any-auth (repo 404)      | page/per_page/state/author → `PullRequestListResponse`                  | `PullRequestService.getPullRequests()` (was the phantom path) | pr-list        | done (Step 2) |
+| `GET /pull-requests/{pull_request_id}`          | member                   | → `PullRequestWithReviews` (`reviews_count`, `latest_review_id/status`) | `PullRequestService.getPullRequest()` (number → UUID scan) | pr-detail     | done (Step 2) |
 | `POST /pull-requests/{id}/review`               | DEVELOPER+, member write | → `{review_id, status, message}`                                        | `GithubService.triggerReview()`                    | pr-detail, review-panel | done       |
 | `GET /pull-requests/{id}/reviews`               | member                   | → `ReviewResponse[]` (newest first)                                     | `GithubService.getPullRequestReviews()`            | review-panel            | done       |
 
@@ -83,9 +89,9 @@ the PLATFORM_ADMIN read/settings carve-out does **not** apply to that route.
 
 | Endpoint                                      | Guard                                   | Request → Response                                                                                    | Frontend service method                 | Screen                     | Status  |
 | --------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------- | ------- |
-| `GET /reviews`                                | any-auth (org-scoped)                   | page/per_page/status_filter/pull_request_id → `ReviewListResponse`                                    | —                                       | — (Step 10 dashboard)      | missing |
+| `GET /reviews`                                | any-auth (org-scoped)                   | page/per_page/status_filter/pull_request_id → `ReviewListResponse`                                    | `ReviewService.listReviews()`            | dashboard (Step 10)      | done    |
 | `GET /reviews/{id}`                           | member (PA bypass read)                 | → `ReviewWithComments` (+`viewer_role`)                                                               | `GithubService.getReviewDetail()`       | review-panel               | done    |
-| `GET /reviews/{id}/scan-report`               | member (PA bypass read)                 | `?tool=&severity=` → `ScanReportResponse` (`tools_failed`, `findings[]` w/ `owasp`, `fix_suggestion`) | —                                       | — (Step 3)                 | missing |
+| `GET /reviews/{id}/scan-report`               | member (PA bypass read)                 | `?tool=&severity=` → `ScanReportResponse` (`tools_failed`, `findings[]` w/ `owasp`, `fix_suggestion`) | `ReviewService.getScanReport()`          | review-panel (Step 3)      | done    |
 | `GET /reviews/{id}/status`                    | member                                  | → `ReviewStatus` (`status`, `progress`)                                                               | `GithubService.getReviewStatus()`       | **no screen calls it**     | missing |
 | `POST /reviews/{id}/retry`                    | DEVELOPER+, member write                | → review status                                                                                       | —                                       | no screen                  | missing |
 | `DELETE /reviews/{id}`                        | DEVELOPER+, member write                | → 204                                                                                                 | —                                       | no screen                  | missing |
@@ -140,20 +146,34 @@ the PLATFORM_ADMIN read/settings carve-out does **not** apply to that route.
 
 ### Totals
 
+Final status after Steps 0–12 (v0.3.1 frontend):
+
 | Status               | Count  |
 | -------------------- | ------ |
-| done                 | 34     |
-| broken               | 2      |
-| missing              | 18     |
+| done                 | 40     |
+| broken               | 0      |
+| missing              | 14     |
 | n/a                  | 5      |
 | **total operations** | **59** |
+
+(Step-0 baseline: done 34 / broken 2 / missing 18. Resolved since: the two
+`broken` PR routes, `GET /users`, `GET /repositories/{id}`, `GET /reviews` and
+`GET /reviews/{id}/scan-report`. The 14 `missing` are deliberate: self-only or
+legacy routes with no screen, `…/detail`, `retry`/`delete`/`resolve`/`status`,
+and the dead `GET /users/{user_id}` detail read — see §3.)
 
 ---
 
 ## 2. Frontend calls to endpoints that do NOT exist
 
-All four live in `core/services/github.service.ts`; **none of them can succeed
-against v0.3.0**:
+> **RESOLVED (Steps 1–2).** `github.service.ts` is gone: Step 1 deleted the
+> dead `getRepositoryStats` (`/repositories/stats`) call, and Step 2 replaced
+> the phantom paths with `repository.service.ts` (owner/name → UUID via
+> `search=` + exact match, gap 6) and `pull-request.service.ts` (owner/name →
+> repo UUID → paginated PR scan for the number, gap 5). The table below is
+> kept as the Step-0 record.
+
+All four lived in `core/services/github.service.ts` at audit time:
 
 | #   | Frontend call                                                                                      | Caller screen             | Reality on the backend                                                          | Known?                         |
 | --- | -------------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------- | ------------------------------ |
@@ -162,9 +182,9 @@ against v0.3.0**:
 | 3   | `GET /pulls/{owner}/{repo}/{number}` (`getPullRequest`)                                            | pr-detail                 | No such path — `GET /pull-requests/{pull_request_id}` takes a UUID              | **new**                        |
 | 4   | `GET /repositories/stats` (`getRepositoryStats`)                                                   | **no caller** (dead code) | No such path                                                                    | **new** (harmless today)       |
 
-**Consequence:** repository detail, PR list and PR detail are all fully broken
-today — the whole `repositories/:owner/:repo/**` subtree 404s. This is wider
-than the single known gap in AGENTS.md.
+**Consequence (at audit time):** repository detail, PR list and PR detail were
+all fully broken — the whole `repositories/:owner/:repo/**` subtree 404'd.
+**Now:** all three screens work against the real routes (Step 2, `57d2fd6`).
 
 ### Shape bugs on endpoints that _do_ exist (path OK, payload mismatch)
 
@@ -176,7 +196,9 @@ These are typed `camelCase` models fed with raw `snake_case` JSON — no mapper:
 | `getRepository`   | `Repository` (`fullName`, `defaultBranch`, …)                     | `RepositoryResponse` (`full_name`, `default_branch`, …) — `mapRepo()` exists but is **not** applied | `fullName` undefined                                    |
 | `getReviewStatus` | `{status, progress}`                                              | `ReviewStatus` = `{review_id, status, progress, started_at, completed_at, error_message}`           | extra fields dropped (harmless), unused anyway          |
 
-`getRepositories()` (list) is the only one that maps correctly (`mapRepo`).
+`getRepositories()` (list) was the only one that mapped correctly (`mapRepo`).
+**Now:** all mapping happens in the route-group mappers
+(`core/services/mappers/`) and these shape bugs no longer exist.
 
 ---
 
@@ -187,9 +209,10 @@ decision in Step 0/9:
 
 | Endpoint / capability                                                 | Needed by                                                                                           | Verdict                                                                                                                                      |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Org members list** (`GET /orgs/{id}/members`)                       | Step 7 "members list (if an endpoint exists, otherwise record the gap)", Step 9 "show orgs/members" | **GAP — does not exist.** `GET /orgs` only returns the caller's own orgs+role; no endpoint enumerates an org's members.                      |
-| **User update / suspend** (`PATCH /users/{id}`)                       | Step 9 "Read-only unless an update endpoint exists"                                                 | **GAP — does not exist** → Step 9 screen is read-only.                                                                                       |
-| **Per-org review/repo metrics**                                       | Step 10 "per-org numbers for ORG_ADMIN"                                                             | **GAP.** `GET /reviews` is org-scoped as a whole but each `ReviewResponse` carries no org/repo field, so the UI cannot split counts per org. |
+| **Org members list** (`GET /orgs/{id}/members`)                       | Step 7 "members list (if an endpoint exists, otherwise record the gap)", Step 9 "show orgs/members" | **GAP — does not exist** → `docs/BACKEND_GAPS_FOR_UI.md` §1. Shipped: invitations surface + "member lists not available yet" note on `/platform`. |
+| **User update / suspend** (`PATCH /users/{id}`)                       | Step 9 "Read-only unless an update endpoint exists"                                                 | **GAP — does not exist** → §2. Shipped: read-only table at `/platform` (Step 9, `fa94476`).                                                   |
+| **Per-org review/repo metrics**                                       | Step 10 "per-org numbers for ORG_ADMIN"                                                             | **GAP** → §3. Shipped: global counts + recent reviews on the dashboard (Step 10, `c023249`).                                                  |
+| **Review → PR page link** (`ReviewResponse` has no repo/number)       | dashboard "recent reviews" rows (Step 10)                                                           | **GAP — does not exist** → `docs/BACKEND_GAPS_FOR_UI.md` §10. Rows are non-clickable rather than guessing the URL.                            |
 | `GET /users/me`                                                       | —                                                                                                   | Exists but duplicates `/auth/me`; no screen needed.                                                                                          |
 | `POST /reviews/{id}/retry`, `DELETE /reviews/{id}`, `PATCH …/resolve` | —                                                                                                   | Exist; no screen yet (optional — not required by the plan).                                                                                  |
 | `GET /reviews/{id}/status`                                            | in-flight progress polling                                                                          | Exists; screen unused (panel refetches the review instead).                                                                                  |
@@ -208,7 +231,7 @@ Checked for Step 0 of the plan:
 | **Org settings**        | ✅ exists (726-line component) — 10 fields, effective vs override, ceilings next to numerics, per-field reset, platform defaults + ceilings sections for PA, inline 422 per field.                                                                   | `features/settings/org-settings/`                               |
 | **Invitations**         | ✅ exists — invite form (email + DEVELOPER/REVIEWER), pending list, revoke, status badges.                                                                                                                                                           | `features/settings/org-invitations/` (embedded in org settings) |
 | **Accept page**         | ✅ exists — public `/invite/accept?token=…`, preview, mismatch warning, never auto-accepts, sign-in returns to same URL.                                                                                                                             | `features/invitations/invite-accept/`                           |
-| **Role-aware nav**      | ⚠️ partial — `navVisibility()` gates entries, but every page rolls its own `<nav>` (dashboard: Dashboard/Repositories/Settings only); there is **no shared header/nav component**, and no nav entry for org settings, platform/users or invitations. | per-component templates                                         |
+| **Role-aware nav**      | ✅ now a **shared header** (`shared/components/site-header/`) — `AuthContextService.can('write'|'org:settings'|'platform')` gates Dashboard / Settings / Organization / Platform entries, plus the org switcher; per-page header copies were removed in Step 1. | `site-header.component.*`                                                 |
 
 Other things that exist and must be reused, not duplicated:
 
@@ -218,32 +241,34 @@ Other things that exist and must be reused, not duplicated:
 - Shared `loading` / `error` / `avatar` components — `shared/components/`
 - `AuthService` (GET `/auth/me`, localStorage profile cache — profile only, **no tokens stored**)
 
-**Not present yet (Step 1 work):** global 403/404 pages, an error interceptor
-for non-401 statuses, a toast/snackbar service, an `AuthContextService` with
-`can(action)` helpers and an org switcher, and a shared role-aware nav.
+**Built in Step 1 (done):** global 403/404 pages, an error interceptor for
+non-401 statuses, a toast/snackbar service, an `AuthContextService` with
+`can(action)` helpers and an org switcher, and the shared role-aware nav.
 
 ---
 
-## 5. Contradictions / decisions needed before building
+## 5. Contradictions / decisions — all resolved during the plan
 
-1. **Scope of Step 2.** The plan only names the repository-detail 404, but PR
-   list and PR detail are broken by the same class of bug (§2 #2, #3), i.e. the
-   screens Step 3 builds on. _Proposal:_ fix all three phantom paths (plus the
-   `mapRepo`-style mappers) inside the Step 2 commit, since Step 3 must then
+1. **Scope of Step 2 — resolved: widened as proposed.** All three phantom
+   paths (repository detail, PR list, PR detail) were fixed in one Step 2
+   commit (`57d2fd6`) together with the route-group mappers, so Step 3 could
    verify against a working PR detail page.
-2. **Step 3 is a completion, not a greenfield.** The review panel exists but
-   never calls `GET /reviews/{id}/scan-report`, so it currently cannot show:
-   `tools_failed` (sonar/semgrep unavailable header), OWASP tags,
-   `fix_suggestion`, or scan findings that never became comments.
-   _Proposal:_ add the scan-report enrichment to the existing panel.
-3. **Steps 4/5/6/7 screens already exist** — they will be audited against the
-   plan's checklist and only deltas fixed (no parallel duplicate screens).
-4. **`GET /orgs/{id}/members` does not exist** (Step 7/9) → members list goes
-   to `docs/BACKEND_GAPS_FOR_UI.md`; invitations remain the only membership
-   surface.
-5. **LLM precedence wording (Step 8)** must be confirmed before it is written
-   into the UI — the code rule is documented in `docs/BACKEND_GAPS_FOR_UI.md`
-   §"LLM precedence" pending sign-off (per-user model → org `ai_model` →
-   system default; provider is never overridden by the org; org `ai_model`
-   only reaches a review when the installation owner has personal LLM
-   credentials configured).
+2. **Step 3 as a completion — resolved: enrichment shipped.** The review
+   panel now calls `GET /reviews/{id}/scan-report` and renders
+   `tools_failed`, OWASP chips, `fix_suggestion` and non-comment scan
+   findings (`1164d91`).
+3. **Steps 4/5/6/7 as audits — resolved:** existing screens were audited and
+   only deltas shipped (staged posting `284fb96`, verdicts `bf4569c`, org
+   settings/ceilings `7b1636e`, invitations/accept `ec918d2`); no duplicate
+   screens were created.
+4. **`GET /orgs/{id}/members` does not exist — resolved as recorded:** the
+   gap went to `docs/BACKEND_GAPS_FOR_UI.md` §1; invitations remain the only
+   membership surface, and `/platform` shows a "member lists not available
+   yet" note instead of a stubbed table.
+5. **LLM precedence wording — resolved: confirmed with the product owner and
+   shipped verbatim in Step 8** (`a259aa8`, `settings.component.html`
+   `data-testid="llm-precedence"`): installation owner's personal model →
+   organization's AI model → platform default; an org only contributes a
+   model name (never the provider or API key), and its model applies only
+   when the installation owner has working personal credentials. See
+   `docs/BACKEND_GAPS_FOR_UI.md` §"LLM precedence".
