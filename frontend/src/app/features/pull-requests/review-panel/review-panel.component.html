@@ -1,0 +1,151 @@
+<section class="review-panel" data-testid="review-panel">
+  <div class="panel-header">
+    <h3>AI Review</h3>
+    @if (state() === 'detail' && !isRunning() && !isFailed()) {
+      <span
+        class="status-badge"
+        [class.ready]="runStatus() === 'ready_to_post'"
+        [class.posted]="isPosted()"
+        data-testid="review-status"
+      >
+        {{ runStatus() === 'ready_to_post' ? 'ready to post' : 'completed' }}
+      </span>
+    }
+  </div>
+
+  @if (state() === 'loading') {
+    <div class="panel-state" data-testid="review-panel-loading">
+      <div class="spinner"></div>
+      <span>Loading review...</span>
+    </div>
+  } @else if (state() === 'error') {
+    <div class="panel-state error" data-testid="review-panel-error">
+      <p>Couldn't load the review for this pull request.</p>
+      <button class="btn-small" data-testid="review-retry" (click)="retry()">Try again</button>
+    </div>
+  } @else if (state() === 'none') {
+    <div class="panel-state" data-testid="review-panel-none">
+      <p>No review yet for this pull request.</p>
+      @if (canTrigger()) {
+        <button
+          class="btn-small primary"
+          data-testid="review-cta"
+          [disabled]="isTriggering()"
+          (click)="runReview()"
+        >
+          {{ isTriggering() ? 'Starting...' : 'Run AI Review' }}
+        </button>
+      }
+      @if (triggerError()) {
+        <p class="trigger-error" data-testid="review-trigger-error">
+          Couldn't start the review — please try again.
+        </p>
+      }
+    </div>
+  } @else {
+    <!-- detail -->
+    @if (isRunning()) {
+      <div class="panel-state" data-testid="review-panel-running">
+        <div class="spinner"></div>
+        <span>Review {{ runStatus() }}…</span>
+      </div>
+    } @else if (isFailed()) {
+      <div class="panel-state error" data-testid="review-panel-failed">
+        <p>The review failed.</p>
+        @if (detail()?.error_message) {
+          <p class="error-detail" data-testid="review-error-message">
+            {{ detail()?.error_message }}
+          </p>
+        }
+      </div>
+    } @else {
+      <div class="posted-row">
+        @if (runStatus() === 'ready_to_post') {
+          <span class="status-badge ready" data-testid="review-ready-badge">Ready to post</span>
+        }
+        @if (isPosted()) {
+          <span class="posted-at" data-testid="review-posted-at">
+            {{ detail()?.posted_at | date: 'medium' }}
+          </span>
+          <a
+            class="gh-link"
+            data-testid="review-gh-link"
+            [href]="githubReviewUrl()"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View on GitHub
+          </a>
+        }
+      </div>
+
+      @if (summaryText()) {
+        <p class="review-summary" data-testid="review-summary">{{ summaryText() }}</p>
+      }
+
+      @if (fileGroups().length === 0) {
+        <div class="panel-empty" data-testid="review-panel-empty">
+          <p>No findings — this review came back clean.</p>
+        </div>
+      } @else {
+        <div class="findings">
+          @for (group of fileGroups(); track group.file) {
+            <div class="file-group" data-testid="review-file-group">
+              <h4 class="file-path">{{ group.file }}</h4>
+              <ul class="comment-list">
+                @for (comment of group.comments; track comment.id) {
+                  <li
+                    class="comment"
+                    [class.dismissed]="comment.dismissed"
+                    [attr.data-severity]="comment.severity"
+                    data-testid="review-comment"
+                  >
+                    <div class="comment-badges">
+                      <span class="sev-badge" [ngClass]="'sev-' + comment.severity.toLowerCase()">
+                        {{ comment.severity }}
+                      </span>
+                      @if (comment.tool) {
+                        <span class="tool-badge" data-testid="comment-tool">{{
+                          comment.tool
+                        }}</span>
+                      }
+                      @if (comment.also_detected_by?.length) {
+                        <span class="tool-extra" data-testid="comment-also">
+                          also detected by {{ comment.also_detected_by?.join(', ') }}
+                        </span>
+                      }
+                      @if (comment.dismissed) {
+                        <span class="dismissed-tag" data-testid="comment-dismissed">dismissed</span>
+                      }
+                    </div>
+                    <!-- Interpolation escapes HTML — no innerHTML anywhere (Q3). -->
+                    <p class="comment-body">{{ comment.body }}</p>
+                    <div class="comment-loc">
+                      <span data-testid="comment-loc">{{ locationLabel(comment) }}</span>
+                      @if (comment.line_start !== null && comment.line_end !== null) {
+                        <span class="finding-range">
+                          finding lines {{ comment.line_start }}–{{ comment.line_end }}
+                        </span>
+                      }
+                      @if (comment.rule_id) {
+                        <span class="rule-id">{{ comment.rule_id }}</span>
+                      }
+                      @if (comment.cwe?.length) {
+                        <span class="cwe">{{ comment.cwe?.join(', ') }}</span>
+                      }
+                    </div>
+                    @if (comment.snippet) {
+                      <pre class="comment-snippet" data-testid="comment-snippet">{{
+                        comment.snippet
+                      }}</pre>
+                    }
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      }
+    }
+  }
+</section>

@@ -76,6 +76,15 @@
         </div>
       }
 
+      <!-- Read-only AI review panel (plan Step 7b). -->
+      <app-review-panel
+        [prId]="pr.id"
+        [owner]="owner()"
+        [repo]="repo()"
+        [number]="pr.number"
+        [canTrigger]="nav().write"
+      />
+
       <div class="card diff-section">
         <h3>Changes</h3>
         <div class="diff-placeholder">

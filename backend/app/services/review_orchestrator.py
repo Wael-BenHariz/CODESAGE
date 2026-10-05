@@ -130,8 +130,13 @@ class ReviewOrchestrator:
 
         valid_results: list[AgentResult] = []
         failed_agents: list[str] = []
-        for (agent, _domain), result in zip(pairs, results):
+        for (agent, domain), result in zip(pairs, results):
             if isinstance(result, AgentResult):
+                # Step 7b: stamp provenance so the worker can match each
+                # comment back to THIS domain's findings (the LLM never
+                # supplies source metadata — plan §1.2).
+                for comment in result.comments:
+                    comment.source_domain = domain
                 logger.info(
                     "Review agent succeeded",
                     extra={

@@ -137,6 +137,13 @@ class ReviewWithComments(ReviewResponse):
     comments: list["ReviewCommentResponse"] = Field(
         default_factory=list, description="Review comments"
     )
+    # Caller's effective role in this review's org (Step 7b) — the UI uses
+    # it to show/hide elevation-dependent controls (cosmetic only; every
+    # write is re-checked server-side by the route guard).
+    viewer_role: str = Field(
+        ...,
+        description="Effective role of the caller in the review's org",
+    )
 
 
 class ReviewCommentResponse(_OrmUuidMixin):
@@ -160,6 +167,24 @@ class ReviewCommentResponse(_OrmUuidMixin):
     dismissed: bool = Field(False, description="Excluded from staged Findings")
     dismissed_by: str | None = Field(None, description="User UUID who dismissed")
     dismissed_at: datetime | None = Field(None, description="Dismissal timestamp")
+    # Source-finding enrichment (Step 7b, migration 015): NULL when the
+    # worker could not match this comment to a finding or the comment
+    # predates 015 — the panel renders without tool/rule/snippet then.
+    tool: str | None = Field(None, description="Tool of the matched finding")
+    rule_id: str | None = Field(None, description="Rule id of the matched finding")
+    cwe: list[str] | None = Field(None, description="CWE ids of the matched finding")
+    line_start: int | None = Field(
+        None, description="First line of the matched finding's range"
+    )
+    line_end: int | None = Field(
+        None, description="Last line of the matched finding's range"
+    )
+    snippet: str | None = Field(
+        None, description="Source excerpt of the matched finding"
+    )
+    also_detected_by: list[str] | None = Field(
+        None, description="Other tools that found the same defect"
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
 
     model_config = {"from_attributes": True}

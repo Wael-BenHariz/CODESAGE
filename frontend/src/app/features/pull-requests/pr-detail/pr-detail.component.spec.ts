@@ -35,8 +35,35 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
     roleSignal = signal({ role: 'DEVELOPER' });
     github = jasmine.createSpyObj<GithubService>('GithubService', [
       'getPullRequest',
-      'triggerReview'
+      'triggerReview',
+      'getPullRequestReviews',
+      'getReviewDetail'
     ]);
+    // The embedded review panel loads on PR success — default to "no reviews".
+    github.getPullRequestReviews.and.returnValue(of([]));
+    github.getReviewDetail.and.returnValue(
+      of({
+        id: 'rev-1',
+        pull_request_id: 'pr-1',
+        user_id: null,
+        status: 'completed',
+        error_message: null,
+        summary: null,
+        posting_mode: 'auto',
+        posted_at: null,
+        edited_summary: null,
+        github_review_id: null,
+        overall_severity: null,
+        created_at: '2026-01-01T00:00:00Z',
+        completed_at: null,
+        comments_count: 0,
+        comments: [],
+        viewer_role: 'DEVELOPER'
+      })
+    );
+    github.triggerReview.and.returnValue(
+      of({ review_id: 'rev-1', status: 'pending', message: 'queued' })
+    );
 
     TestBed.configureTestingModule({
       imports: [PrDetailComponent],

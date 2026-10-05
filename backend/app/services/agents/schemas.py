@@ -50,6 +50,11 @@ class AgentComment(BaseModel):
     category: str = "general"
     body: str = ""
     suggestion: str | None = None
+    # Provenance stamped by the orchestrator AFTER parsing (never read from
+    # the LLM): which specialist domain produced this comment. Step 7b uses
+    # it to scope the worker's match back to that domain's findings. None
+    # only when a comment bypassed the orchestrator (tests, fallbacks).
+    source_domain: str | None = None
 
 
 class AgentResult(BaseModel):

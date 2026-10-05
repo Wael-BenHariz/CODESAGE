@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Boolean,
     DateTime,
@@ -40,6 +41,10 @@ class ReviewComment(Base):
         dismissed: Excluded from the staged Findings section when true
         dismissed_by: User who dismissed the comment (optional)
         dismissed_at: When the comment was dismissed
+        tool/rule_id/cwe/line_start/line_end/snippet/also_detected_by:
+            Source-finding metadata (Step 7b enrichment) — NULL for
+            comments the worker could not match back to a finding, and
+            for all pre-015 comments.
     """
 
     __tablename__ = "review_comments"
@@ -157,6 +162,51 @@ class ReviewComment(Base):
         DateTime(timezone=True),
         nullable=True,
         comment="When the comment was dismissed",
+    )
+
+    # Source-finding enrichment (Step 7b): metadata of the normalized
+    # finding this comment refines, stamped by the worker on creation.
+    # Nullable: unmatched comments and pre-015 rows stay NULL.
+    tool: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        comment="Tool that produced the matched finding (sonarqube/semgrep)",
+    )
+
+    rule_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Rule id of the matched finding",
+    )
+
+    cwe: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="CWE ids of the matched finding",
+    )
+
+    line_start: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="First line of the matched finding's range",
+    )
+
+    line_end: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Last line of the matched finding's range",
+    )
+
+    snippet: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Source excerpt of the matched finding",
+    )
+
+    also_detected_by: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String),
+        nullable=True,
+        comment="Other tools that found the same defect",
     )
 
     # Timestamps

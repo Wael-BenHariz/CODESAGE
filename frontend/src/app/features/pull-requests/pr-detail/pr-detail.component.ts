@@ -1,15 +1,16 @@
-import { Component, OnInit, computed, inject, signal, input } from '@angular/core';
+import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { GithubService } from '../../../core/services/github.service';
 import { navVisibility } from '../../../core/guards/role.guard';
 import { PullRequest } from '../../../core/models/pull-request.model';
+import { ReviewPanelComponent } from '../review-panel/review-panel.component';
 
 @Component({
   selector: 'app-pr-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, ReviewPanelComponent],
   templateUrl: './pr-detail.component.html',
   styleUrl: './pr-detail.component.scss'
 })

@@ -154,7 +154,10 @@ async def get_review(
 
     Org-scoped (flag F3): unknown id and cross-org both 404 with the
     same detail. ``comments`` carry the ``dismissed*`` flags so the
-    staged posting panel can mark excluded findings.
+    staged posting panel can mark excluded findings, plus the Step 7b
+    source-finding enrichment columns (tool/rule/cwe/lines/snippet/
+    also_detected_by — NULL when unmatched or pre-015). ``viewer_role``
+    is the caller's effective role in the review's org.
     """
     review = access.review  # already loaded (and authorized) by the guard
 
@@ -177,6 +180,7 @@ async def get_review(
         created_at=review.created_at,
         updated_at=review.updated_at,
         comments_count=len(review.comments),
+        viewer_role=access.effective_role,
         comments=[
             ReviewCommentResponse(
                 id=str(c.id),
@@ -193,6 +197,15 @@ async def get_review(
                 dismissed=c.dismissed,
                 dismissed_by=str(c.dismissed_by) if c.dismissed_by else None,
                 dismissed_at=c.dismissed_at,
+                tool=c.tool,
+                rule_id=c.rule_id,
+                cwe=list(c.cwe) if c.cwe is not None else None,
+                line_start=c.line_start,
+                line_end=c.line_end,
+                snippet=c.snippet,
+                also_detected_by=(
+                    list(c.also_detected_by) if c.also_detected_by is not None else None
+                ),
                 created_at=c.created_at,
             )
             for c in review.comments

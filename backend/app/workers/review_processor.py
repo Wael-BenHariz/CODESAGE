@@ -21,8 +21,9 @@ from app.services.agents import ReviewContext
 from app.services.github import github_service
 from app.services.github_app import fetch_file_content, get_installation_token
 from app.services.llm_client import resolve_llm_client
+from app.services.normalizers.schema import NormalizedFinding
 from app.services.org_settings import resolve_org_settings
-from app.services.review_orchestrator import ReviewOrchestrator
+from app.services.review_orchestrator import ReviewOrchestrator, domain_for_finding
 from app.services.review_posting import ReviewPostError, post_review_to_github
 from app.services.scan_report_store import persist_scan_report
 from app.services.static_analysis import run_static_analysis
@@ -122,6 +123,62 @@ def _meets_min_severity(comments: list[dict], threshold: str) -> bool:
         if _SEVERITY_RANK[mapped] >= floor:
             return True
     return False
+
+
+def _find_source_finding(
+    comment: dict, findings: list[NormalizedFinding]
+) -> NormalizedFinding | None:
+    """Match one specialist comment back to the finding it refines (Step 7b).
+
+    Deterministic rules (plan §3):
+
+    1. Scope: the comment's ``source_domain`` slice (stamped by the
+       orchestrator) — a comment is only ever attributed to a finding of
+       its own domain. Comments without provenance (tests, fallbacks)
+       match against all findings.
+    2. Same ``file_path`` and the comment's ``line_number`` inside the
+       finding's ``[line_start, line_end]`` range (a single-line finding
+       has ``line_end=None`` → compare against ``line_start``).
+    3. A line-level comment with no range match stays unmatched — there
+       is deliberately no file-level fallback for it (a lone unrelated
+       finding on the same file would receive wrong attribution).
+    4. A file-level comment (no ``line_number``) matches only when the
+       file has exactly one finding in scope.
+
+    Overlapping ranges resolve deterministically: tightest range first,
+    then lowest ``line_start``, then ``rule_id``.
+    """
+    domain = comment.get("source_domain")
+    scope = (
+        [f for f in findings if domain_for_finding(f) == domain]
+        if domain is not None
+        else list(findings)
+    )
+    candidates = [f for f in scope if f.file_path == comment.get("file_path", "")]
+
+    line = comment.get("line_number")
+    if line is None:
+        return candidates[0] if len(candidates) == 1 else None
+
+    in_range = [
+        f
+        for f in candidates
+        if f.line_start is not None
+        and f.line_start
+        <= line
+        <= (f.line_end if f.line_end is not None else f.line_start)
+    ]
+    if not in_range:
+        return None
+    in_range.sort(
+        key=lambda f: (
+            (f.line_end if f.line_end is not None else f.line_start or 0)
+            - (f.line_start or 0),
+            f.line_start or 0,
+            f.rule_id,
+        )
+    )
+    return in_range[0]
 
 
 async def _acquire_org_slot(
@@ -546,6 +603,10 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
         review.status = "ready_to_post" if staged else "completed"
 
         for comment in comments:
+            # Step 7b: stamp source-finding metadata (tool/rule/cwe/lines/
+            # snippet/also_detected_by) when the comment matches back to a
+            # finding — NULL otherwise, the panel degrades gracefully.
+            source = _find_source_finding(comment, context.findings)
             review_comment = ReviewComment(
                 review_id=review.id,
                 pull_request_id=pr.id,
@@ -555,6 +616,15 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
                 severity=comment.get("severity", "info"),
                 category=comment.get("category", "general"),
                 suggestion=comment.get("suggestion"),
+                tool=source.tool if source is not None else None,
+                rule_id=source.rule_id if source is not None else None,
+                cwe=list(source.cwe) if source is not None else None,
+                line_start=source.line_start if source is not None else None,
+                line_end=source.line_end if source is not None else None,
+                snippet=source.snippet if source is not None else None,
+                also_detected_by=(
+                    list(source.also_detected_by) if source is not None else None
+                ),
             )
             db.add(review_comment)
 

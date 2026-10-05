@@ -3,6 +3,7 @@ import { ApiService } from './api.service';
 import { Observable, map, tap } from 'rxjs';
 import { Repository, RepositoryStats } from '../models/repository.model';
 import { PullRequest } from '../models/pull-request.model';
+import { ReviewDetail, ReviewSummary } from '../models/review.model';
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -144,11 +145,26 @@ export class GithubService {
     return this.api.get<PullRequest>(`/pulls/${owner}/${repo}/${number}`);
   }
 
-  triggerReview(prId: string): Observable<{ reviewId: string }> {
-    return this.api.post<{ reviewId: string }>(`/pulls/${prId}/review`, {});
+  triggerReview(prId: string): Observable<{ review_id: string; status: string; message: string }> {
+    // The backend mounts this router at /pull-requests — the previous
+    // /pulls path never existed upstream (POST /pull-requests/{id}/review).
+    return this.api.post<{ review_id: string; status: string; message: string }>(
+      `/pull-requests/${prId}/review`,
+      {}
+    );
   }
 
   getReviewStatus(reviewId: string): Observable<{ status: string; progress: number }> {
     return this.api.get<{ status: string; progress: number }>(`/reviews/${reviewId}/status`);
+  }
+
+  /** All reviews for a pull request, newest first (review panel input). */
+  getPullRequestReviews(prId: string): Observable<ReviewSummary[]> {
+    return this.api.get<ReviewSummary[]>(`/pull-requests/${prId}/reviews`);
+  }
+
+  /** Full review detail: summary + comments with enrichment and viewer_role. */
+  getReviewDetail(reviewId: string): Observable<ReviewDetail> {
+    return this.api.get<ReviewDetail>(`/reviews/${reviewId}`);
   }
 }
