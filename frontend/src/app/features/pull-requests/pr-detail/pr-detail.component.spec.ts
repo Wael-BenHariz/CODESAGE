@@ -1,11 +1,13 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { WritableSignal, signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { NEVER, Subject, of, throwError } from 'rxjs';
 
 import { PrDetailComponent } from './pr-detail.component';
+import { ReviewPanelComponent } from '../review-panel/review-panel.component';
 import { ApiError } from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
@@ -323,6 +325,25 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
 
     expect(reviewApi.getReviewDetail).toHaveBeenCalledTimes(1);
     expect(el().querySelector('[data-testid="stat-open-issues"]')?.textContent?.trim()).toBe('3');
+  });
+
+  it('hasUnsavedSummaryEdit mirrors the embedded panel editor (plan Step 4)', () => {
+    pullRequests.getPullRequest.and.returnValue(of(pr));
+    create(); // panel renders (no reviews → its "none" state, still alive)
+
+    // Nothing unsaved → the canDeactivate guard lets navigation through.
+    expect(fixture.componentInstance.hasUnsavedSummaryEdit()).toBeFalse();
+
+    // A dirty summary edit → the guard must ask before leaving.
+    const panel = fixture.debugElement.query(By.directive(ReviewPanelComponent))
+      ?.componentInstance as ReviewPanelComponent;
+    panel.editingSummary.set(true);
+    panel.summaryDraft.set('dirty');
+    expect(fixture.componentInstance.hasUnsavedSummaryEdit()).toBeTrue();
+
+    // Saving (or cancelling) the editor clears the warning.
+    panel.editingSummary.set(false);
+    expect(fixture.componentInstance.hasUnsavedSummaryEdit()).toBeFalse();
   });
 });
 

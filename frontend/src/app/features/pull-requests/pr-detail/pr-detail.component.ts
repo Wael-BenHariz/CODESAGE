@@ -6,7 +6,8 @@ import {
   inject,
   input,
   numberAttribute,
-  signal
+  signal,
+  viewChild
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -66,6 +67,18 @@ export class PrDetailComponent implements OnInit {
   readonly reviewStats = signal<ReviewStatsState>({ kind: 'hidden' });
   /** Latest review id from the PR response — source for the stats tiles. */
   private latestReviewId: string | null = null;
+
+  /** Embedded review panel (absent until a review exists). */
+  readonly reviewPanel = viewChild(ReviewPanelComponent);
+
+  /**
+   * Plan Step 4: true while the summary editor holds unsaved changes —
+   * read by the route's canDeactivate guard to warn before navigation.
+   */
+  hasUnsavedSummaryEdit(): boolean {
+    const panel = this.reviewPanel();
+    return !!panel && panel.editingSummary() && panel.summaryDirty();
+  }
 
   ngOnInit(): void {
     this.loadPullRequest();

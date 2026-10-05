@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { ADMIN_ROLES, ANY_ROLE, RoleGuard, WRITE_ROLES } from './core/guards/role.guard';
+import { confirmUnsavedSummaryGuard } from './features/pull-requests/pr-detail/pr-detail.guard';
 
 export const routes: Routes = [
   {
@@ -69,6 +70,8 @@ export const routes: Routes = [
         m => m.PrDetailComponent
       ),
     canActivate: [RoleGuard],
+    // Plan Step 4: warn before leaving with an unsaved summary edit.
+    canDeactivate: [confirmUnsavedSummaryGuard],
     data: { roles: ANY_ROLE }
   },
   {

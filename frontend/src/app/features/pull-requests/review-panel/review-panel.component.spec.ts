@@ -11,6 +11,7 @@ import {
 import { ApiError } from '../../../core/services/api.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
+import { ToastService } from '../../../core/services/toast.service';
 import {
   CommentValidation,
   ReviewComment,
@@ -612,6 +613,41 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('review-status')?.textContent).toContain('posted');
     });
 
+    it('on 409 closes the dialog, shows the reason and re-fetches (plan Step 4)', () => {
+      createReady();
+      const toast = TestBed.inject(ToastService);
+      spyOn(toast, 'error');
+      reviewApi.postReview.and.returnValue(
+        throwError(() => new ApiError('Review already posted to GitHub', 409, 'conflict'))
+      );
+      // The state changed elsewhere — the refresh serves the posted truth.
+      pullRequests.getPullRequestReviews.and.returnValue(
+        of([
+          summary({ status: 'completed', posted_at: '2026-01-01T00:06:00Z', github_review_id: 777 })
+        ])
+      );
+      reviewApi.getReviewDetail.and.returnValue(
+        of(
+          detail({
+            status: 'completed',
+            posted_at: '2026-01-01T00:06:00Z',
+            github_review_id: 777
+          })
+        )
+      );
+
+      (testid('open-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      (testid('confirm-post') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(toast.error).toHaveBeenCalledWith('Review already posted to GitHub');
+      expect(testid('post-dialog')).toBeNull(); // stale premise closed
+      expect(testid('post-error')).toBeNull();
+      expect(testid('review-status')?.textContent).toContain('posted'); // refreshed
+      expect(testid('staged-banner')).toBeNull();
+    });
+
     it('gates every control off for a NONE viewer but keeps the content', () => {
       createReady({ viewer_role: 'NONE' });
 
@@ -676,6 +712,44 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('summary-textarea')).toBeNull(); // discarded
     });
 
+    it('intercepts page unload only while the summary edit is dirty (plan Step 4)', () => {
+      createReady();
+      // The handler is invoked directly: dispatching a synthetic
+      // `beforeunload` through the window makes the browser unload the test
+      // runner page itself (observed: Karma reconnects mid-run). The
+      // @HostListener registration on `window` is standard Angular wiring.
+      const clean = new Event('beforeunload', { cancelable: true });
+      fixture.componentInstance.onBeforeUnload(clean);
+      expect(clean.defaultPrevented).toBeFalse(); // nothing unsaved → free to leave
+
+      (testid('edit-summary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const textarea = testid('summary-textarea') as HTMLTextAreaElement;
+      textarea.value = 'dirty';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      const dirty = new Event('beforeunload', { cancelable: true });
+      fixture.componentInstance.onBeforeUnload(dirty);
+      expect(dirty.defaultPrevented).toBeTrue(); // browser shows its leave warning
+
+      // Saving clears the warning.
+      reviewApi.updateReviewSummary.and.returnValue(
+        of({
+          review_id: 'rev-1',
+          summary: 'Original summary.',
+          edited_summary: 'dirty',
+          status: 'ready_to_post',
+          posted_at: null
+        })
+      );
+      (testid('save-summary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const afterSave = new Event('beforeunload', { cancelable: true });
+      fixture.componentInstance.onBeforeUnload(afterSave);
+      expect(afterSave.defaultPrevented).toBeFalse();
+    });
+
     it('dismisses a finding into the muted state and restores it back', () => {
       createReady();
       reviewApi.dismissReviewComment.and.returnValue(of({ ...baseComment(), dismissed: true }));
@@ -706,7 +780,28 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       fixture.detectChanges();
 
       expect(testid('api-error')?.textContent).toContain('Comment not found');
-      expect(testid('comment-dismissed')).toBeNull(); // state did not change
+      expect(testid('comment-dismissed')).toBeNull(); // rolled back to the original state
+      expect((testid('dismiss-finding') as HTMLButtonElement).disabled).toBeFalse();
+    });
+
+    it('dismisses optimistically and rolls back when the API rejects (plan Step 4)', () => {
+      createReady();
+      const response = new Subject<ReviewComment>();
+      reviewApi.dismissReviewComment.and.returnValue(response);
+
+      (testid('dismiss-finding') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      // Optimistic: the row mutes BEFORE the server answers, and the pending
+      // lock keeps the toggle unusable until the verdict arrives.
+      expect(testid('comment-dismissed')).not.toBeNull();
+      expect((testid('restore-finding') as HTMLButtonElement).disabled).toBeTrue();
+
+      response.error(new ApiError('Could not save', 500, 'server'));
+      fixture.detectChanges();
+
+      expect(testid('comment-dismissed')).toBeNull(); // snapshot restored
+      expect(testid('api-error')?.textContent).toContain('Could not save');
       expect((testid('dismiss-finding') as HTMLButtonElement).disabled).toBeFalse();
     });
   });

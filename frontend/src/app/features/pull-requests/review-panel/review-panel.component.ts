@@ -1,8 +1,9 @@
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiError } from '../../../core/services/api.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
+import { ToastService } from '../../../core/services/toast.service';
 import {
   CommentValidation,
   ReviewComment,
@@ -191,6 +192,7 @@ function withValidation(
 export class ReviewPanelComponent implements OnInit {
   private readonly pullRequests = inject(PullRequestService);
   private readonly reviewApi = inject(ReviewService);
+  private readonly toast = inject(ToastService);
 
   /** Client-side cap for the summary editor (backend rejects over-cap too). */
   readonly summaryMaxChars = SUMMARY_MAX_CHARS;
@@ -240,6 +242,10 @@ export class ReviewPanelComponent implements OnInit {
     this.actionError.set(null);
     this.scanReport.set(null);
     this.scanLoadFailed.set(false);
+    // A (re)load supersedes any in-progress edit — the posted/staged view
+    // below is read-only, an orphaned textarea must not survive a refresh.
+    this.editingSummary.set(false);
+    this.summaryDraft.set('');
     this.pullRequests.getPullRequestReviews(this.prId()).subscribe({
       next: reviews => {
         const latest = reviews[0]; // the endpoint orders created_at desc
@@ -444,7 +450,20 @@ export class ReviewPanelComponent implements OnInit {
         this.load(); // re-fetch → read-only posted view (time + GitHub link)
       },
       error: (err: unknown) => {
-        // Keep the dialog open so the failure is visible and retryable.
+        // 409 = the review's state changed elsewhere (already posted / not
+        // staged / not ready). The dialog's premise is stale: close it,
+        // surface the backend's reason (a toast survives the re-fetch), and
+        // reload the truth — plan Step 4.
+        if (err instanceof ApiError && err.status === 409) {
+          this.posting.set(false);
+          this.postDialogOpen.set(false);
+          this.actionError.set(null);
+          this.toast.error(actionErrorMessage(err));
+          this.load();
+          return;
+        }
+        // Keep the dialog open so the failure is visible and retryable
+        // (a GitHub failure answers 502 — nothing was posted).
         this.posting.set(false);
         this.actionError.set(actionErrorMessage(err));
       }
@@ -469,6 +488,20 @@ export class ReviewPanelComponent implements OnInit {
     }
     this.editingSummary.set(false);
     this.summaryDraft.set('');
+  }
+
+  /**
+   * Dirty-state warning when leaving the page (plan Step 4): a reload or tab
+   * close while the summary editor holds unsaved changes is intercepted here;
+   * in-app navigation is intercepted by the route's canDeactivate guard
+   * (pr-detail.guard.ts), which reads the same two signals.
+   */
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: Event): void {
+    if (this.editingSummary() && this.summaryDirty()) {
+      event.preventDefault();
+      event.returnValue = false; // legacy browsers require the assignment
+    }
   }
 
   onSummaryInput(event: Event): void {
@@ -521,6 +554,19 @@ export class ReviewPanelComponent implements OnInit {
     }
     this.pendingCommentId.set(comment.id);
     this.actionError.set(null);
+    // Optimistic (plan Step 4): flip the row immediately — the pending lock
+    // keeps the toggle unusable until the server answers with its truth.
+    const snapshot = detail.comments;
+    this.detail.update(current =>
+      current
+        ? {
+            ...current,
+            comments: current.comments.map(existing =>
+              existing.id === comment.id ? { ...existing, dismissed } : existing
+            )
+          }
+        : current
+    );
     const request = dismissed
       ? this.reviewApi.dismissReviewComment(detail.id, comment.id)
       : this.reviewApi.restoreReviewComment(detail.id, comment.id);
@@ -539,7 +585,9 @@ export class ReviewPanelComponent implements OnInit {
         );
       },
       error: (err: unknown) => {
+        // Roll back the optimistic flip to the pre-click snapshot.
         this.pendingCommentId.set(null);
+        this.detail.update(current => (current ? { ...current, comments: snapshot } : current));
         this.actionError.set(actionErrorMessage(err));
       }
     });
