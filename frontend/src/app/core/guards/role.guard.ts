@@ -17,6 +17,13 @@ export const WRITE_ROLES = ['DEVELOPER', 'REVIEWER', 'ORG_ADMIN', 'PLATFORM_ADMI
 export const ADMIN_ROLES = ['ORG_ADMIN', 'PLATFORM_ADMIN'];
 
 /**
+ * Platform-admin-only routes (plan Step 9). Deliberately NOT covered by
+ * `isAdminRoute` below — an org_members ORG_ADMIN row must never elevate
+ * into the platform screens; only the JWT/backend role can.
+ */
+export const PLATFORM_ROLES = ['PLATFORM_ADMIN'];
+
+/**
  * True when the route declares exactly the admin role list — those are
  * the routes eligible for the org-membership elevation below (an org
  * members row raises the effective role, plan §2 max(JWT, org_members.role)).

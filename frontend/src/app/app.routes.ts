@@ -1,5 +1,11 @@
 import { Routes } from '@angular/router';
-import { ADMIN_ROLES, ANY_ROLE, RoleGuard, WRITE_ROLES } from './core/guards/role.guard';
+import {
+  ADMIN_ROLES,
+  ANY_ROLE,
+  PLATFORM_ROLES,
+  RoleGuard,
+  WRITE_ROLES
+} from './core/guards/role.guard';
 import { confirmUnsavedSummaryGuard } from './features/pull-requests/pr-detail/pr-detail.guard';
 
 export const routes: Routes = [
@@ -92,6 +98,19 @@ export const routes: Routes = [
       ),
     canActivate: [RoleGuard],
     data: { roles: ADMIN_ROLES }
+  },
+  {
+    // Platform admin screen (plan Step 9) — PLATFORM_ADMIN only. Not an
+    // "admin route" for the guard's org-membership elevation (the role
+    // list is not ADMIN_ROLES), so an ORG_ADMIN can never open it; the
+    // backend re-authorizes every /users and /orgs read regardless.
+    path: 'platform',
+    loadComponent: () =>
+      import('./features/admin/platform-admin/platform-admin.component').then(
+        m => m.PlatformAdminComponent
+      ),
+    canActivate: [RoleGuard],
+    data: { roles: PLATFORM_ROLES }
   },
   {
     // Generic 404 (rule 5) — also the wildcard target below, so an unknown

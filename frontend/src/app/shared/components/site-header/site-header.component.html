@@ -29,6 +29,16 @@
           Organization
         </a>
       }
+      @if (can('platform')) {
+        <a
+          routerLink="/platform"
+          routerLinkActive="active"
+          class="nav-link"
+          data-testid="nav-platform"
+        >
+          Platform
+        </a>
+      }
     </nav>
   </div>
 

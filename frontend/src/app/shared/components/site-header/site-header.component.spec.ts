@@ -100,6 +100,17 @@ describe('SiteHeaderComponent', () => {
     expect(el().querySelector('[data-testid="nav-org-settings"]')).not.toBeNull();
   });
 
+  it('adds the Platform entry only for a PLATFORM_ADMIN (plan Step 9)', () => {
+    render('PLATFORM_ADMIN');
+    expect(el().querySelector('[data-testid="nav-platform"]')).not.toBeNull();
+
+    render('ORG_ADMIN');
+    expect(el().querySelector('[data-testid="nav-platform"]')).toBeNull();
+
+    render('DEVELOPER');
+    expect(el().querySelector('[data-testid="nav-platform"]')).toBeNull();
+  });
+
   it('does not render the user menu without a session profile', () => {
     render(null);
 
