@@ -144,6 +144,28 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     expect(text).toContain('max 10');
   });
 
+  it('shows the effective value with an override marker per field (plan Step 6)', async () => {
+    create('ORG_ADMIN');
+    // NgModel writes its view value in a microtask.
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Overridden number: the stored override fills the input, chip + reset show.
+    const diffInput = el().querySelector('[data-testid="org-diffCharCap"]') as HTMLInputElement;
+    expect(diffInput.value).toBe('20000');
+    expect(diffInput.closest('.setting-field')?.textContent).toContain('overridden');
+
+    // Non-overridden number: empty input = inherit; the effective value is
+    // visible in the inherit hint, and no reset button appears.
+    const findingsInput = el().querySelector(
+      '[data-testid="org-maxFindingsPerAgent"]'
+    ) as HTMLInputElement;
+    expect(findingsInput.value).toBe('');
+    const block = findingsInput.closest('.setting-field');
+    expect(block?.textContent).toContain('inherits 15');
+    expect(block?.querySelector('[data-testid^="reset-"]')).toBeNull();
+  });
+
   it('PUTs only dirty fields — absent fields are kept by the backend', () => {
     create('ORG_ADMIN');
     component.setField('org', 'maxFindingsPerAgent', '20');
@@ -176,6 +198,40 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
 
     reset?.click();
     expect(orgSvc.saveOrgSettings).toHaveBeenCalledWith('org-1', { diffCharCap: null });
+  });
+
+  it('offers only backend vocab as choices — unknown agents are not selectable', () => {
+    // A stored override holds a name the current backend no longer knows;
+    // it must never become a selectable choice.
+    orgSvc.getOrgSettings.and.returnValue(
+      of({
+        ...orgSettings,
+        overrides: { ...orgSettings.overrides, enabledAgents: ['security', 'rogue_agent'] },
+        overridden: { ...orgSettings.overridden, enabledAgents: true }
+      })
+    );
+    create('ORG_ADMIN');
+
+    const agentLabel = Array.from(el().querySelectorAll('label')).find(
+      label => label.textContent?.trim() === 'Agents enabled'
+    );
+    const agentBlock = agentLabel?.closest('.setting-field');
+    const agentChecks = agentBlock?.querySelectorAll('input[type="checkbox"]') ?? [];
+    expect(agentChecks.length).toBe(5); // AGENT_DOMAINS only — nothing extra
+    expect(agentBlock?.textContent).not.toContain('rogue_agent');
+
+    const severity = el().querySelector(
+      '[data-testid="org-minSeverityToPost"]'
+    ) as HTMLSelectElement;
+    expect(Array.from(severity.options).map(option => option.value)).toEqual([
+      'info',
+      'low',
+      'medium',
+      'high',
+      'critical'
+    ]);
+    const mode = el().querySelector('[data-testid="org-postingMode"]') as HTMLSelectElement;
+    expect(Array.from(mode.options).map(option => option.value)).toEqual(['auto', 'staged']);
   });
 
   it('renders a route-level 422 string inline next to the offending field', () => {
