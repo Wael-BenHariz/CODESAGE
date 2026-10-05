@@ -18,7 +18,11 @@ function messageOf(err: unknown, fallback: string): string {
  * Contract mirrors Step 11: DEVELOPER/REVIEWER only (422 otherwise),
  * 20/hour/org → 429, revoke is 409 on an already-accepted row, and the
  * list NEVER carries token material — the raw link exists only in the
- * email (in local dev: the backend console log).
+ * email.
+ *
+ * Dev note (plan Step 7 — kept here, out of the UI): with the default
+ * `MAIL_BACKEND=console` no email is sent; the invite link is the
+ * `mail_console to=…` line in the **backend pod log** (`kubectl logs`).
  */
 @Component({
   selector: 'app-org-invitations',

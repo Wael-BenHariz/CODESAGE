@@ -45,8 +45,7 @@
 
       @if (sentTo(); as to) {
         <div class="banner success" role="status" data-testid="invite-sent">
-          Invitation created for {{ to }} — the link was emailed to them. In local development the
-          invite link lands in the backend console log.
+          Invitation created for {{ to }} — the link was emailed to them.
         </div>
       }
       @if (formError(); as err) {

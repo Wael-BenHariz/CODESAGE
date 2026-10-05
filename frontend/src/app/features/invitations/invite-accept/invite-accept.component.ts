@@ -31,6 +31,10 @@ type InviteState = 'loading' | 'invalid' | 'error' | 'ready' | 'joined';
  *
  * The raw token only ever appears in this URL — it is never written to
  * `console`, storage, or any tracker (there are none; keep it that way).
+ *
+ * Dev note (plan Step 7 — kept here, out of the UI): with
+ * `MAIL_BACKEND=console` no email is sent; the invite link a tester
+ * needs is the `mail_console to=…` line in the backend pod log.
  */
 @Component({
   selector: 'app-invite-accept',

@@ -87,6 +87,8 @@ describe('OrgInvitationsComponent — invite form, list, revoke (plan Step 12)',
       role: 'REVIEWER'
     });
     expect(q('invite-sent')?.textContent).toContain('Invitation created for new@example.com');
+    // Dev notes (mail_console / pod log) stay out of the UI (plan Step 7).
+    expect(q('invite-sent')?.textContent).not.toContain('console');
     expect(invitations.list).toHaveBeenCalledTimes(2); // refreshed after the create
   });
 
