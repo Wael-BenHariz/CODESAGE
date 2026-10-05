@@ -6,6 +6,7 @@ from app.db.models.orgs import Org, OrgMember, OrgSetting, PlatformSetting
 from app.db.models.pull_requests import PullRequest
 from app.db.models.repositories import Repository
 from app.db.models.review_comments import ReviewComment
+from app.db.models.review_finding_validations import ReviewFindingValidation
 from app.db.models.reviews import Review
 from app.db.models.scan_reports import ScanFindingRow, ScanReportRow
 from app.db.models.users import User
@@ -23,6 +24,7 @@ __all__ = [
     "Repository",
     "Review",
     "ReviewComment",
+    "ReviewFindingValidation",
     "ScanFindingRow",
     "ScanReportRow",
     "User",

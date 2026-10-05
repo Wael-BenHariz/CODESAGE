@@ -21,6 +21,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.pull_requests import PullRequest
+    from app.db.models.review_finding_validations import ReviewFindingValidation
     from app.db.models.reviews import Review
 
 
@@ -225,6 +226,18 @@ class ReviewComment(Base):
     pull_request: Mapped["PullRequest"] = relationship(
         "PullRequest",
         back_populates="review_comments",
+    )
+
+    # Reviewer verdicts (Step 9). selectin so GET /reviews/{id} and the
+    # dismiss/restore responses can serialize them without an async
+    # lazy-load; newest verdict first.
+    validations: Mapped[list["ReviewFindingValidation"]] = relationship(
+        "ReviewFindingValidation",
+        back_populates="comment",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        foreign_keys="ReviewFindingValidation.comment_id",
+        order_by="ReviewFindingValidation.updated_at.desc()",
     )
 
     def __repr__(self) -> str:

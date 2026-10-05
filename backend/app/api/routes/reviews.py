@@ -16,6 +16,7 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -27,22 +28,30 @@ from app.db.models import (
     Repository,
     Review,
     ReviewComment,
+    ReviewFindingValidation,
     ScanFindingRow,
     ScanReportRow,
     User,
 )
 from app.schemas.review import (
+    CommentValidation,
     ReviewCommentResponse,
     ReviewListResponse,
     ReviewResponse,
     ReviewStatus,
     ReviewWithComments,
     SummaryUpdate,
+    ValidationCreate,
 )
 from app.schemas.scan_report import ScanReportResponse
 from app.security.dependencies import get_current_user
 from app.security.org_access import ReviewAccess, require_review_access
-from app.security.roles import ROLE_DEVELOPER, ROLE_PLATFORM_ADMIN, require_developer
+from app.security.roles import (
+    ROLE_DEVELOPER,
+    ROLE_PLATFORM_ADMIN,
+    ROLE_REVIEWER,
+    require_developer,
+)
 from app.services.review_posting import ReviewPostError, post_review_to_github
 from app.services.scan_report_store import finding_from_row
 
@@ -69,6 +78,11 @@ _review_reader = require_review_access(ROLE_DEVELOPER, write=False)
 _review_member_write = require_review_access(ROLE_DEVELOPER, write=True)
 _review_writer = require_review_access(
     ROLE_DEVELOPER, write=True, platform_admin_bypass=False
+)
+# Verdict upsert (Step 9): member + effective >= REVIEWER and NO
+# PLATFORM_ADMIN bypass — validate is in the F2 carve-out list too.
+_review_comment_validator = require_review_access(
+    ROLE_REVIEWER, write=True, platform_admin_bypass=False
 )
 
 
@@ -206,6 +220,10 @@ async def get_review(
                 also_detected_by=(
                     list(c.also_detected_by) if c.also_detected_by is not None else None
                 ),
+                # Step 9 verdicts (selectin-loaded, newest first).
+                validations=[
+                    CommentValidation.model_validate(v) for v in c.validations
+                ],
                 created_at=c.created_at,
             )
             for c in review.comments
@@ -524,6 +542,79 @@ async def restore_comment(
     """Undo a dismissal — the finding is back in the staged Findings body."""
     comment = await _set_comment_dismissed(db, access, comment_id, dismissed=False)
     return ReviewCommentResponse.model_validate(comment)
+
+
+# --- Reviewer validation (plan Step 9) ----------------------------------------
+
+
+@router.patch("/{review_id}/comments/{comment_id}/validate")
+async def validate_comment(
+    review_id: str,
+    comment_id: str,
+    payload: ValidationCreate,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    access: ReviewAccess = Depends(_review_comment_validator),  # noqa: B008
+):
+    """
+    Upsert the caller's verdict for one finding (plan Step 9).
+
+    Guard: org member + effective role >= REVIEWER with the F2 carve-out
+    (no PLATFORM_ADMIN bypass without a membership row). A changed mind
+    replaces the verdict — ``UNIQUE (comment_id, reviewer_id)`` plus
+    ``ON CONFLICT ... DO UPDATE``. ``note`` is stored as-is (plain text);
+    the frontend renders it through Angular interpolation only.
+    """
+    # Same comment-ownership check as dismiss/restore: an existing
+    # comment of ANOTHER review is never revealed (404 either way).
+    result = await db.execute(
+        select(ReviewComment)
+        .where(ReviewComment.id == comment_id)
+        .where(ReviewComment.review_id == access.review.id)
+    )
+    comment = result.scalar_one_or_none()
+    if comment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comment not found",
+        )
+
+    now = datetime.now(timezone.utc)
+    stmt = (
+        # pg_insert (dialect form) — the generic Insert has no
+        # on_conflict_do_update.
+        pg_insert(ReviewFindingValidation)
+        .values(
+            comment_id=comment.id,
+            reviewer_id=access.user.id,
+            verdict=payload.verdict,
+            severity_override=payload.severity_override,
+            note=payload.note,
+        )
+        .on_conflict_do_update(
+            index_elements=["comment_id", "reviewer_id"],
+            set_={
+                "verdict": payload.verdict,
+                "severity_override": payload.severity_override,
+                "note": payload.note,
+                "updated_at": now,
+            },
+        )
+        .returning(
+            ReviewFindingValidation.created_at,
+            ReviewFindingValidation.updated_at,
+        )
+    )
+    row = (await db.execute(stmt)).one()
+    await db.commit()
+
+    return CommentValidation(
+        verdict=payload.verdict,
+        severity_override=payload.severity_override,
+        note=payload.note,
+        reviewer_login=access.user.login,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 @router.post("/{review_id}/post")

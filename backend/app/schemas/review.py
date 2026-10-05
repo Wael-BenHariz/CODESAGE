@@ -4,6 +4,7 @@ Request/Response models for code review management.
 """
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -74,6 +75,48 @@ class SummaryUpdate(BaseModel):
             f"{EDITED_SUMMARY_MAX_CHARS} characters"
         ),
     )
+
+
+class ValidationCreate(BaseModel):
+    """Request body for ``PATCH /reviews/{id}/comments/{id}/validate``.
+
+    Upserts the caller's verdict (unique per comment + reviewer, plan
+    Step 9). The ``Literal`` enums match the migration 016 CHECK
+    constraints, so unknown values are rejected 422 before touching
+    the database.
+    """
+
+    verdict: Literal["confirmed", "false_positive", "needs_investigation"] = Field(
+        ..., description="The reviewer's verdict"
+    )
+    severity_override: Literal["info", "warning", "error", "suggestion"] | None = Field(
+        None, description="Reviewer-assigned severity; NULL keeps the original"
+    )
+    note: str | None = Field(
+        None, description="Plain-text justification — stored as-is, never parsed"
+    )
+
+
+class CommentValidation(BaseModel):
+    """One reviewer's verdict on a finding (plan Step 9).
+
+    Attached to ``ReviewCommentResponse.validations`` — one row per
+    reviewer (newest first), so the UI can show who judged the finding,
+    what they decided, and when.
+    """
+
+    verdict: str = Field(
+        ..., description="confirmed | false_positive | needs_investigation"
+    )
+    severity_override: str | None = Field(
+        None, description="Reviewer-assigned severity; NULL keeps the original"
+    )
+    note: str | None = Field(None, description="Plain-text justification")
+    reviewer_login: str = Field(..., description="Login of the verdict's author")
+    created_at: datetime = Field(..., description="When the verdict was first given")
+    updated_at: datetime = Field(..., description="When the verdict last changed")
+
+    model_config = {"from_attributes": True}
 
 
 class ReviewStatus(BaseModel):
@@ -184,6 +227,11 @@ class ReviewCommentResponse(_OrmUuidMixin):
     )
     also_detected_by: list[str] | None = Field(
         None, description="Other tools that found the same defect"
+    )
+    # Reviewer verdicts (Step 9, migration 016): newest first, one row
+    # per reviewer; empty until someone judges the finding.
+    validations: list[CommentValidation] = Field(
+        default_factory=list, description="Reviewer verdicts on this finding"
     )
     created_at: datetime = Field(..., description="Creation timestamp")
 
