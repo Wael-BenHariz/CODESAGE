@@ -1290,6 +1290,23 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(el().querySelectorAll('[data-testid="review-file-group"]').length).toBe(2);
     });
 
+    it('explains dismissed vs validated next to the count from shared copy (Step 9)', () => {
+      createDetail([errComment()]);
+      showTab('findings');
+
+      const trigger = testid('help-trigger') as HTMLButtonElement;
+      expect(trigger.getAttribute('aria-label')).toBe('What do dismissed and validated mean?');
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+      trigger.click();
+      fixture.detectChanges();
+
+      const panel = testid('help-panel');
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(panel?.textContent).toContain('confirmed, false positive, or needs investigation');
+      expect(panel?.textContent).toContain('Status filter on the Findings tab');
+    });
+
     it('searches message/file/rule and shows the filtered-empty state on no match', () => {
       createDetail([errComment(), infoComment()]);
       const input = testid('f-search') as HTMLInputElement;

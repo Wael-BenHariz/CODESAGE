@@ -23,7 +23,9 @@ import {
   ValidationSeverity,
   ValidationVerdict
 } from '../../../core/models/review.model';
+import { HelpPopoverComponent } from '../../../shared/components/help-popover/help-popover.component';
 import { TabsComponent, TabDef } from '../../../shared/components/tabs/tabs.component';
+import { DISMISSED_VS_VALIDATED_TEXT } from '../../../shared/help.copy';
 
 /** Comments of one file after the plan's ordering: severity → file → line. */
 export interface ReviewFileGroup {
@@ -201,7 +203,7 @@ function withValidation(
 @Component({
   selector: 'app-review-panel',
   standalone: true,
-  imports: [CommonModule, TabsComponent],
+  imports: [CommonModule, HelpPopoverComponent, TabsComponent],
   templateUrl: './review-panel.component.html',
   styleUrl: './review-panel.component.scss'
 })
@@ -212,6 +214,9 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
 
   /** Client-side cap for the summary editor (backend rejects over-cap too). */
   readonly summaryMaxChars = SUMMARY_MAX_CHARS;
+
+  /** Body of the Findings "?" popover — shared copy, same string as /help. */
+  readonly dismissedHelpText = DISMISSED_VS_VALIDATED_TEXT;
 
   readonly prId = input.required<string>();
   readonly owner = input.required<string>();

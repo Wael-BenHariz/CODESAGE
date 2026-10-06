@@ -322,6 +322,10 @@
               <span class="findings-count" data-testid="findings-count">
                 {{ filteredCount() }} of {{ detail()?.comments_count }} findings
               </span>
+              <app-help-popover
+                label="What do dismissed and validated mean?"
+                [content]="dismissedHelpText"
+              />
               @if (filteredFileGroups().length > 1) {
                 <button class="btn-mini" data-testid="collapse-all" (click)="collapseAllGroups()">
                   Collapse all

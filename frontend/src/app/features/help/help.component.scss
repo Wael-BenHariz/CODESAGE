@@ -1,0 +1,242 @@
+.help-page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+  color: var(--text-2);
+}
+
+.help-header {
+  margin-bottom: var(--space-6);
+
+  h1 {
+    margin: var(--space-3) 0;
+    font-size: var(--font-size-2xl);
+    line-height: 1.2;
+    color: var(--text-1);
+  }
+}
+
+.back-link {
+  display: inline-block;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+}
+
+.help-lede {
+  max-width: 68ch;
+  margin: 0;
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+}
+
+.help-section {
+  margin-bottom: var(--space-5);
+  padding: var(--space-5);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+
+  h2 {
+    margin: 0 0 var(--space-4);
+    font-size: var(--font-size-lg);
+    color: var(--text-1);
+  }
+}
+
+.pipeline-scroll {
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+.pipeline-svg {
+  display: block;
+  width: 100%;
+  min-width: 700px;
+  height: auto;
+}
+
+.pipe-box {
+  fill: var(--surface-2);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.pipe-no {
+  fill: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pipe-label {
+  fill: var(--text-1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pipe-arrow-line {
+  stroke: var(--text-3);
+  stroke-width: 2;
+}
+
+.pipe-arrow-head {
+  fill: var(--text-3);
+}
+
+.pipeline-steps {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-card {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+
+  .step-no {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  h3 {
+    margin: 0 0 2px;
+    font-size: var(--font-size-sm);
+    color: var(--text-1);
+  }
+
+  p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+  }
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+
+  th,
+  td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    vertical-align: top;
+    line-height: 1.6;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  thead th {
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-3);
+  }
+
+  tbody th {
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text-1);
+  }
+
+  code {
+    padding: 2px 6px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--text-1);
+    background: var(--surface-3);
+    border-radius: var(--radius-xs);
+  }
+}
+
+.help-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.posting-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.posting-card {
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+
+  h3 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--font-size-md);
+    color: var(--text-1);
+  }
+
+  p {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+  }
+}
+
+.invite-steps {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding-left: 1.3em;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.glossary {
+  margin: 0;
+
+  dt {
+    margin-top: var(--space-4);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    color: var(--text-1);
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  dd {
+    margin: 4px 0 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+  }
+}

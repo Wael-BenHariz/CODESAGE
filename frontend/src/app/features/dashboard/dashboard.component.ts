@@ -18,7 +18,9 @@ import {
 } from '../../shared/components/severity-badge/severity-badge.component';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 import { ErrorStateComponent } from '../../shared/components/error-state/error-state.component';
+import { HelpPopoverComponent } from '../../shared/components/help-popover/help-popover.component';
 import { SpinnerComponent } from '../../shared/components/spinner/spinner.component';
+import { SEVERITY_HELP_TEXT } from '../../shared/help.copy';
 import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
 
 type SectionState = 'loading' | 'error' | 'ready';
@@ -92,6 +94,7 @@ interface SeverityBar {
     SpinnerComponent,
     EmptyStateComponent,
     ErrorStateComponent,
+    HelpPopoverComponent,
     SeverityBadgeComponent,
     TimeAgoPipe
   ],
@@ -106,6 +109,9 @@ export class DashboardComponent implements OnInit {
   private readonly orgApi = inject(OrgSettingsService);
   private readonly repoApi = inject(RepositoryService);
   private readonly reviewApi = inject(ReviewService);
+
+  /** Body of the severity "?" popover — shared copy, same strings as /help. */
+  readonly severityHelpText = SEVERITY_HELP_TEXT;
 
   user = signal<User | null>(null);
   repositories = signal<Repository[]>([]);

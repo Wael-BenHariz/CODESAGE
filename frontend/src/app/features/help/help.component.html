@@ -1,0 +1,138 @@
+<div class="help-page">
+  <header class="help-header">
+    <a class="back-link" routerLink="/" data-testid="help-back">← CodeSage home</a>
+    <h1>How CodeSage reviews your pull requests</h1>
+    <p class="help-lede">
+      What happens after you open a pull request, what the severities and statuses mean, and who can
+      do what. Everywhere in the app, a “?” button opens the same explanations in place.
+    </p>
+  </header>
+
+  <section class="help-section" data-testid="help-pipeline">
+    <h2>The review pipeline</h2>
+    <div class="pipeline-scroll" tabindex="0">
+      <svg
+        class="pipeline-svg"
+        viewBox="0 0 760 150"
+        role="img"
+        [attr.aria-label]="diagramLabel"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        @for (step of pipelineSteps; track step.id; let i = $index) {
+          <rect class="pipe-box" [attr.x]="boxX(i)" y="35" width="130" height="80" rx="8" />
+          <text class="pipe-no" [attr.x]="boxX(i) + 14" y="58">{{ i + 1 }}</text>
+          <text class="pipe-label" [attr.x]="boxX(i) + 65" y="80" text-anchor="middle">
+            {{ step.diagram[0] }}
+          </text>
+          <text class="pipe-label" [attr.x]="boxX(i) + 65" y="98" text-anchor="middle">
+            {{ step.diagram[1] }}
+          </text>
+          @if (i < pipelineSteps.length - 1) {
+            <line
+              class="pipe-arrow-line"
+              [attr.x1]="boxX(i) + 134"
+              y1="75"
+              [attr.x2]="boxX(i) + 148"
+              y2="75"
+            />
+            <polygon class="pipe-arrow-head" [attr.points]="arrowHead(i)" />
+          }
+        }
+      </svg>
+    </div>
+    <ol class="pipeline-steps">
+      @for (step of pipelineSteps; track step.id; let i = $index) {
+        <li class="step-card">
+          <span class="step-no" aria-hidden="true">{{ i + 1 }}</span>
+          <div>
+            <h3>{{ step.title }}</h3>
+            <p>{{ step.body }}</p>
+          </div>
+        </li>
+      }
+    </ol>
+  </section>
+
+  <section class="help-section" data-testid="help-severity">
+    <h2>Severity levels</h2>
+    <div class="table-scroll">
+      <table class="help-table">
+        <thead>
+          <tr>
+            <th scope="col">Level</th>
+            <th scope="col">What it means</th>
+            <th scope="col">What to do</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of severities; track row.id) {
+            <tr [attr.data-testid]="'sev-' + row.id">
+              <td><app-severity-badge [severity]="row.id" /></td>
+              <td>{{ row.meaning }}</td>
+              <td>{{ row.action }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="help-note">{{ scaleNote }}</p>
+  </section>
+
+  <section class="help-section" data-testid="help-roles">
+    <h2>Who can do what</h2>
+    <div class="table-scroll">
+      <table class="help-table">
+        <thead>
+          <tr>
+            <th scope="col">Role</th>
+            <th scope="col">Can do</th>
+            <th scope="col">Where it comes from</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of roles; track row.id) {
+            <tr [attr.data-testid]="'role-' + row.id">
+              <th scope="row">
+                <code>{{ row.label }}</code>
+              </th>
+              <td>{{ row.can }}</td>
+              <td>{{ row.scope }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="help-note">{{ roleNote }}</p>
+  </section>
+
+  <section class="help-section" data-testid="help-posting">
+    <h2>Staged vs automatic posting</h2>
+    <div class="posting-grid">
+      @for (row of posting; track row.id) {
+        <article class="posting-card" [attr.data-testid]="'posting-' + row.id">
+          <h3>{{ row.label }}</h3>
+          <p>{{ row.body }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="help-section" data-testid="help-invite">
+    <h2>Inviting your team</h2>
+    <ol class="invite-steps">
+      @for (step of inviteSteps; track $index) {
+        <li>{{ step }}</li>
+      }
+    </ol>
+  </section>
+
+  <section class="help-section" data-testid="help-glossary">
+    <h2>Glossary</h2>
+    <dl class="glossary">
+      @for (entry of glossary; track entry.id) {
+        <dt [attr.data-testid]="'term-' + entry.id">{{ entry.term }}</dt>
+        <dd>{{ entry.definition }}</dd>
+      }
+    </dl>
+  </section>
+</div>

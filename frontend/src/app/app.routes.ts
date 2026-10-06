@@ -44,6 +44,13 @@ export const routes: Routes = [
     data: { shell: false }
   },
   {
+    // Public explainer (plan Step 9): no guard and no shell — the guide is
+    // readable before sign-in, like the landing page.
+    path: 'help',
+    loadComponent: () => import('./features/help/help.component').then(m => m.HelpComponent),
+    data: { shell: false }
+  },
+  {
     path: 'dashboard',
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),

@@ -335,6 +335,21 @@ describe('DashboardComponent — real API data (plan Step 10)', () => {
     expect(q('[data-testid="severity-chart"]')).not.toBeNull();
   });
 
+  it('opens the severity "?" popover from the shared /help copy (Step 9)', () => {
+    const trigger = q('[data-testid="help-trigger"]') as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    expect(trigger.getAttribute('aria-label')).toBe('What do severity levels mean?');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    trigger.click();
+    fixture.detectChanges();
+
+    const panel = q('[data-testid="help-panel"]');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(panel?.textContent).toContain('critical — Fix before merging.');
+    expect(panel?.textContent).toContain('error = critical, warning = medium, suggestion = low');
+  });
+
   it('summarises staged reviews in an awaiting-approval callout', () => {
     // Base mock: status_filter=ready_to_post → total 3.
     const callout = q('[data-testid="awaiting-approval"]');

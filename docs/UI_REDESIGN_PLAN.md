@@ -1,9 +1,9 @@
 # UI Redesign Plan — CodeSage frontend
 
-**Status:** Steps 0–8 complete (`docs: ui redesign plan`, `feat(web): design tokens…`,
+**Status:** Steps 0–9 complete (`docs: ui redesign plan`, `feat(web): design tokens…`,
 `shared ui primitives`, `application shell`, `public screens on design tokens`,
-`dashboard walkthrough…`, `repositories`, `review walkthrough`, `settings walkthrough…`) —
-gates green through 433 tests
+`dashboard walkthrough…`, `repositories`, `review walkthrough`, `settings walkthrough…`,
+`contextual help…`) — gates green through 451 tests
 **Branch:** `feat/ui-redesign` (from `feat/roles-org-settings-staged-reviews`, the current
 release branch carrying frontend v0.3.1)
 **Ground rules:** frozen palette · no backend changes · no fake data · no new runtime

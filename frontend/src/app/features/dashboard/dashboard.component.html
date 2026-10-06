@@ -214,7 +214,10 @@
 
     <section class="section">
       <div class="section-header">
-        <h2>Severity Distribution</h2>
+        <h2>
+          Severity Distribution
+          <app-help-popover label="What do severity levels mean?" [content]="severityHelpText" />
+        </h2>
         @if (severityState() === 'ready' && severityKnown() > 0) {
           <span class="section-note"
             >Most recent {{ severityRows().length }}
