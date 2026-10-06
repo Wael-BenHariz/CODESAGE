@@ -1,5 +1,15 @@
-import { Component, HostListener, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subscription, switchMap, timer } from 'rxjs';
 import { ApiError } from '../../../core/services/api.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
@@ -13,6 +23,7 @@ import {
   ValidationSeverity,
   ValidationVerdict
 } from '../../../core/models/review.model';
+import { TabsComponent, TabDef } from '../../../shared/components/tabs/tabs.component';
 
 /** Comments of one file after the plan's ordering: severity → file → line. */
 export interface ReviewFileGroup {
@@ -175,21 +186,26 @@ function withValidation(
 }
 
 /**
- * Read-only AI review panel on the PR detail page (plan Step 7b).
+ * Read-only AI review panel on the PR detail page (plan Step 7b, walkthrough
+ * restructure §4.3 / Step 7).
  *
- * Fetches the PR's reviews (newest first) and renders the latest one:
- * summary (edited_summary wins), status states, and the findings grouped
- * by file. All text is interpolated — never `innerHTML` — so LLM and
- * scanner output can't inject markup.
+ * Renders the PR's latest review as a three-tab walkthrough — Overview
+ * (summary + stat tiles), Findings (filters + file groups) and Static
+ * analysis (per-tool report) — behind a sticky status bar (staged / posted /
+ * auto mode) with a polled pipeline progress bar while a run is in flight.
+ * All text is interpolated — never `innerHTML` — so LLM and scanner output
+ * can't inject markup. Inactive tab panels stay in the DOM behind `[hidden]`
+ * (removed from the a11y tree) so the DOM contract tests read the same
+ * content regardless of the active tab.
  */
 @Component({
   selector: 'app-review-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TabsComponent],
   templateUrl: './review-panel.component.html',
   styleUrl: './review-panel.component.scss'
 })
-export class ReviewPanelComponent implements OnInit {
+export class ReviewPanelComponent implements OnInit, OnDestroy {
   private readonly pullRequests = inject(PullRequestService);
   private readonly reviewApi = inject(ReviewService);
   private readonly toast = inject(ToastService);
@@ -232,8 +248,37 @@ export class ReviewPanelComponent implements OnInit {
   /** Per-comment draft of the severity-override + note inputs (keyed by comment id). */
   readonly validationDrafts = signal<Record<string, ValidationDraft>>({});
 
+  // --- Walkthrough (plan Step 7 / §4.3) --------------------------------------
+  /** Active walkthrough tab; inactive panels are `[hidden]` in the DOM. */
+  readonly activeTab = signal<'overview' | 'findings' | 'scan'>('overview');
+  readonly tabDefs: TabDef[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'findings', label: 'Findings' },
+    { id: 'scan', label: 'Static analysis' }
+  ];
+
+  /** Plain pipeline progress 0–100 (proposal #14: no step names exist). */
+  readonly progress = signal(0);
+  /** Status polling — stopped on terminal states, errors and destroy. */
+  private pollSub: Subscription | null = null;
+
+  // Findings toolbar filters — client-side over the loaded comments.
+  readonly fSeverity = signal('');
+  readonly fTool = signal('');
+  readonly fCategory = signal('');
+  readonly fStatus = signal('');
+  readonly fSearch = signal('');
+  /** Files the viewer collapsed (expand/collapse-all write the whole set). */
+  private readonly collapsedFiles = signal<ReadonlySet<string>>(new Set());
+  /** Scan report resolved (arrived / 404 / failed) — no empty state before. */
+  readonly scanResolved = signal(false);
+
   ngOnInit(): void {
     this.load();
+  }
+
+  ngOnDestroy(): void {
+    this.pollSub?.unsubscribe();
   }
 
   load(): void {
@@ -241,7 +286,10 @@ export class ReviewPanelComponent implements OnInit {
     this.triggerError.set(false);
     this.actionError.set(null);
     this.scanReport.set(null);
+    this.scanResolved.set(false);
     this.scanLoadFailed.set(false);
+    this.progress.set(0);
+    this.stopPolling(); // a (re)load owns the loop from here
     // A (re)load supersedes any in-progress edit — the posted/staged view
     // below is read-only, an orphaned textarea must not survive a refresh.
     this.editingSummary.set(false);
@@ -259,6 +307,9 @@ export class ReviewPanelComponent implements OnInit {
           next: detail => {
             this.detail.set(detail);
             this.state.set('detail');
+            if (RUNNING_STATUSES.includes(detail.status)) {
+              this.startPolling(detail.id); // plan §4.3: poll → progress bar
+            }
           },
           error: () => this.state.set('error')
         });
@@ -282,14 +333,55 @@ export class ReviewPanelComponent implements OnInit {
           return; // stale response — a newer load() supersedes it
         }
         this.scanReport.set(report);
+        this.scanResolved.set(true);
       },
       error: (err: unknown) => {
+        // Every terminal path resolves the section so the Static-analysis
+        // tab never sits in a permanent "loading" state.
+        this.scanResolved.set(true);
         if (err instanceof ApiError && err.status === 404) {
           return; // absence, not a failure — no note, no navigation
         }
         this.scanLoadFailed.set(true);
       }
     });
+  }
+
+  /**
+   * Poll `GET /reviews/{id}/status` while a run is in flight (plan §4.3):
+   * first tick after 1 s, then every 2.5 s — the delay keeps the initial
+   * render deterministic and the bar is honest from its first fill. A
+   * terminal status stops the loop and refetches the full review (the
+   * status endpoint drops the session's detail cache); a transient error
+   * stops quietly, leaving the running state visible. Unsubscribed on
+   * destroy. Progress has no step names — plain bar (proposal #14).
+   */
+  private startPolling(reviewId: string): void {
+    this.stopPolling();
+    this.pollSub = timer(1000, 2500)
+      .pipe(switchMap(() => this.reviewApi.getReviewStatus(reviewId)))
+      .subscribe({
+        next: ({ status, progress }) => {
+          this.progress.set(progress);
+          if (RUNNING_STATUSES.includes(status)) {
+            // Reflect the intermediate status without a full refetch.
+            this.detail.update(current =>
+              current && current.id === reviewId
+                ? { ...current, status: status as ReviewDetail['status'] }
+                : current
+            );
+            return;
+          }
+          this.stopPolling();
+          this.load(); // terminal → full refetch (completed / failed / ready)
+        },
+        error: () => this.stopPolling()
+      });
+  }
+
+  private stopPolling(): void {
+    this.pollSub?.unsubscribe();
+    this.pollSub = null;
   }
 
   retry(): void {
@@ -369,6 +461,149 @@ export class ReviewPanelComponent implements OnInit {
     return groups;
   });
 
+  // --- Walkthrough tabs + findings toolbar (plan §4.3) -----------------------
+
+  setTab(id: string): void {
+    this.activeTab.set(id as 'overview' | 'findings' | 'scan');
+  }
+
+  onFilterChange(kind: 'severity' | 'tool' | 'category' | 'status' | 'search', event: Event): void {
+    const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
+    const targets = {
+      severity: this.fSeverity,
+      tool: this.fTool,
+      category: this.fCategory,
+      status: this.fStatus,
+      search: this.fSearch
+    };
+    targets[kind].set(value);
+  }
+
+  clearFilters(): void {
+    this.fSeverity.set('');
+    this.fTool.set('');
+    this.fCategory.set('');
+    this.fStatus.set('');
+    this.fSearch.set('');
+  }
+
+  readonly findingsFilterActive = computed(() =>
+    Boolean(
+      this.fSeverity() ||
+        this.fTool() ||
+        this.fCategory() ||
+        this.fStatus() ||
+        this.fSearch().trim()
+    )
+  );
+
+  /** Filter options derived from the loaded comments — never guessed. */
+  readonly severityOptions = computed(() => {
+    const seen = new Set<string>();
+    for (const comment of this.detail()?.comments ?? []) {
+      seen.add(comment.severity.toLowerCase());
+    }
+    return [...seen].sort((a, b) => (SEVERITY_RANK[b] ?? 0) - (SEVERITY_RANK[a] ?? 0));
+  });
+
+  readonly toolOptions = computed(() => {
+    const seen = new Set<string>();
+    for (const comment of this.detail()?.comments ?? []) {
+      if (comment.tool) {
+        seen.add(comment.tool);
+      }
+    }
+    return [...seen].sort();
+  });
+
+  readonly categoryOptions = computed(() => {
+    const seen = new Set<string>();
+    for (const comment of this.detail()?.comments ?? []) {
+      if (comment.category) {
+        seen.add(comment.category);
+      }
+    }
+    return [...seen].sort();
+  });
+
+  /**
+   * `fileGroups` with the toolbar filters applied. Status vocab (plan §4.3):
+   * `open` = not dismissed · `dismissed` = dismissed · `validated` = carries
+   * at least one reviewer verdict (a validated finding stays open until
+   * dismissed — the filters are not mutually exclusive by design).
+   */
+  readonly filteredFileGroups = computed<ReviewFileGroup[]>(() => {
+    const severity = this.fSeverity();
+    const tool = this.fTool();
+    const category = this.fCategory();
+    const status = this.fStatus();
+    const query = this.fSearch().trim().toLowerCase();
+    if (!this.findingsFilterActive()) {
+      return this.fileGroups();
+    }
+    return this.fileGroups()
+      .map(group => ({
+        file: group.file,
+        comments: group.comments.filter(comment => {
+          if (severity && comment.severity.toLowerCase() !== severity) {
+            return false;
+          }
+          if (tool && comment.tool !== tool) {
+            return false;
+          }
+          if (category && comment.category !== category) {
+            return false;
+          }
+          if (status === 'open' && comment.dismissed) {
+            return false;
+          }
+          if (status === 'dismissed' && !comment.dismissed) {
+            return false;
+          }
+          if (status === 'validated' && comment.validations.length === 0) {
+            return false;
+          }
+          return !(
+            query &&
+            !comment.body.toLowerCase().includes(query) &&
+            !comment.file_path.toLowerCase().includes(query) &&
+            !(comment.rule_id ?? '').toLowerCase().includes(query)
+          );
+        })
+      }))
+      .filter(group => group.comments.length > 0);
+  });
+
+  readonly filteredCount = computed(() =>
+    this.filteredFileGroups().reduce((total, group) => total + group.comments.length, 0)
+  );
+
+  // --- Per-file collapse (plan §4.3: collapsible groups) ---------------------
+
+  isFileCollapsed(file: string): boolean {
+    return this.collapsedFiles().has(file);
+  }
+
+  toggleFileGroup(file: string): void {
+    this.collapsedFiles.update(current => {
+      const next = new Set(current);
+      if (next.has(file)) {
+        next.delete(file);
+      } else {
+        next.add(file);
+      }
+      return next;
+    });
+  }
+
+  collapseAllGroups(): void {
+    this.collapsedFiles.set(new Set(this.filteredFileGroups().map(group => group.file)));
+  }
+
+  expandAllGroups(): void {
+    this.collapsedFiles.set(new Set());
+  }
+
   /**
    * Whether the viewer may drive the staged flow: effective role >= DEVELOPER
    * (NONE is the only blocked role — it 403s on every write), the review is
@@ -390,6 +625,82 @@ export class ReviewPanelComponent implements OnInit {
   readonly dismissedCount = computed(
     () => (this.detail()?.comments ?? []).filter(comment => comment.dismissed).length
   );
+
+  // --- Overview tiles + status-bar copy (plan §4.3) --------------------------
+
+  /** Findings carrying at least one reviewer verdict (Overview tile). */
+  readonly validatedCount = computed(
+    () => (this.detail()?.comments ?? []).filter(comment => comment.validations.length > 0).length
+  );
+
+  /** Distinct files with findings (matches the Findings tab's groups). */
+  readonly fileCount = computed(() => this.fileGroups().length);
+
+  /**
+   * "Reviewed in 4m 12s" — `started_at` → `completed_at`, both on the wire.
+   * Null until the run finished (or if a timestamp is missing/invalid).
+   */
+  readonly durationLabel = computed(() => {
+    const detail = this.detail();
+    if (!detail?.started_at || !detail.completed_at || this.isRunning() || this.isFailed()) {
+      return null;
+    }
+    const ms = Date.parse(detail.completed_at) - Date.parse(detail.started_at);
+    if (!Number.isFinite(ms) || ms < 0) {
+      return null;
+    }
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      const rest = seconds % 60;
+      return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
+    }
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  });
+
+  /**
+   * One-line posting-mode explanation shown instead of staged controls in
+   * auto mode (plan §4.3). Describes the MODE — never claims an outcome.
+   */
+  readonly autoPostNote = computed(() => {
+    const detail = this.detail();
+    if (!detail || detail.posting_mode !== 'auto' || this.isPosted()) {
+      return null;
+    }
+    return 'Posting mode: automatic — reviews go to GitHub without an approval step.';
+  });
+
+  /** Dismissed count inside one file group (files-summary table). */
+  dismissedInGroup(group: ReviewFileGroup): number {
+    return group.comments.filter(comment => comment.dismissed).length;
+  }
+
+  /** The sticky bar only renders when it has something to say. */
+  readonly statusBarVisible = computed(() => {
+    if (this.state() !== 'detail') {
+      return false;
+    }
+    return Boolean(
+      this.canEdit() ||
+        this.isPosted() ||
+        this.runStatus() === 'ready_to_post' ||
+        this.autoPostNote() ||
+        this.durationLabel()
+    );
+  });
+
+  /** `by_severity` rows of the scan summary (Static-analysis tab). */
+  scanSeverityCounts(scan: ScanReport): { key: string; value: number }[] {
+    return Object.entries(scan.summary.by_severity ?? {}).map(([key, value]) => ({ key, value }));
+  }
+
+  /** `by_tool` rows of the scan summary (Static-analysis tab). */
+  scanToolCounts(scan: ScanReport): { key: string; value: number }[] {
+    return Object.entries(scan.summary.by_tool ?? {}).map(([key, value]) => ({ key, value }));
+  }
 
   // --- Scan-report enrichment (plan Step 3) ---------------------------------
 

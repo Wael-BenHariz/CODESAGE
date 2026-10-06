@@ -52,6 +52,7 @@ describe('DashboardComponent — real API data (plan Step 10)', () => {
     edited_summary: null,
     github_review_id: null,
     overall_severity: 'info',
+    started_at: '2026-02-01T09:59:00Z',
     created_at: '2026-02-01T10:00:00Z',
     completed_at: null,
     ...extra

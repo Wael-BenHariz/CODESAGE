@@ -27,6 +27,8 @@ export interface ReviewSummary {
   edited_summary: string | null;
   github_review_id: number | null;
   overall_severity: string | null;
+  /** Processing start (`ReviewResponse.started_at`) — duration source (Step 7). */
+  started_at: string;
   created_at: string;
   completed_at: string | null;
 }

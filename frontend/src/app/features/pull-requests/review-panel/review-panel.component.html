@@ -15,13 +15,48 @@
     }
   </div>
 
-  <!-- Staged banner: nothing reaches GitHub until posted (plan Step 8). -->
-  @if (canEdit()) {
-    <div class="staged-banner" data-testid="staged-banner">
-      <span>Staged — this review is not on GitHub yet.</span>
-      <button class="btn-small primary" data-testid="open-post" (click)="openPostDialog()">
-        Post to GitHub
-      </button>
+  <!-- Sticky status bar (plan §4.3): staged awaiting-approval + counts + post,
+       ready badge, posted time + GitHub link, auto-mode line, run duration. -->
+  @if (statusBarVisible()) {
+    <div class="status-bar" data-testid="status-bar">
+      @if (canEdit()) {
+        <div class="staged-banner" data-testid="staged-banner">
+          <span class="await-text">
+            Awaiting your approval —
+            <strong data-testid="staged-counts"
+              >{{ pendingFindings().length }}
+              {{ pendingFindings().length === 1 ? 'finding' : 'findings' }} to post ·
+              {{ dismissedCount() }} dismissed</strong
+            >
+          </span>
+          <button class="btn-small primary" data-testid="open-post" (click)="openPostDialog()">
+            Post to GitHub
+          </button>
+        </div>
+      }
+      @if (runStatus() === 'ready_to_post' && !isPosted()) {
+        <span class="status-badge ready" data-testid="review-ready-badge">Ready to post</span>
+      }
+      @if (isPosted()) {
+        <span class="posted-at" data-testid="review-posted-at">
+          {{ detail()?.posted_at | date: 'medium' }}
+        </span>
+        <a
+          class="gh-link"
+          data-testid="review-gh-link"
+          [href]="githubReviewUrl()"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          View on GitHub
+        </a>
+      }
+      @if (autoPostNote(); as note) {
+        <span class="auto-note" data-testid="auto-post-note">{{ note }}</span>
+      }
+      @if (durationLabel(); as duration) {
+        <span class="duration" data-testid="review-duration">Reviewed in {{ duration }}</span>
+      }
     </div>
   }
   @if (actionError() && !postDialogOpen()) {
@@ -63,6 +98,19 @@
       <div class="panel-state" data-testid="review-panel-running">
         <div class="spinner"></div>
         <span>Review {{ runStatus() }}…</span>
+        <!-- Plain pipeline bar (proposal #14): progress carries no step names. -->
+        <div
+          class="progress"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          [attr.aria-valuenow]="progress()"
+          [attr.aria-label]="'Review progress: ' + progress() + '%'"
+          data-testid="review-progress"
+        >
+          <div class="progress-fill" [style.width.%]="progress()"></div>
+        </div>
+        <span class="progress-label" data-testid="review-progress-label">{{ progress() }}%</span>
       </div>
     } @else if (isFailed()) {
       <div class="panel-state error" data-testid="review-panel-failed">
@@ -74,356 +122,619 @@
         }
       </div>
     } @else {
-      <div class="posted-row">
-        @if (runStatus() === 'ready_to_post') {
-          <span class="status-badge ready" data-testid="review-ready-badge">Ready to post</span>
-        }
-        @if (isPosted()) {
-          <span class="posted-at" data-testid="review-posted-at">
-            {{ detail()?.posted_at | date: 'medium' }}
-          </span>
-          <a
-            class="gh-link"
-            data-testid="review-gh-link"
-            [href]="githubReviewUrl()"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on GitHub
-          </a>
-        }
-      </div>
+      <app-tabs [tabs]="tabDefs" [active]="activeTab()" (activeChange)="setTab($event)"></app-tabs>
 
-      <!-- Static analysis header (plan Step 3): failures are stated up
-           front; a report that could not load only notes it — the review
-           comments below are the source of truth and stay untouched. -->
-      @if (scanReport(); as scan) {
-        @if (scan.tools_failed.length > 0) {
-          <div class="scan-notice" role="status" data-testid="scan-tools-failed">
-            <strong>Static analysis incomplete</strong>
-            <ul>
-              @for (failure of scan.tools_failed; track failure.tool) {
-                <li>{{ failure.tool }}: {{ failure.error }}</li>
-              }
-            </ul>
+      <div class="tab-panels">
+        <!-- ── Overview: stat tiles, tools-failed banner, summary ── -->
+        <div
+          class="tab-panel"
+          role="tabpanel"
+          id="panel-overview"
+          aria-labelledby="tab-overview"
+          [hidden]="activeTab() !== 'overview'"
+          data-testid="panel-overview"
+        >
+          <div class="ov-stats">
+            <div class="ov-tile">
+              <span class="ov-num" data-testid="ov-findings">{{ detail()?.comments_count }}</span>
+              <span class="ov-label">Findings</span>
+            </div>
+            <div class="ov-tile">
+              <span class="ov-num" data-testid="ov-dismissed">{{ dismissedCount() }}</span>
+              <span class="ov-label">Dismissed</span>
+            </div>
+            <div class="ov-tile">
+              <span class="ov-num" data-testid="ov-validated">{{ validatedCount() }}</span>
+              <span class="ov-label">Validated</span>
+            </div>
+            <div class="ov-tile">
+              <span class="ov-num" data-testid="ov-files">{{ fileCount() }}</span>
+              <span class="ov-label">Files with findings</span>
+            </div>
           </div>
-        }
-      } @else if (scanLoadFailed()) {
-        <p class="scan-unavailable" data-testid="scan-unavailable">
-          Static analysis report unavailable — review comments below are unaffected.
-        </p>
-      }
 
-      <div class="summary-block">
-        @if (!editingSummary()) {
-          @if (summaryText()) {
-            <p class="review-summary" data-testid="review-summary">{{ summaryText() }}</p>
+          <!-- Static analysis header (plan Step 3): failures are stated up
+               front; a report that could not load only notes it — the review
+               findings are the source of truth and stay untouched. -->
+          @if (scanReport(); as scan) {
+            @if (scan.tools_failed.length > 0) {
+              <div class="scan-notice" role="status" data-testid="scan-tools-failed">
+                <strong>Static analysis incomplete</strong>
+                <ul>
+                  @for (failure of scan.tools_failed; track failure.tool) {
+                    <li>{{ failure.tool }}: {{ failure.error }}</li>
+                  }
+                </ul>
+              </div>
+            }
+          } @else if (scanLoadFailed()) {
+            <p class="scan-unavailable" data-testid="scan-unavailable">
+              Static analysis report unavailable — the review findings are unaffected.
+            </p>
           }
-          @if (canEdit()) {
-            <button
-              class="btn-small summary-edit-btn"
-              data-testid="edit-summary"
-              (click)="startEditSummary()"
-            >
-              Edit summary
-            </button>
-          }
-        } @else {
-          <label class="summary-label" for="review-summary-editor">Summary</label>
-          <textarea
-            id="review-summary-editor"
-            class="summary-editor"
-            data-testid="summary-textarea"
-            rows="6"
-            [value]="summaryDraft()"
-            (input)="onSummaryInput($event)"
-            [attr.maxlength]="summaryMaxChars"
-            [disabled]="savingSummary()"
-          ></textarea>
-          <div class="summary-meta">
-            <span data-testid="summary-counter"
-              >{{ summaryDraft().length }} / {{ summaryMaxChars }}</span
-            >
-            @if (summaryDirty()) {
-              <span class="dirty" data-testid="summary-dirty">unsaved changes</span>
+
+          <div class="summary-block">
+            @if (!editingSummary()) {
+              @if (summaryText()) {
+                <p class="review-summary" data-testid="review-summary">{{ summaryText() }}</p>
+              }
+              @if (canEdit()) {
+                <button
+                  class="btn-small summary-edit-btn"
+                  data-testid="edit-summary"
+                  (click)="startEditSummary()"
+                >
+                  Edit summary
+                </button>
+              }
+            } @else {
+              <label class="summary-label" for="review-summary-editor">Summary</label>
+              <textarea
+                id="review-summary-editor"
+                class="summary-editor"
+                data-testid="summary-textarea"
+                rows="6"
+                [value]="summaryDraft()"
+                (input)="onSummaryInput($event)"
+                [attr.maxlength]="summaryMaxChars"
+                [disabled]="savingSummary()"
+              ></textarea>
+              <div class="summary-meta">
+                <span data-testid="summary-counter"
+                  >{{ summaryDraft().length }} / {{ summaryMaxChars }}</span
+                >
+                @if (summaryDirty()) {
+                  <span class="dirty" data-testid="summary-dirty">unsaved changes</span>
+                }
+              </div>
+              <div class="summary-actions">
+                <button
+                  class="btn-small primary"
+                  data-testid="save-summary"
+                  [disabled]="!summaryDirty() || savingSummary()"
+                  (click)="saveSummary()"
+                >
+                  {{ savingSummary() ? 'Saving…' : 'Save' }}
+                </button>
+                <button
+                  class="btn-small"
+                  data-testid="cancel-summary"
+                  [disabled]="savingSummary()"
+                  (click)="cancelEditSummary()"
+                >
+                  Cancel
+                </button>
+              </div>
             }
           </div>
-          <div class="summary-actions">
-            <button
-              class="btn-small primary"
-              data-testid="save-summary"
-              [disabled]="!summaryDirty() || savingSummary()"
-              (click)="saveSummary()"
-            >
-              {{ savingSummary() ? 'Saving…' : 'Save' }}
-            </button>
-            <button
-              class="btn-small"
-              data-testid="cancel-summary"
-              [disabled]="savingSummary()"
-              (click)="cancelEditSummary()"
-            >
-              Cancel
-            </button>
-          </div>
-        }
-      </div>
-
-      @if (fileGroups().length === 0) {
-        <div class="panel-empty" data-testid="review-panel-empty">
-          <p>No findings — this review came back clean.</p>
         </div>
-      } @else {
-        <div class="findings">
-          @for (group of fileGroups(); track group.file) {
-            <div class="file-group" data-testid="review-file-group">
-              <h4 class="file-path">{{ group.file }}</h4>
-              <ul class="comment-list">
-                @for (comment of group.comments; track comment.id) {
-                  <li
-                    class="comment"
-                    [class.dismissed]="comment.dismissed"
-                    [attr.data-severity]="comment.severity"
-                    data-testid="review-comment"
-                  >
-                    <div class="comment-badges">
-                      <span class="sev-badge" [ngClass]="'sev-' + comment.severity.toLowerCase()">
-                        {{ comment.severity }}
-                      </span>
-                      @if (comment.tool) {
-                        <span class="tool-badge" data-testid="comment-tool">{{
-                          comment.tool
-                        }}</span>
-                      }
-                      @if (comment.also_detected_by?.length) {
-                        <span class="tool-extra" data-testid="comment-also">
-                          also detected by {{ comment.also_detected_by?.join(', ') }}
-                        </span>
-                      }
-                      @if (comment.dismissed) {
-                        <span class="dismissed-tag" data-testid="comment-dismissed">dismissed</span>
-                      }
-                      @if (canEdit()) {
-                        <span class="comment-actions">
+
+        <!-- ── Findings: toolbar, files summary, grouped finding cards ── -->
+        <div
+          class="tab-panel"
+          role="tabpanel"
+          id="panel-findings"
+          aria-labelledby="tab-findings"
+          [hidden]="activeTab() !== 'findings'"
+          data-testid="panel-findings"
+        >
+          @if (fileGroups().length > 0) {
+            <div class="findings-toolbar" data-testid="findings-toolbar">
+              <label class="tb-field">
+                <span class="tb-label">Severity</span>
+                <select
+                  class="tb-select"
+                  data-testid="f-severity"
+                  [value]="fSeverity()"
+                  (change)="onFilterChange('severity', $event)"
+                >
+                  <option value="">All</option>
+                  @for (severity of severityOptions(); track severity) {
+                    <option [value]="severity">{{ severity }}</option>
+                  }
+                </select>
+              </label>
+              <label class="tb-field">
+                <span class="tb-label">Tool</span>
+                <select
+                  class="tb-select"
+                  data-testid="f-tool"
+                  [value]="fTool()"
+                  (change)="onFilterChange('tool', $event)"
+                >
+                  <option value="">All</option>
+                  @for (tool of toolOptions(); track tool) {
+                    <option [value]="tool">{{ tool }}</option>
+                  }
+                </select>
+              </label>
+              <label class="tb-field">
+                <span class="tb-label">Category</span>
+                <select
+                  class="tb-select"
+                  data-testid="f-category"
+                  [value]="fCategory()"
+                  (change)="onFilterChange('category', $event)"
+                >
+                  <option value="">All</option>
+                  @for (category of categoryOptions(); track category) {
+                    <option [value]="category">{{ category }}</option>
+                  }
+                </select>
+              </label>
+              <label class="tb-field">
+                <span class="tb-label">Status</span>
+                <select
+                  class="tb-select"
+                  data-testid="f-status"
+                  [value]="fStatus()"
+                  (change)="onFilterChange('status', $event)"
+                >
+                  <option value="">All</option>
+                  <option value="open">open</option>
+                  <option value="dismissed">dismissed</option>
+                  <option value="validated">validated</option>
+                </select>
+              </label>
+              <label class="tb-field tb-search">
+                <span class="tb-label">Search</span>
+                <input
+                  type="search"
+                  class="tb-input"
+                  data-testid="f-search"
+                  placeholder="Message, file or rule…"
+                  [value]="fSearch()"
+                  (input)="onFilterChange('search', $event)"
+                />
+              </label>
+              @if (findingsFilterActive()) {
+                <button
+                  class="btn-mini"
+                  data-testid="clear-findings-filters"
+                  (click)="clearFilters()"
+                >
+                  Clear filters
+                </button>
+              }
+            </div>
+
+            <div class="findings-meta">
+              <span class="findings-count" data-testid="findings-count">
+                {{ filteredCount() }} of {{ detail()?.comments_count }} findings
+              </span>
+              @if (filteredFileGroups().length > 1) {
+                <button class="btn-mini" data-testid="collapse-all" (click)="collapseAllGroups()">
+                  Collapse all
+                </button>
+                <button class="btn-mini" data-testid="expand-all" (click)="expandAllGroups()">
+                  Expand all
+                </button>
+              }
+            </div>
+          }
+
+          @if (fileGroups().length === 0) {
+            <div class="panel-empty" data-testid="review-panel-empty">
+              <p>No findings — this review came back clean.</p>
+            </div>
+          } @else if (filteredFileGroups().length === 0) {
+            <div class="panel-empty" data-testid="findings-filtered-empty">
+              <p>No findings match your filters.</p>
+              <button class="btn-small" data-testid="clear-filters-empty" (click)="clearFilters()">
+                Clear filters
+              </button>
+            </div>
+          } @else {
+            <!-- Files WITH findings — explicitly NOT the full changed-file
+                 list (the API returns none here; proposal #13 in
+                 docs/BACKEND_GAPS_FOR_UI.md). -->
+            <div class="files-summary" data-testid="files-summary">
+              <div class="files-summary-head">
+                <h4>Files with findings</h4>
+                <span class="files-summary-note">
+                  Only files that carry findings — not all changed files.
+                </span>
+              </div>
+              <table class="files-table">
+                <thead>
+                  <tr>
+                    <th scope="col">File</th>
+                    <th scope="col">Findings</th>
+                    <th scope="col">Top severity</th>
+                    <th scope="col">Dismissed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (group of filteredFileGroups(); track group.file) {
+                    <tr>
+                      <td class="files-table-path">{{ group.file }}</td>
+                      <td>{{ group.comments.length }}</td>
+                      <td>
+                        <span
+                          class="sev-badge"
+                          [ngClass]="'sev-' + group.comments[0].severity.toLowerCase()"
+                          >{{ group.comments[0].severity }}</span
+                        >
+                      </td>
+                      <td>{{ dismissedInGroup(group) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="findings">
+              @for (group of filteredFileGroups(); track group.file) {
+                <div class="file-group" data-testid="review-file-group">
+                  <div class="file-group-header">
+                    <button
+                      type="button"
+                      class="group-toggle"
+                      data-testid="file-group-toggle"
+                      [attr.aria-expanded]="!isFileCollapsed(group.file)"
+                      [attr.aria-label]="'Toggle findings for ' + group.file"
+                      (click)="toggleFileGroup(group.file)"
+                    >
+                      <span class="chevron" aria-hidden="true">{{
+                        isFileCollapsed(group.file) ? '▸' : '▾'
+                      }}</span>
+                    </button>
+                    <h4 class="file-path">{{ group.file }}</h4>
+                    <span class="file-count" data-testid="file-group-count">{{
+                      group.comments.length
+                    }}</span>
+                  </div>
+                  <ul class="comment-list" [hidden]="isFileCollapsed(group.file)">
+                    @for (comment of group.comments; track comment.id) {
+                      <li
+                        class="comment"
+                        [class.dismissed]="comment.dismissed"
+                        [attr.data-severity]="comment.severity"
+                        data-testid="review-comment"
+                      >
+                        <div class="comment-badges">
+                          <span
+                            class="sev-badge"
+                            [ngClass]="'sev-' + comment.severity.toLowerCase()"
+                          >
+                            {{ comment.severity }}
+                          </span>
+                          @if (comment.tool) {
+                            <span class="tool-badge" data-testid="comment-tool">{{
+                              comment.tool
+                            }}</span>
+                          }
+                          @if (comment.also_detected_by?.length) {
+                            <span class="tool-extra" data-testid="comment-also">
+                              also detected by {{ comment.also_detected_by?.join(', ') }}
+                            </span>
+                          }
                           @if (comment.dismissed) {
-                            <button
-                              class="btn-mini"
-                              data-testid="restore-finding"
-                              [disabled]="pendingCommentId() === comment.id"
-                              (click)="restoreFinding(comment)"
+                            <span class="dismissed-tag" data-testid="comment-dismissed"
+                              >dismissed</span
                             >
-                              {{ pendingCommentId() === comment.id ? 'Restoring…' : 'Restore' }}
-                            </button>
-                          } @else {
-                            <button
-                              class="btn-mini"
-                              data-testid="dismiss-finding"
-                              [disabled]="pendingCommentId() === comment.id"
-                              (click)="dismissFinding(comment)"
-                            >
-                              {{ pendingCommentId() === comment.id ? 'Dismissing…' : 'Dismiss' }}
-                            </button>
                           }
-                        </span>
-                      }
-                    </div>
-                    <!-- Interpolation escapes HTML — no innerHTML anywhere (Q3). -->
-                    <p class="comment-body">{{ comment.body }}</p>
-                    <div class="comment-loc">
-                      <span data-testid="comment-loc">{{ locationLabel(comment) }}</span>
-                      @if (comment.line_start !== null && comment.line_end !== null) {
-                        <span class="finding-range">
-                          finding lines {{ comment.line_start }}–{{ comment.line_end }}
-                        </span>
-                      }
-                      @if (comment.rule_id) {
-                        <span class="rule-id">{{ comment.rule_id }}</span>
-                      }
-                      @if (comment.cwe?.length) {
-                        <span class="cwe">{{ comment.cwe?.join(', ') }}</span>
-                      }
-                    </div>
-                    @if (comment.snippet) {
-                      <pre class="comment-snippet" data-testid="comment-snippet">{{
-                        comment.snippet
-                      }}</pre>
-                    }
-                    <!-- Scan-report enrichment (plan Step 3): OWASP tags and
-                         the source finding's fix suggestion, joined by
-                         source rule. Interpolation only — scanner text is
-                         untrusted like any other server output. -->
-                    @if (scanFindingFor(comment); as finding) {
-                      @if (finding.owasp.length > 0) {
-                        <div class="owasp-chips" data-testid="comment-owasp">
-                          @for (owasp of finding.owasp; track owasp) {
-                            <span class="owasp-chip">{{ owasp }}</span>
+                          @if (canEdit()) {
+                            <span class="comment-actions">
+                              @if (comment.dismissed) {
+                                <button
+                                  class="btn-mini"
+                                  data-testid="restore-finding"
+                                  [disabled]="pendingCommentId() === comment.id"
+                                  (click)="restoreFinding(comment)"
+                                >
+                                  {{ pendingCommentId() === comment.id ? 'Restoring…' : 'Restore' }}
+                                </button>
+                              } @else {
+                                <button
+                                  class="btn-mini"
+                                  data-testid="dismiss-finding"
+                                  [disabled]="pendingCommentId() === comment.id"
+                                  (click)="dismissFinding(comment)"
+                                >
+                                  {{
+                                    pendingCommentId() === comment.id ? 'Dismissing…' : 'Dismiss'
+                                  }}
+                                </button>
+                              }
+                            </span>
                           }
                         </div>
-                      }
-                      @if (finding.fix_suggestion) {
-                        <div class="fix-suggestion" data-testid="comment-fix">
-                          <span class="fix-label">Suggested fix</span>
-                          <p>{{ finding.fix_suggestion }}</p>
+                        <!-- Interpolation escapes HTML — no innerHTML anywhere (Q3). -->
+                        <p class="comment-body">{{ comment.body }}</p>
+                        <div class="comment-loc">
+                          <span data-testid="comment-loc">{{ locationLabel(comment) }}</span>
+                          @if (comment.line_start !== null && comment.line_end !== null) {
+                            <span class="finding-range">
+                              finding lines {{ comment.line_start }}–{{ comment.line_end }}
+                            </span>
+                          }
+                          @if (comment.rule_id) {
+                            <span class="rule-id">{{ comment.rule_id }}</span>
+                          }
+                          @if (comment.cwe?.length) {
+                            <span class="cwe">{{ comment.cwe?.join(', ') }}</span>
+                          }
                         </div>
-                      }
-                    }
-                    <!-- Reviewer verdicts (plan Step 10): visible to every
-                         viewer; the controls only render for role >= REVIEWER.
-                         Interpolation escapes notes — never innerHTML. -->
-                    @if (comment.validations.length > 0) {
-                      <ul class="verdict-list" data-testid="verdict-list">
-                        @for (validation of comment.validations; track validation.reviewer_login) {
-                          <li class="verdict" data-testid="verdict">
-                            <span
-                              class="verdict-badge"
-                              [ngClass]="'verdict-' + validation.verdict"
-                              data-testid="verdict-badge"
-                            >
-                              {{ verdictLabel(validation.verdict) }}
-                            </span>
-                            <span class="verdict-who" data-testid="verdict-who">
-                              {{ validation.reviewer_login }}
-                            </span>
-                            @if (validation.severity_override) {
-                              <span class="verdict-sev" data-testid="verdict-severity">
-                                as {{ validation.severity_override }}
-                              </span>
-                            }
-                            <span class="verdict-when">
-                              {{ validation.updated_at | date: 'medium' }}
-                            </span>
-                            @if (validation.note) {
-                              <p class="verdict-note" data-testid="verdict-note">
-                                {{ validation.note }}
-                              </p>
-                            }
-                          </li>
+                        @if (comment.snippet) {
+                          <pre class="comment-snippet" data-testid="comment-snippet">{{
+                            comment.snippet
+                          }}</pre>
                         }
-                      </ul>
+                        <!-- Scan-report enrichment (plan Step 3): OWASP tags and
+                             the source finding's fix suggestion, joined by
+                             source rule. Interpolation only — scanner text is
+                             untrusted like any other server output. -->
+                        @if (scanFindingFor(comment); as finding) {
+                          @if (finding.owasp.length > 0) {
+                            <div class="owasp-chips" data-testid="comment-owasp">
+                              @for (owasp of finding.owasp; track owasp) {
+                                <span class="owasp-chip">{{ owasp }}</span>
+                              }
+                            </div>
+                          }
+                          @if (finding.fix_suggestion) {
+                            <div class="fix-suggestion" data-testid="comment-fix">
+                              <span class="fix-label">Suggested fix</span>
+                              <p>{{ finding.fix_suggestion }}</p>
+                            </div>
+                          }
+                        }
+                        <!-- Reviewer verdicts (plan Step 10): visible to every
+                             viewer; the controls only render for role >= REVIEWER.
+                             Interpolation escapes notes — never innerHTML. -->
+                        @if (comment.validations.length > 0) {
+                          <ul class="verdict-list" data-testid="verdict-list">
+                            @for (
+                              validation of comment.validations;
+                              track validation.reviewer_login
+                            ) {
+                              <li class="verdict" data-testid="verdict">
+                                <span
+                                  class="verdict-badge"
+                                  [ngClass]="'verdict-' + validation.verdict"
+                                  data-testid="verdict-badge"
+                                >
+                                  {{ verdictLabel(validation.verdict) }}
+                                </span>
+                                <span class="verdict-who" data-testid="verdict-who">
+                                  {{ validation.reviewer_login }}
+                                </span>
+                                @if (validation.severity_override) {
+                                  <span class="verdict-sev" data-testid="verdict-severity">
+                                    as {{ validation.severity_override }}
+                                  </span>
+                                }
+                                <span class="verdict-when">
+                                  {{ validation.updated_at | date: 'medium' }}
+                                </span>
+                                @if (validation.note) {
+                                  <p class="verdict-note" data-testid="verdict-note">
+                                    {{ validation.note }}
+                                  </p>
+                                }
+                              </li>
+                            }
+                          </ul>
+                        }
+                        @if (canValidate()) {
+                          <div class="validation-controls" data-testid="validation-controls">
+                            <button
+                              class="btn-mini"
+                              data-testid="confirm-finding"
+                              [disabled]="validatingCommentId() === comment.id"
+                              (click)="submitValidation(comment, 'confirmed')"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              class="btn-mini"
+                              data-testid="fp-finding"
+                              [disabled]="validatingCommentId() === comment.id"
+                              (click)="submitValidation(comment, 'false_positive')"
+                            >
+                              False positive
+                            </button>
+                            <button
+                              class="btn-mini"
+                              data-testid="investigate-finding"
+                              [disabled]="validatingCommentId() === comment.id"
+                              (click)="submitValidation(comment, 'needs_investigation')"
+                            >
+                              Needs investigation
+                            </button>
+                            <select
+                              class="sev-select"
+                              data-testid="severity-override"
+                              [value]="validationSeverity(comment.id)"
+                              [disabled]="validatingCommentId() === comment.id"
+                              [attr.aria-label]="'Severity override for ' + locationLabel(comment)"
+                              (change)="onValidationSeverityChange(comment.id, $event)"
+                            >
+                              <option value="">severity: keep original</option>
+                              <option value="info">info</option>
+                              <option value="warning">warning</option>
+                              <option value="error">error</option>
+                              <option value="suggestion">suggestion</option>
+                            </select>
+                            <input
+                              class="note-input"
+                              type="text"
+                              data-testid="validation-note"
+                              placeholder="Note (optional)"
+                              [value]="validationNote(comment.id)"
+                              [disabled]="validatingCommentId() === comment.id"
+                              [attr.aria-label]="'Validation note for ' + locationLabel(comment)"
+                              (input)="onValidationNoteChange(comment.id, $event)"
+                            />
+                          </div>
+                        }
+                      </li>
                     }
-                    @if (canValidate()) {
-                      <div class="validation-controls" data-testid="validation-controls">
-                        <button
-                          class="btn-mini"
-                          data-testid="confirm-finding"
-                          [disabled]="validatingCommentId() === comment.id"
-                          (click)="submitValidation(comment, 'confirmed')"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          class="btn-mini"
-                          data-testid="fp-finding"
-                          [disabled]="validatingCommentId() === comment.id"
-                          (click)="submitValidation(comment, 'false_positive')"
-                        >
-                          False positive
-                        </button>
-                        <button
-                          class="btn-mini"
-                          data-testid="investigate-finding"
-                          [disabled]="validatingCommentId() === comment.id"
-                          (click)="submitValidation(comment, 'needs_investigation')"
-                        >
-                          Needs investigation
-                        </button>
-                        <select
-                          class="sev-select"
-                          data-testid="severity-override"
-                          [value]="validationSeverity(comment.id)"
-                          [disabled]="validatingCommentId() === comment.id"
-                          [attr.aria-label]="'Severity override for ' + locationLabel(comment)"
-                          (change)="onValidationSeverityChange(comment.id, $event)"
-                        >
-                          <option value="">severity: keep original</option>
-                          <option value="info">info</option>
-                          <option value="warning">warning</option>
-                          <option value="error">error</option>
-                          <option value="suggestion">suggestion</option>
-                        </select>
-                        <input
-                          class="note-input"
-                          type="text"
-                          data-testid="validation-note"
-                          placeholder="Note (optional)"
-                          [value]="validationNote(comment.id)"
-                          [disabled]="validatingCommentId() === comment.id"
-                          [attr.aria-label]="'Validation note for ' + locationLabel(comment)"
-                          (input)="onValidationNoteChange(comment.id, $event)"
-                        />
+                  </ul>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- ── Static analysis: per-tool status, counts, scan-only list ── -->
+        <div
+          class="tab-panel"
+          role="tabpanel"
+          id="panel-scan"
+          aria-labelledby="tab-scan"
+          [hidden]="activeTab() !== 'scan'"
+          data-testid="panel-scan"
+        >
+          @if (scanReport(); as scan) {
+            <div class="scan-tools" data-testid="scan-tools">
+              <div class="scan-tools-row">
+                <span class="scan-tools-label">Ran</span>
+                @for (tool of scan.tools_run; track tool) {
+                  <span class="tool-chip">{{ tool }}</span>
+                }
+              </div>
+              @if (scan.tools_failed.length > 0) {
+                <div class="scan-tools-row failed">
+                  <span class="scan-tools-label">Failed</span>
+                  @for (failure of scan.tools_failed; track failure.tool) {
+                    <span class="tool-chip failed">{{ failure.tool }} — {{ failure.error }}</span>
+                  }
+                </div>
+              }
+            </div>
+
+            @if (scan.summary.total || scanSeverityCounts(scan).length > 0) {
+              <div class="scan-counts" data-testid="scan-counts">
+                <p class="scan-counts-note">
+                  Static-analysis findings only — never summed with AI review comments.
+                </p>
+                @if (scan.summary.total !== undefined) {
+                  <p class="scan-total" data-testid="scan-total">{{ scan.summary.total }} total</p>
+                }
+                @if (scanSeverityCounts(scan).length > 0) {
+                  <div class="scan-counts-grid" aria-label="Findings by severity">
+                    @for (row of scanSeverityCounts(scan); track row.key) {
+                      <div class="count-cell">
+                        <span class="count-num">{{ row.value }}</span>
+                        <span class="count-key">{{ row.key }}</span>
                       </div>
                     }
+                  </div>
+                }
+                @if (scanToolCounts(scan).length > 0) {
+                  <div class="scan-counts-grid" aria-label="Findings by tool">
+                    @for (row of scanToolCounts(scan); track row.key) {
+                      <div class="count-cell">
+                        <span class="count-num">{{ row.value }}</span>
+                        <span class="count-key">{{ row.key }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          } @else if (scanLoadFailed()) {
+            <p class="scan-unavailable" data-testid="scan-unavailable-detail">
+              Static analysis report unavailable — the review findings are unaffected.
+            </p>
+          } @else if (scanResolved()) {
+            <p class="scan-none" data-testid="scan-none">
+              No static-analysis report for this review.
+            </p>
+          } @else {
+            <div class="panel-state" data-testid="scan-loading">
+              <div class="spinner"></div>
+              <span>Loading static analysis…</span>
+            </div>
+          }
+
+          <!-- Static findings no comment covers (plan Step 3): a separate list —
+               never merged into the review findings, never counted in the
+               Overview tiles (different source, per the Q1 decision). -->
+          @if (visibleUncovered().length > 0) {
+            <div class="scan-only" data-testid="scan-only-findings">
+              <h4 class="scan-only-title">
+                Static findings not in review comments
+                <span class="scan-only-count" data-testid="scan-only-count">
+                  {{ uncoveredFindings().length }}
+                </span>
+              </h4>
+              <ul class="scan-only-list">
+                @for (finding of visibleUncovered(); track finding.id) {
+                  <li class="scan-finding" data-testid="scan-finding">
+                    <div class="scan-finding-badges">
+                      <span class="scan-sev" [ngClass]="'scan-sev-' + finding.severity">
+                        {{ finding.severity }}
+                      </span>
+                      <span class="tool-badge">{{ finding.tool }}</span>
+                      @if (finding.category) {
+                        <span class="scan-category">{{ finding.category }}</span>
+                      }
+                    </div>
+                    @if (finding.title && finding.title !== finding.message) {
+                      <p class="scan-finding-title">{{ finding.title }}</p>
+                    }
+                    <p class="scan-finding-msg">{{ finding.message }}</p>
+                    <div class="scan-finding-meta">
+                      <span data-testid="scan-finding-loc">
+                        {{ finding.file_path
+                        }}{{ finding.line_start !== null ? ':' + finding.line_start : '' }}
+                      </span>
+                      @if (finding.rule_id) {
+                        <span class="rule-id">{{ finding.rule_id }}</span>
+                      }
+                      @if (finding.cwe.length > 0) {
+                        <span class="cwe">{{ finding.cwe.join(', ') }}</span>
+                      }
+                    </div>
+                    @if (finding.owasp.length > 0) {
+                      <div class="owasp-chips">
+                        @for (owasp of finding.owasp; track owasp) {
+                          <span class="owasp-chip">{{ owasp }}</span>
+                        }
+                      </div>
+                    }
+                    @if (finding.fix_suggestion) {
+                      <div class="fix-suggestion" data-testid="scan-fix">
+                        <span class="fix-label">Suggested fix</span>
+                        <p>{{ finding.fix_suggestion }}</p>
+                      </div>
+                    }
+                  </li>
+                }
+                @if (uncoveredFindings().length > visibleUncovered().length) {
+                  <li class="scan-more" data-testid="scan-more">
+                    …and {{ uncoveredFindings().length - visibleUncovered().length }} more static
+                    findings not shown.
                   </li>
                 }
               </ul>
             </div>
           }
         </div>
-      }
-
-      <!-- Static findings no comment covers (plan Step 3): a separate list —
-           never merged into the review comments, never counted in the stats
-           tiles (different source, per the Q1 decision). -->
-      @if (visibleUncovered().length > 0) {
-        <div class="scan-only" data-testid="scan-only-findings">
-          <h4 class="scan-only-title">
-            Static findings not in review comments
-            <span class="scan-only-count" data-testid="scan-only-count">
-              {{ uncoveredFindings().length }}
-            </span>
-          </h4>
-          <ul class="scan-only-list">
-            @for (finding of visibleUncovered(); track finding.id) {
-              <li class="scan-finding" data-testid="scan-finding">
-                <div class="scan-finding-badges">
-                  <span class="scan-sev" [ngClass]="'scan-sev-' + finding.severity">
-                    {{ finding.severity }}
-                  </span>
-                  <span class="tool-badge">{{ finding.tool }}</span>
-                  @if (finding.category) {
-                    <span class="scan-category">{{ finding.category }}</span>
-                  }
-                </div>
-                @if (finding.title && finding.title !== finding.message) {
-                  <p class="scan-finding-title">{{ finding.title }}</p>
-                }
-                <p class="scan-finding-msg">{{ finding.message }}</p>
-                <div class="scan-finding-meta">
-                  <span data-testid="scan-finding-loc">
-                    {{ finding.file_path
-                    }}{{ finding.line_start !== null ? ':' + finding.line_start : '' }}
-                  </span>
-                  @if (finding.rule_id) {
-                    <span class="rule-id">{{ finding.rule_id }}</span>
-                  }
-                  @if (finding.cwe.length > 0) {
-                    <span class="cwe">{{ finding.cwe.join(', ') }}</span>
-                  }
-                </div>
-                @if (finding.owasp.length > 0) {
-                  <div class="owasp-chips">
-                    @for (owasp of finding.owasp; track owasp) {
-                      <span class="owasp-chip">{{ owasp }}</span>
-                    }
-                  </div>
-                }
-                @if (finding.fix_suggestion) {
-                  <div class="fix-suggestion" data-testid="scan-fix">
-                    <span class="fix-label">Suggested fix</span>
-                    <p>{{ finding.fix_suggestion }}</p>
-                  </div>
-                }
-              </li>
-            }
-            @if (uncoveredFindings().length > visibleUncovered().length) {
-              <li class="scan-more" data-testid="scan-more">
-                …and {{ uncoveredFindings().length - visibleUncovered().length }} more static
-                findings not shown.
-              </li>
-            }
-          </ul>
-        </div>
-      }
+      </div>
     }
   }
   <!-- Post confirmation: exactly what will go to GitHub (plan Step 8). -->

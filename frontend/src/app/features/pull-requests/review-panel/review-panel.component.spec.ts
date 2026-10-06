@@ -1,4 +1,4 @@
-import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { TestBed, ComponentFixture, fakeAsync, tick } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 
@@ -38,6 +38,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     edited_summary: null,
     github_review_id: null,
     overall_severity: 'warning',
+    started_at: '2026-01-01T00:04:00Z', // wire field (ReviewResponse.started_at)
     created_at: '2026-01-01T00:00:00Z',
     completed_at: '2026-01-01T00:05:00Z',
     ...over
@@ -118,6 +119,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', [
       'getReviewDetail',
       'getScanReport',
+      'getReviewStatus', // Step 7: polled while a run is in flight
       'postReview',
       'updateReviewSummary',
       'dismissReviewComment',
@@ -126,6 +128,7 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
     ]);
     pullRequests.getPullRequestReviews.and.returnValue(of([]));
     reviewApi.getReviewDetail.and.returnValue(of(detail()));
+    reviewApi.getReviewStatus.and.returnValue(of({ status: 'completed', progress: 100 }));
     // Default: a report with no findings → no visible enrichment, so the
     // pre-Step-3 state tests stay byte-identical.
     reviewApi.getScanReport.and.returnValue(of(scanReport()));
@@ -1181,6 +1184,276 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
         findings
       );
       expect(rest.map(f => f.id)).toEqual(['f-other']);
+    });
+  });
+
+  // --- Step 7: walkthrough (plan §4.3) ----------------------------------------
+
+  describe('Step 7: walkthrough — tabs, filters, status bar, progress', () => {
+    const errComment = (): ReviewComment =>
+      comment({
+        id: 'c-err',
+        severity: 'error',
+        body: 'SQL injection risk',
+        file_path: 'src/a.py',
+        line_number: 5,
+        tool: 'semgrep',
+        rule_id: 'python.lang.security.audit.sqli',
+        category: 'security'
+      });
+
+    const infoComment = (): ReviewComment =>
+      comment({
+        id: 'c-info',
+        severity: 'info',
+        body: 'Rename for clarity',
+        file_path: 'src/b.py',
+        line_number: 9
+      });
+
+    const validatedComment = (): ReviewComment =>
+      comment({
+        id: 'c-val',
+        file_path: 'src/c.py',
+        validations: [
+          {
+            verdict: 'confirmed',
+            severity_override: null,
+            note: null,
+            reviewer_login: 'octocat',
+            created_at: '2026-01-01T00:06:00Z',
+            updated_at: '2026-01-01T00:06:00Z'
+          }
+        ]
+      });
+
+    function createDetail(comments: ReviewComment[], over: Partial<ReviewDetail> = {}): void {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+      reviewApi.getReviewDetail.and.returnValue(
+        of(detail({ status: 'completed', ...over }, comments))
+      );
+      create();
+    }
+
+    function showTab(id: string): void {
+      (testid(`tab-${id}`) as HTMLButtonElement).click();
+      fixture.detectChanges();
+    }
+
+    it('renders three tabs — Overview active, inactive panels hidden but in the DOM', () => {
+      createDetail([errComment(), infoComment()]);
+
+      expect(testid('tab-overview')?.getAttribute('aria-selected')).toBe('true');
+      expect(testid('tab-findings')).not.toBeNull();
+      expect(testid('tab-scan')).not.toBeNull();
+      expect(testid('panel-overview')?.hasAttribute('hidden')).toBeFalse();
+      expect(testid('panel-findings')?.hasAttribute('hidden')).toBeTrue();
+      expect(testid('panel-scan')?.hasAttribute('hidden')).toBeTrue();
+    });
+
+    it('activates a panel on click and keeps inactive content in the DOM', () => {
+      createDetail([errComment()]);
+      showTab('findings');
+
+      expect(testid('tab-findings')?.getAttribute('aria-selected')).toBe('true');
+      expect(testid('panel-overview')?.hasAttribute('hidden')).toBeTrue();
+      expect(testid('panel-findings')?.hasAttribute('hidden')).toBeFalse();
+      // Hidden ≠ destroyed: the summary stays queryable (DOM-contract tests).
+      expect(testid('review-summary')).not.toBeNull();
+    });
+
+    it('derives the Overview tiles from the loaded comments only', () => {
+      createDetail([errComment(), infoComment(), validatedComment()]);
+
+      expect(testid('ov-findings')?.textContent?.trim()).toBe('3');
+      expect(testid('ov-dismissed')?.textContent?.trim()).toBe('0');
+      expect(testid('ov-validated')?.textContent?.trim()).toBe('1');
+      expect(testid('ov-files')?.textContent?.trim()).toBe('3');
+    });
+
+    it('filters by severity, then clears back to the full list', () => {
+      createDetail([errComment(), infoComment()]);
+
+      const select = testid('f-severity') as HTMLSelectElement;
+      select.value = 'error';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(testid('findings-count')?.textContent).toContain('1 of 2');
+      const groups = el().querySelectorAll('[data-testid="review-file-group"]');
+      expect(groups.length).toBe(1);
+      expect(groups[0].querySelector('.file-path')?.textContent).toContain('src/a.py');
+
+      (testid('clear-findings-filters') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(testid('clear-findings-filters')).toBeNull();
+      expect(el().querySelectorAll('[data-testid="review-file-group"]').length).toBe(2);
+    });
+
+    it('searches message/file/rule and shows the filtered-empty state on no match', () => {
+      createDetail([errComment(), infoComment()]);
+      const input = testid('f-search') as HTMLInputElement;
+
+      input.value = 'sql';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(testid('findings-count')?.textContent).toContain('1 of 2');
+      expect(testid('findings-filtered-empty')).toBeNull();
+
+      input.value = 'zzz-no-match';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(testid('findings-filtered-empty')).not.toBeNull();
+
+      (testid('clear-filters-empty') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(testid('findings-filtered-empty')).toBeNull();
+      expect(testid('clear-findings-filters')).toBeNull();
+    });
+
+    it('collapses one group with an aria-expanded toggle', () => {
+      createDetail([errComment()]);
+      const toggle = testid('file-group-toggle') as HTMLButtonElement;
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+      toggle.click();
+      fixture.detectChanges();
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(el().querySelector('.comment-list')?.hasAttribute('hidden')).toBeTrue();
+
+      toggle.click();
+      fixture.detectChanges();
+      expect(el().querySelector('.comment-list')?.hasAttribute('hidden')).toBeFalse();
+    });
+
+    it('collapse all / expand all drive every visible group', () => {
+      createDetail([errComment(), infoComment()]);
+
+      (testid('collapse-all') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el().querySelectorAll('.comment-list[hidden]').length).toBe(2);
+
+      (testid('expand-all') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(el().querySelectorAll('.comment-list[hidden]').length).toBe(0);
+    });
+
+    it('lists files with findings in a table and never claims all changed files', () => {
+      createDetail([errComment(), infoComment()]);
+
+      const rows = el().querySelectorAll('.files-table tbody tr');
+      expect(rows.length).toBe(2);
+      expect(rows[0].textContent).toContain('src/a.py');
+      expect(testid('files-summary')?.textContent).toContain('not all changed files');
+    });
+
+    it('staged: the status bar carries exact pending/dismissed counts (§4.3 copy)', () => {
+      pullRequests.getPullRequestReviews.and.returnValue(
+        of([summary({ status: 'ready_to_post', posting_mode: 'staged' })])
+      );
+      reviewApi.getReviewDetail.and.returnValue(
+        of(
+          detail({ status: 'ready_to_post', posting_mode: 'staged' }, [
+            errComment(),
+            comment({ id: 'c-d', file_path: 'src/d.py', dismissed: true })
+          ])
+        )
+      );
+      create();
+
+      const counts = testid('staged-counts')?.textContent?.replace(/\s+/g, ' ') ?? '';
+      expect(counts).toContain('1 finding to post');
+      expect(counts).toContain('1 dismissed');
+      expect(testid('auto-post-note')).toBeNull();
+    });
+
+    it('auto mode: one-line mode explanation instead of staged controls', () => {
+      createDetail([errComment()]); // summary() default posting_mode is 'auto'
+
+      expect(testid('auto-post-note')?.textContent).toContain('Posting mode: automatic');
+      expect(testid('staged-banner')).toBeNull();
+      expect(testid('open-post')).toBeNull();
+    });
+
+    it('shows the run duration from started_at to completed_at', () => {
+      createDetail([errComment()], {
+        started_at: '2026-01-01T00:00:00Z',
+        completed_at: '2026-01-01T00:04:30Z'
+      });
+
+      expect(testid('review-duration')?.textContent).toContain('Reviewed in 4m 30s');
+    });
+
+    it('polls the status endpoint and fills the plain progress bar (proposal #14)', fakeAsync(() => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'processing' })]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'processing' })));
+      reviewApi.getReviewStatus.and.returnValue(of({ status: 'processing', progress: 42 }));
+      create();
+
+      tick(1000); // first poll — the 1 s delay keeps the initial render deterministic
+      fixture.detectChanges();
+      expect(reviewApi.getReviewStatus).toHaveBeenCalledWith('rev-1');
+      expect(testid('review-progress')?.getAttribute('aria-valuenow')).toBe('42');
+      expect(testid('review-progress-label')?.textContent).toContain('42%');
+
+      // Terminal status stops the loop and refetches the full review.
+      reviewApi.getReviewStatus.and.returnValue(of({ status: 'completed', progress: 100 }));
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'completed' })]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'completed' })));
+      tick(2500);
+      fixture.detectChanges();
+
+      expect(testid('review-panel-running')).toBeNull();
+      expect(testid('review-summary')).not.toBeNull();
+      expect(reviewApi.getReviewDetail).toHaveBeenCalledTimes(2);
+      fixture.destroy(); // tear the loop down inside the fake zone
+    }));
+
+    it('stops polling on destroy — no stray subscriptions', fakeAsync(() => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary({ status: 'processing' })]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({ status: 'processing' })));
+      create();
+      fixture.detectChanges();
+
+      fixture.destroy();
+      const calls = reviewApi.getReviewStatus.calls.count();
+      tick(10_000);
+      expect(reviewApi.getReviewStatus.calls.count()).toBe(calls);
+    }));
+
+    it('Static analysis tab: per-tool rows, severity counts and the scan-only list', () => {
+      pullRequests.getPullRequestReviews.and.returnValue(of([summary()]));
+      reviewApi.getReviewDetail.and.returnValue(of(detail({}, [])));
+      reviewApi.getScanReport.and.returnValue(
+        of(
+          scanReport({
+            summary: { total: 2, by_severity: { low: 1, info: 1 }, by_tool: { semgrep: 2 } },
+            findings: [scanFinding()]
+          })
+        )
+      );
+      create();
+      showTab('scan');
+
+      expect(testid('scan-tools')?.textContent).toContain('sonarqube');
+      expect(testid('scan-total')?.textContent).toContain('2');
+      const counts = testid('scan-counts')?.textContent ?? '';
+      expect(counts).toContain('low');
+      expect(counts).toContain('semgrep');
+      expect(testid('scan-only-findings')).not.toBeNull(); // uncovered finding lives here
+    });
+
+    it('Static analysis tab: absence (404) reads as an empty state, not an error', () => {
+      reviewApi.getScanReport.and.returnValue(
+        throwError(() => new ApiError('Not found', 404, 'none'))
+      );
+      createDetail([errComment()]);
+
+      showTab('scan');
+      expect(testid('scan-none')).not.toBeNull();
+      expect(testid('scan-unavailable')).toBeNull();
+      expect(testid('scan-unavailable-detail')).toBeNull();
+      expect(testid('scan-tools-failed')).toBeNull();
     });
   });
 });
