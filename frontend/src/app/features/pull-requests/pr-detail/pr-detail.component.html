@@ -1,9 +1,7 @@
 <div class="pr-detail-page">
-  <app-site-header />
   @if (isLoading()) {
     <div class="loading">
-      <div class="spinner"></div>
-      <span>Loading pull request...</span>
+      <app-spinner size="lg" label="Loading pull request..." testid="pr-loading" />
     </div>
   } @else {
     <ng-container *ngIf="pullRequest() as pr">
@@ -13,16 +11,23 @@
             ← Pull Requests
           </a>
           <div class="pr-title-row">
-            <span class="state-badge" [class]="pr.state">
-              {{ pr.state === 'open' ? '●' : pr.state === 'closed' ? '✕' : '◉' }}
-              {{ pr.state }}
-            </span>
+            <!-- Written state name — the chip is never color-only. -->
+            <span class="state-chip" [ngClass]="'state-' + pr.state">{{ pr.state }}</span>
             <h1>{{ pr.title }}</h1>
           </div>
           <div class="pr-meta">
             <span class="pr-number">#{{ pr.number }}</span>
             <span class="pr-branches">{{ pr.baseBranch }} ← {{ pr.headBranch }}</span>
             <span class="pr-author">by {{ pr.author.login }}</span>
+            <a
+              class="pr-gh-link"
+              data-testid="pr-gh-link"
+              [href]="githubPrUrl(pr)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on GitHub
+            </a>
           </div>
         </div>
         <div class="header-actions">
@@ -41,6 +46,17 @@
             <span class="review-status" [class]="pr.reviewStatus.status">
               {{ pr.reviewStatus.status }}
             </span>
+            @if (pr.reviewStatus.status === 'failed' && nav().write) {
+              <!-- Failed runs are retryable (plan §4.3) — behind a confirm
+                   so a stray click never re-queues an expensive run. -->
+              <button
+                class="btn btn-retry"
+                data-testid="retry-review"
+                (click)="retryDialogOpen.set(true)"
+              >
+                Retry review
+              </button>
+            }
           }
         </div>
       </header>
@@ -126,15 +142,32 @@
           <p>Each file with changes will be shown with syntax highlighting.</p>
         </div>
       </div>
+
+      @if (retryDialogOpen()) {
+        <app-confirm-dialog
+          title="Retry this review?"
+          message="A new AI review run starts for pull request #{{
+            pr.number
+          }}. The failed run stays in history."
+          confirmLabel="Start review"
+          cancelLabel="Cancel"
+          testid="retry-dialog"
+          (confirmed)="confirmRetry()"
+          (cancelled)="retryDialogOpen.set(false)"
+        />
+      }
     </ng-container>
 
     @if (loadError()) {
       <!-- Load failure (e.g. 404 after an org-scope miss): an explicit
-               error state instead of a blank page (F3 pre-check b). -->
-      <div class="error-state" data-testid="pr-load-error">
-        <p>Couldn't load this pull request — it may not exist or you may not have access.</p>
-        <button class="btn" (click)="loadPullRequest()">Try again</button>
-      </div>
+               error state instead of a blank page (F3 pre-check b). The 404
+               copy never says "no access" as a verdict — only "may not". -->
+      <app-error-state
+        testid="pr-load-error"
+        message="Couldn't load this pull request — it may not exist or you may not have access."
+        retryLabel="Try again"
+        (retry)="loadPullRequest()"
+      />
     }
   }
 </div>

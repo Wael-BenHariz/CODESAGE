@@ -1,13 +1,16 @@
 <div class="repo-detail-page">
-  <app-site-header />
   @if (isLoading()) {
-    <div class="loading" data-testid="repo-loading">Loading repository...</div>
+    <div class="state-slot" data-testid="repo-loading">
+      <app-spinner label="Loading repository..." />
+    </div>
   } @else if (loadError()) {
     <!-- Load failure: explicit error state instead of a blank content area. -->
-    <div class="error-state" data-testid="repo-load-error">
-      <p>Couldn't load this repository — check the repository or your access.</p>
-      <button class="btn" (click)="loadRepository()">Try again</button>
-    </div>
+    <app-error-state
+      [testid]="'repo-load-error'"
+      message="Couldn't load this repository — check the repository or your access."
+      retryLabel="Try again"
+      (retry)="loadRepository()"
+    />
   } @else {
     @if (repository(); as repo) {
       <header class="page-header">
@@ -15,57 +18,148 @@
           <a routerLink="/repositories" class="back-link">← Repositories</a>
           <h1>{{ repo.fullName }}</h1>
         </div>
-        <div class="header-actions">
-          @if (nav().write) {
-            <button
-              class="toggle-btn"
-              [class.enabled]="repo.enabled"
-              [disabled]="toggling()"
-              (click)="toggleEnabled()"
-            >
-              {{ toggling() ? 'Saving...' : repo.enabled ? 'Disable Reviews' : 'Enable Reviews' }}
-            </button>
-          }
-        </div>
+        <span class="status-badge" [class.enabled]="repo.enabled">
+          {{ repo.enabled ? 'Enabled' : 'Disabled' }}
+        </span>
       </header>
 
       <div class="repo-info-card">
         <p class="description">{{ repo.description || 'No description available' }}</p>
         <div class="meta-grid">
           <div class="meta-item">
+            <span class="label">Pull requests</span>
+            <span class="value">{{ repo.totalPrs }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Completed reviews</span>
+            <span class="value">{{ repo.totalReviews }}</span>
+          </div>
+          <div class="meta-item">
             <span class="label">Language</span>
             <span class="value">{{ repo.language || 'N/A' }}</span>
           </div>
           <div class="meta-item">
-            <span class="label">Default Branch</span>
+            <span class="label">Default branch</span>
             <span class="value">{{ repo.defaultBranch }}</span>
           </div>
           <div class="meta-item">
-            <span class="label">Stars</span>
-            <span class="value">{{ repo.stars }}</span>
+            <span class="label">Visibility</span>
+            <span class="value">{{ repo.private ? 'Private' : 'Public' }}</span>
           </div>
           <div class="meta-item">
-            <span class="label">Forks</span>
-            <span class="value">{{ repo.forks }}</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">Open Issues</span>
-            <span class="value">{{ repo.openIssues }}</span>
+            <span class="label">Webhook</span>
+            <span class="value">{{ repo.webhookEnabled ? 'Connected' : 'Not connected' }}</span>
           </div>
           <div class="meta-item">
             <span class="label">Status</span>
-            <span class="value" [class.enabled]="repo.enabled">
-              {{ repo.enabled ? 'Enabled' : 'Disabled' }}
-            </span>
+            <span class="value">{{ repo.enabled ? 'Enabled' : 'Disabled' }}</span>
           </div>
         </div>
       </div>
 
-      <div class="actions-section">
-        <h2>Actions</h2>
-        <div class="action-buttons">
-          <a [routerLink]="['pulls']" class="action-btn primary"> View Pull Requests </a>
-        </div>
+      <app-tabs [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
+
+      <div class="tab-panels">
+        @if (activeTab() === 'prs') {
+          <section
+            role="tabpanel"
+            id="panel-prs"
+            aria-labelledby="tab-prs"
+            tabindex="0"
+            class="tabpanel"
+            data-testid="panel-prs"
+          >
+            <app-pr-list [embedded]="true" [owner]="owner()" [repo]="repo.name" />
+          </section>
+        } @else {
+          <section
+            role="tabpanel"
+            id="panel-settings"
+            aria-labelledby="tab-settings"
+            tabindex="0"
+            class="tabpanel"
+            data-testid="panel-settings"
+          >
+            <h2 class="settings-heading">Reviews</h2>
+            <div class="setting-row">
+              <div class="setting-copy">
+                <span class="setting-label">Automatic pull request reviews</span>
+                <span class="setting-hint">
+                  CodeSage reviews new pull requests on this repository while it is enabled.
+                </span>
+              </div>
+              @if (nav().write) {
+                <button
+                  class="toggle-btn"
+                  [class.enabled]="repo.enabled"
+                  [disabled]="toggling()"
+                  (click)="toggleEnabled()"
+                >
+                  {{
+                    toggling() ? 'Saving...' : repo.enabled ? 'Disable Reviews' : 'Enable Reviews'
+                  }}
+                </button>
+              }
+            </div>
+
+            <h2 class="settings-heading">Default branch</h2>
+            <div class="setting-row branch-row">
+              <label class="setting-label" for="default-branch">Branch name</label>
+              <div class="branch-form">
+                <input
+                  id="default-branch"
+                  class="branch-input"
+                  type="text"
+                  [value]="branchDraft()"
+                  (input)="onBranchInput($event)"
+                  (keyup.enter)="saveBranch()"
+                  [disabled]="branchSaving()"
+                  autocomplete="off"
+                  data-testid="branch-input"
+                />
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  [disabled]="!canSaveBranch()"
+                  (click)="saveBranch()"
+                  data-testid="branch-save"
+                >
+                  {{ branchSaving() ? 'Saving…' : 'Save branch' }}
+                </button>
+              </div>
+              @if (branchSaved()) {
+                <p class="save-ok" role="status">Default branch saved.</p>
+              }
+              @if (branchError(); as err) {
+                <p class="save-err" role="alert">{{ err }}</p>
+              }
+            </div>
+
+            <h2 class="settings-heading">Repository settings</h2>
+            <dl class="settings-readonly">
+              <div class="setting-line">
+                <dt>Auto review</dt>
+                <dd>{{ repo.settings.autoReview ? 'On' : 'Off' }}</dd>
+              </div>
+              <div class="setting-line">
+                <dt>Review on push</dt>
+                <dd>{{ repo.settings.reviewOnPush ? 'On' : 'Off' }}</dd>
+              </div>
+              <div class="setting-line">
+                <dt>Notify on failure</dt>
+                <dd>{{ repo.settings.notifyOnFailure ? 'On' : 'Off' }}</dd>
+              </div>
+              <div class="setting-line">
+                <dt>Max files per review</dt>
+                <dd>{{ repo.settings.maxFilesPerReview }}</dd>
+              </div>
+            </dl>
+            <p class="settings-note">
+              Read-only — these always show the platform defaults. Per-repository configuration
+              isn't supported by the API yet.
+            </p>
+          </section>
+        }
       </div>
     }
   }

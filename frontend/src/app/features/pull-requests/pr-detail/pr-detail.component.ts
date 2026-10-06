@@ -20,7 +20,9 @@ import { navVisibility } from '../../../core/guards/role.guard';
 import { PullRequest } from '../../../core/models/pull-request.model';
 import { ReviewStats, deriveReviewStats } from '../../../core/services/mappers/pull-request.mapper';
 import { ReviewPanelComponent } from '../review-panel/review-panel.component';
-import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
+import { SpinnerComponent } from '../../../shared/components/spinner/spinner.component';
+import { ErrorStateComponent } from '../../../shared/components/error-state/error-state.component';
+import { ConfirmDialogComponent } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 
 /**
  * Stats-bar state for the two review tiles (plan Step 2, Q1/Option 1):
@@ -39,7 +41,14 @@ export type ReviewStatsState =
 @Component({
   selector: 'app-pr-detail',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, RouterLink, ReviewPanelComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    ReviewPanelComponent,
+    SpinnerComponent,
+    ErrorStateComponent,
+    ConfirmDialogComponent
+  ],
   templateUrl: './pr-detail.component.html',
   styleUrl: './pr-detail.component.scss'
 })
@@ -62,6 +71,8 @@ export class PrDetailComponent implements OnInit {
   /** True when the load failed (404/5xx/network) — renders the error state. */
   loadError = signal(false);
   isReviewing = signal(false);
+  /** Failed run → confirm before starting a new one (plan §4.3). */
+  readonly retryDialogOpen = signal(false);
 
   /** Stats-bar state (see ReviewStatsState). */
   readonly reviewStats = signal<ReviewStatsState>({ kind: 'hidden' });
@@ -176,16 +187,14 @@ export class PrDetailComponent implements OnInit {
     }
   }
 
-  getStateColor(state: string): string {
-    switch (state) {
-      case 'open':
-        return '#2f855a';
-      case 'closed':
-        return '#c53030';
-      case 'merged':
-        return '#805ad5';
-      default:
-        return '#718096';
-    }
+  /** Confirm handler for the retry dialog — a retry starts a NEW run. */
+  confirmRetry(): void {
+    this.retryDialogOpen.set(false);
+    this.triggerReview();
+  }
+
+  /** GitHub's own view of this PR — the canonical link (plan §4.3). */
+  githubPrUrl(pr: PullRequest): string {
+    return `https://github.com/${this.owner()}/${this.repo()}/pull/${pr.number}`;
   }
 }

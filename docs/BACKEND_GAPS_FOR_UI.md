@@ -172,6 +172,89 @@ would remove the documented workarounds if closed. Screens inventory:
 
 ---
 
+## 11. Persist + expose `source_domain` on review comments
+
+- **Wanted by:** UI redesign Step 7 — filter/chip for the **agent domain** that produced a
+  finding ("Security agent", "Performance agent", …).
+- **What exists today:** `source_domain` is only an **in-memory field** on the agent comment
+  (`app/services/agents/schemas.py`, stamped in `review_orchestrator.py` for one run) and is
+  used by the worker to scope matching. It is **not a DB column** (migration 015 added
+  `tool/rule_id/cwe/line_start/line_end/snippet/also_detected_by` only) and is **not on
+  `ReviewCommentResponse`**.
+- **UI built instead:** the Findings tab filters by the real `category` field
+  (`bug|security|performance|style|best_practice|general`), labelled "Category" — never
+  relabelled as "agent".
+- **Suggested backend:** add `review_comments.source_domain`, stamp it at persist time,
+  expose it on `ReviewCommentResponse`.
+
+## 12. Expose `comment.suggestion` on `ReviewCommentResponse`
+
+- **Wanted by:** Step 7 finding card — a fix-suggestion block for comments that have no
+  scan-report match.
+- **What exists today:** `review_comments.suggestion` exists as a **model column** (added in
+  migration 006) and agents fill it, but the API response never returns it, so the UI can
+  only show `fix_suggestion` from the scan report (joined heuristically).
+- **UI built instead:** fix suggestions render only when the scan report provides
+  `fix_suggestion`; otherwise the block is omitted (never invented).
+- **Suggested backend:** add `suggestion` to `ReviewCommentResponse`.
+
+## 13. Changed-files list per PR — `GET /pull-requests/{id}/files`
+
+- **Wanted by:** Step 7 "files with findings" summary table — ideally compared against the
+  PR's changed files.
+- **What exists today:** `PullRequestResponse`/`PullRequestWithReviews` carry only the
+  `changed_files` **count**; no route lists the changed file paths (the `PRFileChange`
+  schema is dead code — no route serves it).
+- **UI built instead:** the table is explicitly labelled **"Files with findings"** (derived
+  from review comments + scan findings), never "changed files".
+- **Suggested backend:** serve a files list (the `PRFileChange` schema already exists) or
+  add `changed_file_paths` to the PR detail.
+
+## 14. Pipeline `stage` names on `GET /reviews/{id}/status`
+
+- **Wanted by:** Step 7 pipeline stepper ("static analysis → agents → synthesis → posted").
+- **What exists today:** `ReviewStatus` exposes `status` (pending/processing/completed/
+  failed) and a **0–100 `progress` float** — no step names.
+- **UI built instead:** a plain labelled progress bar with the real status vocabulary;
+  duration is computed from `started_at`/`completed_at`.
+- **Suggested backend:** add `stage: queued|static_analysis|agents|synthesis|posting`.
+
+## 15. Org-wide pull-request list — `GET /pull-requests`
+
+- **Wanted by:** app shell Step 3 — a "Pull requests" sidebar entry with a real list.
+- **What exists today:** PRs are only listable per repository
+  (`GET /pull-requests/repository/{repository_id}`); there is no org/global list and no
+  `repository` attribution on `ReviewResponse`.
+- **UI built instead:** the sidebar entry routes through repository selection
+  ("Pull requests via repositories").
+- **Suggested backend:** `GET /pull-requests` (org-scoped, paginated, same row shape).
+
+## 16. Review statistics aggregation — `GET /reviews/stats`
+
+- **Wanted by:** Step 5 dashboard — exact severity/status distribution over all reviews.
+- **What exists today:** `GET /reviews` returns rows + a filtered `total`; severity
+  distribution can only be computed client-side over the fetched page.
+- **UI built instead:** bars computed from the **most recent 100 reviews**, labelled
+  "severity of the most recent 100 reviews" — never presented as all-time.
+- **Suggested backend:** `GET /reviews/stats?group_by=overall_severity|status` returning
+  `{value: count}`.
+
+## 17. Per-repository settings persistence + update route
+
+- **Wanted by:** Step 6 repository detail "Settings" tab (`auto_review`,
+  `review_on_push`, `notify_on_failure`, `max_files_per_review`).
+- **What exists today:** `GET /repositories/{id}/detail` builds
+  `settings=RepositorySettings()` — **always the schema defaults**, nothing persists them,
+  and no route updates them. `PATCH /repositories/{id}` accepts only `enabled` /
+  `default_branch`.
+- **UI built instead:** the Settings tab edits only what the API really updates
+  (`default_branch`; enable/disable via the existing routes). The `settings` block is shown
+  read-only with an explicit "not configurable yet" note — toggles that cannot persist are
+  never rendered as if they work.
+- **Suggested backend:** persist per-repo settings + `PUT /repositories/{id}/settings`.
+
+---
+
 ## Decisions / facts to confirm with the product owner
 
 ### LLM precedence (plan Step 8 — **confirmed**; wording shipped in the UI)

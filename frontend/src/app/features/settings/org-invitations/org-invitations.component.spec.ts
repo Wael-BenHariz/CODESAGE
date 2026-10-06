@@ -71,6 +71,12 @@ describe('OrgInvitationsComponent — invite form, list, revoke (plan Step 12)',
     expect(q('invite-revoke')).not.toBeNull(); // pending rows are revocable
   });
 
+  it('marks every header cell with scope for screen readers (Step 10)', () => {
+    const headers = Array.from(el().querySelectorAll('thead th'));
+    expect(headers.length).toBe(6);
+    headers.forEach(th => expect(th.getAttribute('scope')).toBe('col'));
+  });
+
   it('creates an invitation with the selected role and confirms', () => {
     invitations.create.and.returnValue(of({ ...pending, email: 'new@example.com' }));
 

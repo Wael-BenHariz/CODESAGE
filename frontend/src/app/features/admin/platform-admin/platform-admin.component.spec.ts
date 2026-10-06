@@ -179,11 +179,20 @@ describe('PlatformAdminComponent — /users + orgs (plan Step 9)', () => {
     expect(q('[data-testid="users-table"]')).not.toBeNull();
   });
 
-  it('shows the Platform nav entry for a platform admin', () => {
+  it('loads both panels as ready (the Platform nav entry now lives in the app-shell sidebar)', () => {
     create();
 
-    expect(q('[data-testid="nav-platform"]')).not.toBeNull();
+    // Shell-owned navigation: the screen no longer renders nav entries.
+    expect(q('[data-testid="nav-platform"]')).toBeNull();
     expect(component.usersState()).toBe('ready');
     expect(component.orgsState()).toBe('ready');
+  });
+
+  it('shows the settings sub-nav with Platform marked current (plan Step 8)', () => {
+    create();
+    expect(q('[data-testid="settings-nav"]')).not.toBeNull();
+    expect(q('[data-testid="settings-nav-ai"]')).not.toBeNull();
+    expect(q('[data-testid="settings-nav-platform"]')?.getAttribute('aria-current')).toBe('page');
+    expect(q('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')).toBeNull();
   });
 });

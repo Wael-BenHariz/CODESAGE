@@ -1,9 +1,9 @@
 <div class="github-callback">
   <div class="callback-card">
     @if (state() === 'processing') {
-      <div class="spinner"></div>
+      <app-spinner label="Finishing GitHub setup…" />
     }
-    <p class="status" [class.error]="!isSuccess()">{{ statusMessage() }}</p>
+    <h1 class="status" [class.error]="!isSuccess()">{{ statusMessage() }}</h1>
 
     @if (state() === 'error') {
       <button class="retry-btn" (click)="retry()">Try again</button>

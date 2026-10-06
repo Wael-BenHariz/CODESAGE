@@ -1,48 +1,87 @@
 <div class="pr-list-page">
-  <app-site-header />
-  <header class="page-header">
-    <div class="header-left">
-      <a [routerLink]="['/repositories', owner(), repo()]" class="back-link">
-        ← {{ owner() }}/{{ repo() }}
-      </a>
-      <h1>Pull Requests</h1>
-    </div>
-  </header>
+  @if (!embedded()) {
+    <header class="page-header">
+      <div class="header-left">
+        <a [routerLink]="['/repositories', owner(), repo()]" class="back-link">
+          ← {{ owner() }}/{{ repo() }}
+        </a>
+        <h1>Pull Requests</h1>
+      </div>
+    </header>
+  }
 
-  <div class="filters">
-    <button class="filter-btn" [class.active]="filter() === 'all'" (click)="setFilter('all')">
-      All <span class="count">({{ pullRequests().length }})</span>
-    </button>
-    <button class="filter-btn" [class.active]="filter() === 'open'" (click)="setFilter('open')">
-      Open <span class="count">({{ openCount }})</span>
-    </button>
-    <button class="filter-btn" [class.active]="filter() === 'closed'" (click)="setFilter('closed')">
-      Closed <span class="count">({{ closedCount }})</span>
-    </button>
+  <div class="toolbar">
+    <div class="filters" role="group" aria-label="Filter pull requests by state">
+      <button class="filter-btn" [class.active]="filter() === 'all'" (click)="setFilter('all')">
+        All <span class="count">{{ pullRequests().length }}</span>
+      </button>
+      <button class="filter-btn" [class.active]="filter() === 'open'" (click)="setFilter('open')">
+        Open <span class="count">{{ openCount }}</span>
+      </button>
+      <button
+        class="filter-btn"
+        [class.active]="filter() === 'closed'"
+        (click)="setFilter('closed')"
+      >
+        Closed <span class="count">{{ closedCount }}</span>
+      </button>
+    </div>
+
+    <label class="author-filter">
+      <span class="author-label">Author</span>
+      <input
+        type="search"
+        class="author-input"
+        placeholder="Filter by author…"
+        [value]="authorFilter()"
+        (input)="onAuthorInput($event)"
+        data-testid="pr-author-filter"
+      />
+    </label>
   </div>
 
+  @if (!isLoading() && !loadError() && pullRequests().length >= windowCap) {
+    <!-- Honest cap note: the backend request window is 100 rows max. -->
+    <p class="window-note" data-testid="pr-window-note">
+      Showing the newest {{ windowCap }} pull requests — older ones aren't loaded on this page.
+    </p>
+  }
+
   @if (isLoading()) {
-    <div class="loading" data-testid="pr-list-loading">
-      <div class="spinner"></div>
-      <span>Loading pull requests...</span>
+    <div class="state-slot" data-testid="pr-list-loading">
+      <app-spinner label="Loading pull requests..." />
     </div>
   } @else if (loadError()) {
-    <!-- Load failure: an explicit error state rather than a misleading
-         "No pull requests found" (F3 pre-check b). -->
-    <div class="error-state" data-testid="pr-list-load-error">
-      <p>Couldn't load pull requests — check the repository or your access.</p>
-      <button class="btn" (click)="loadPullRequests()">Try again</button>
-    </div>
+    <!-- Load failure: explicit error state instead of a blank content area. -->
+    <app-error-state
+      [testid]="'pr-list-load-error'"
+      message="Couldn't load pull requests — check the repository or your access."
+      retryLabel="Try again"
+      (retry)="loadPullRequests()"
+    />
+  } @else if (filteredPRs.length === 0 && pullRequests().length === 0) {
+    <app-empty-state
+      [testid]="'pr-list-empty'"
+      title="No pull requests found."
+      message="New pull requests on this repository will show up here."
+    />
   } @else if (filteredPRs.length === 0) {
-    <div class="empty-state">
-      <p>No pull requests found.</p>
-    </div>
+    <app-empty-state
+      [testid]="'pr-list-empty'"
+      title="No pull requests match your filters."
+      message="Adjust the state or author filter to see rows again."
+    >
+      <button class="btn btn-ghost" data-testid="clear-pr-filters" (click)="clearFilters()">
+        Clear filters
+      </button>
+    </app-empty-state>
   } @else {
     <div class="pr-list">
-      @for (pr of filteredPRs; track pr.id) {
+      @for (pr of pageRows; track pr.id) {
         <a [routerLink]="['/repositories', owner(), repo(), 'pulls', pr.number]" class="pr-item">
           <div class="pr-status">
-            <span class="state-icon" [class]="pr.state">{{ getStateIcon(pr.state) }}</span>
+            <!-- Written state chip — severity/state is never color-only. -->
+            <span class="state-chip" [ngClass]="'state-' + pr.state">{{ pr.state }}</span>
           </div>
           <div class="pr-content">
             <div class="pr-title">{{ pr.title }}</div>
@@ -57,13 +96,25 @@
             <span class="stat deletions">-{{ pr.deletions }}</span>
             <span class="stat files">{{ pr.changedFiles }} files</span>
           </div>
-          @if (pr.reviewStatus) {
-            <div class="pr-review-status" [class]="pr.reviewStatus.status">
-              {{ pr.reviewStatus.status }}
-            </div>
-          }
         </a>
       }
     </div>
+
+    @if (pageCount > 1) {
+      <nav class="pagination" aria-label="Pull request pages" data-testid="pr-pagination">
+        <button class="page-btn" type="button" [disabled]="page() === 1" (click)="goTo(page() - 1)">
+          ← Previous
+        </button>
+        <span class="page-info"> Page {{ page() }} of {{ pageCount }} · {{ pageRangeLabel }} </span>
+        <button
+          class="page-btn"
+          type="button"
+          [disabled]="page() === pageCount"
+          (click)="goTo(page() + 1)"
+        >
+          Next →
+        </button>
+      </nav>
+    }
   }
 </div>

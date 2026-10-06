@@ -1,68 +1,33 @@
 @import 'reset';
 @import 'mixins';
+@import 'tokens';
 
 // ─── CodeSage Terminal Aesthetic ───
-// Dark industrial UI inspired by developer tools and terminals
-
-$bg-primary: #0a0a0a;
-$bg-secondary: #111111;
-$bg-tertiary: #1a1a1a;
-$bg-elevated: #222222;
-$bg-hover: #2a2a2a;
-
-$border-subtle: #1e1e1e;
-$border-default: #2a2a2a;
-$border-strong: #3a3a3a;
-
-$text-primary: #e5e5e5;
-$text-secondary: #a0a0a0;
-$text-muted: #666666;
-$text-inverse: #0a0a0a;
-
-$accent: #00e87b;
-$accent-hover: #00cc6d;
-$accent-dim: rgba(0, 232, 123, 0.1);
-
-$warning: #ffaa00;
-$warning-dim: rgba(255, 170, 0, 0.1);
-
-$error: #ff4444;
-$error-dim: rgba(255, 68, 68, 0.1);
-
-$info: #00aaff;
-$info-dim: rgba(0, 170, 255, 0.1);
-
-$purple: #a855f7;
-$purple-dim: rgba(168, 85, 247, 0.1);
-
-$font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, monospace;
-$font-sans:
-  'Inter',
-  -apple-system,
-  BlinkMacSystemFont,
-  'Segoe UI',
-  sans-serif;
-
-$radius-sm: 2px;
-$radius-md: 4px;
-$radius-lg: 6px;
-
-$transition-fast: 100ms ease;
-$transition-base: 200ms ease;
+// Dark industrial UI inspired by developer tools and terminals.
+// All colors come from `_tokens.scss` (frozen palette) — do not hard-code
+// hex values in this file or in components; use var(--…) / the $-tokens.
 
 // ─── Global ───
 
 html {
-  background: $bg-primary;
-  color: $text-primary;
+  background: $surface-0;
+  color: $text-1;
 }
 
 body {
   font-family: $font-sans;
-  background: $bg-primary;
-  color: $text-primary;
+  background: $surface-0;
+  color: $text-1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+// Visible keyboard focus everywhere (rule 9). The accent passes AA as a
+// non-text indicator on every surface (12:1 on --surface-0).
+:focus-visible {
+  outline: 2px solid $accent;
+  outline-offset: 2px;
+  border-radius: $radius-xs;
 }
 
 // ─── Typography ───
@@ -73,8 +38,9 @@ h3,
 h4,
 h5,
 h6 {
-  font-weight: 600;
+  font-weight: $font-weight-semibold;
   letter-spacing: -0.02em;
+  line-height: $line-height-tight;
 }
 
 code,
@@ -88,12 +54,12 @@ pre,
 .btn {
   @include button-base;
   font-family: $font-mono;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
   letter-spacing: 0.02em;
-  padding: 8px 16px;
-  border-radius: $radius-sm;
-  transition: all $transition-fast;
+  padding: $space-2 $space-4;
+  border-radius: $radius-xs;
+  transition: all $motion-fast $motion-ease;
   cursor: pointer;
   border: 1px solid transparent;
 }
@@ -116,33 +82,33 @@ pre,
 
 .btn-secondary {
   background: transparent;
-  color: $text-primary;
-  border-color: $border-strong;
+  color: $text-1;
+  border-color: $border-control;
 
   &:hover:not(:disabled) {
-    background: $bg-hover;
-    border-color: $text-muted;
+    background: $surface-hover;
+    border-color: $text-3;
   }
 }
 
 .btn-ghost {
   background: transparent;
-  color: $text-secondary;
-  padding: 4px 8px;
+  color: $text-2;
+  padding: $space-1 $space-2;
 
   &:hover:not(:disabled) {
-    color: $text-primary;
-    background: $bg-hover;
+    color: $text-1;
+    background: $surface-hover;
   }
 }
 
 .btn-danger {
   background: transparent;
-  color: $error;
-  border-color: $error;
+  color: $danger;
+  border-color: $danger;
 
   &:hover:not(:disabled) {
-    background: $error-dim;
+    background: $danger-dim;
   }
 }
 
@@ -151,13 +117,13 @@ pre,
 .input {
   width: 100%;
   padding: 10px 14px;
-  background: $bg-tertiary;
-  border: 1px solid $border-default;
-  border-radius: $radius-sm;
-  color: $text-primary;
+  background: $surface-2;
+  border: 1px solid $border-strong;
+  border-radius: $radius-xs;
+  color: $text-1;
   font-family: $font-mono;
-  font-size: 13px;
-  transition: border-color $transition-fast;
+  font-size: $font-size-sm;
+  transition: border-color $motion-fast $motion-ease;
 
   &:focus {
     outline: none;
@@ -171,13 +137,13 @@ pre,
   }
 
   &::placeholder {
-    color: $text-muted;
+    color: $text-3;
   }
 }
 
 select.input {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23929292' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 32px;
@@ -186,8 +152,8 @@ select.input {
 // ─── Cards ───
 
 .card {
-  background: $bg-secondary;
-  border: 1px solid $border-default;
+  background: $surface-1;
+  border: 1px solid $border-strong;
   border-radius: $radius-md;
 }
 
@@ -198,10 +164,10 @@ select.input {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: $radius-sm;
+  border-radius: $radius-xs;
   font-family: $font-mono;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: $font-weight-semibold;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
@@ -217,8 +183,8 @@ select.input {
 }
 
 .badge-error {
-  background: $error-dim;
-  color: $error;
+  background: $danger-dim;
+  color: $danger;
 }
 
 .badge-info {
@@ -228,7 +194,7 @@ select.input {
 
 .badge-purple {
   background: $purple-dim;
-  color: $purple;
+  color: $purple-text;
 }
 
 // ─── Scrollbar ───
@@ -239,15 +205,15 @@ select.input {
 }
 
 ::-webkit-scrollbar-track {
-  background: $bg-primary;
+  background: $surface-0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: $border-strong;
-  border-radius: $radius-sm;
+  background: $border-control;
+  border-radius: $radius-xs;
 
   &:hover {
-    background: $text-muted;
+    background: $text-3;
   }
 }
 
@@ -293,15 +259,34 @@ select.input {
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease forwards;
+  animation: fadeIn $motion-slow $motion-ease forwards;
 }
 
 .animate-slide-in {
-  animation: slideIn 0.3s ease forwards;
+  animation: slideIn $motion-slow $motion-ease forwards;
 }
 
 .animate-pulse {
   animation: pulse 2s ease-in-out infinite;
+}
+
+// Reduced motion (rule 9): kill decorative animation and transitions.
+@media (prefers-reduced-motion: reduce) {
+  // …but the loading spinner is the state indicator itself — a frozen
+  // spinner would communicate nothing, so it stays animated.
+  .cs-spinner {
+    animation-duration: 0.9s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 // ─── Utility ───
@@ -309,7 +294,7 @@ select.input {
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 $space-5;
 }
 
 .text-center {
@@ -319,14 +304,14 @@ select.input {
   font-family: $font-mono;
 }
 .text-sm {
-  font-size: 13px;
+  font-size: $font-size-sm;
 }
 .text-xs {
-  font-size: 11px;
+  font-size: $font-size-xs;
 }
 .text-muted {
-  color: $text-muted;
+  color: $text-3;
 }
 .text-secondary {
-  color: $text-secondary;
+  color: $text-2;
 }

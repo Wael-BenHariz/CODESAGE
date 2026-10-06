@@ -12,11 +12,15 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () =>
-      import('./features/landing/landing.component').then(m => m.LandingComponent)
+      import('./features/landing/landing.component').then(m => m.LandingComponent),
+    // Public screen: rendered without the app shell (plan Step 3).
+    data: { shell: false }
   },
   {
     path: 'login',
-    loadComponent: () => import('./features/auth/login/login.component').then(m => m.LoginComponent)
+    loadComponent: () =>
+      import('./features/auth/login/login.component').then(m => m.LoginComponent),
+    data: { shell: false }
   },
   {
     // No guard here: this route is GitHub's post-install redirect target and
@@ -25,7 +29,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/auth/github-callback/github-callback.component').then(
         m => m.GithubCallbackComponent
-      )
+      ),
+    data: { shell: false }
   },
   {
     // No guard: the invitee has no session yet (plan Step 12). The page
@@ -35,7 +40,15 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/invitations/invite-accept/invite-accept.component').then(
         m => m.InviteAcceptComponent
-      )
+      ),
+    data: { shell: false }
+  },
+  {
+    // Public explainer (plan Step 9): no guard and no shell — the guide is
+    // readable before sign-in, like the landing page.
+    path: 'help',
+    loadComponent: () => import('./features/help/help.component').then(m => m.HelpComponent),
+    data: { shell: false }
   },
   {
     path: 'dashboard',
@@ -117,18 +130,21 @@ export const routes: Routes = [
     // client-side URL renders the page instead of silently bouncing home.
     path: 'not-found',
     loadComponent: () =>
-      import('./features/errors/not-found/not-found.component').then(m => m.NotFoundComponent)
+      import('./features/errors/not-found/not-found.component').then(m => m.NotFoundComponent),
+    data: { shell: false }
   },
   {
     // Role-guard denial target (rule 5's "forbidden"). Unguarded: a
     // NONE-role user lands here from the guard and must not redirect-loop.
     path: 'forbidden',
     loadComponent: () =>
-      import('./features/errors/forbidden/forbidden.component').then(m => m.ForbiddenComponent)
+      import('./features/errors/forbidden/forbidden.component').then(m => m.ForbiddenComponent),
+    data: { shell: false }
   },
   {
     path: '**',
     loadComponent: () =>
-      import('./features/errors/not-found/not-found.component').then(m => m.NotFoundComponent)
+      import('./features/errors/not-found/not-found.component').then(m => m.NotFoundComponent),
+    data: { shell: false }
   }
 ];

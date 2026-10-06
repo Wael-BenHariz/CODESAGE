@@ -1,9 +1,12 @@
+// Login screen (Step 4) — tokens only, frozen palette.
+// AA fix carried over: `.login-subtitle` was #666666 on #111111 (2.7:1)
+// → --text-3 (#929292, 4.9:1).
 .login {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a0a0a;
+  background: var(--surface-0);
   position: relative;
   padding: 24px;
 }
@@ -18,9 +21,9 @@
 }
 
 .login-card {
-  background: #111111;
-  border: 1px solid #1e1e1e;
-  border-radius: 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   padding: 48px;
   max-width: 420px;
   width: 100%;
@@ -49,9 +52,9 @@
   padding: 12px 16px;
   background: rgba(0, 232, 123, 0.08);
   border: 1px solid rgba(0, 232, 123, 0.3);
-  border-radius: 6px;
-  color: #00e87b;
-  font-family: 'JetBrains Mono', monospace;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   text-align: center;
@@ -65,83 +68,95 @@
   height: 56px;
   background: rgba(0, 232, 123, 0.1);
   border: 1px solid rgba(0, 232, 123, 0.2);
-  border-radius: 8px;
-  font-size: 24px;
-  color: #00e87b;
+  border-radius: var(--radius-lg);
+  color: var(--accent);
   margin-bottom: 20px;
+
+  .glyph {
+    stroke: var(--text-inverse);
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
 }
 
 .login-title {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 28px;
   font-weight: 700;
-  color: #e5e5e5;
+  color: var(--text-1);
   margin: 0 0 8px;
   letter-spacing: -0.02em;
 }
 
 .login-subtitle {
-  font-size: 15px;
-  color: #666666;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-3);
   margin: 0;
 }
 
+// ─── GitHub button ───
+
 .github-btn {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  width: 100%;
+  gap: var(--space-3);
   padding: 14px 24px;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  color: #e5e5e5;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
-  font-weight: 500;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-md);
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--motion-fast) var(--motion-ease);
 
   &:hover {
-    background: #222222;
-    border-color: #3a3a3a;
+    background: var(--surface-3);
+    border-color: var(--border-control);
     transform: translateY(-1px);
   }
 
   &:active {
     transform: translateY(0);
   }
+
+  .github-icon {
+    width: 20px;
+    height: 20px;
+    fill: var(--text-1);
+  }
 }
 
-.github-icon {
-  width: 20px;
-  height: 20px;
-  fill: #e5e5e5;
-}
+// ─── Feature list ───
 
 .login-features {
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid #1e1e1e;
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .feature {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: #a0a0a0;
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-2);
 }
 
 .feature-dot {
   width: 6px;
   height: 6px;
-  background: #00e87b;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
   flex-shrink: 0;
 }

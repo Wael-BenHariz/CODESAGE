@@ -56,46 +56,48 @@
     @if (items().length === 0) {
       <p class="state-note">No invitations yet.</p>
     } @else {
-      <table class="invites-table">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Expires</th>
-            <th>Invited by</th>
-            <th><span class="visually-hidden">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (invitation of items(); track invitation.id) {
-            <tr data-testid="invite-row">
-              <td>{{ invitation.email }}</td>
-              <td>{{ invitation.role }}</td>
-              <td>
-                <span class="status-chip" data-testid="invite-status">
-                  {{ invitation.status }}
-                </span>
-              </td>
-              <td>{{ invitation.expires_at | date: 'mediumDate' }}</td>
-              <td>{{ invitation.invited_by ?? '—' }}</td>
-              <td class="row-actions">
-                @if (canManage() && invitation.status === 'pending') {
-                  <button
-                    class="btn-link"
-                    type="button"
-                    [disabled]="revokingId() === invitation.id"
-                    (click)="revoke(invitation)"
-                    data-testid="invite-revoke"
-                  >
-                    {{ revokingId() === invitation.id ? 'Revoking…' : 'Revoke' }}
-                  </button>
-                }
-              </td>
+      <div class="table-wrap">
+        <table class="invites-table">
+          <thead>
+            <tr>
+              <th scope="col">Email</th>
+              <th scope="col">Role</th>
+              <th scope="col">Status</th>
+              <th scope="col">Expires</th>
+              <th scope="col">Invited by</th>
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
             </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (invitation of items(); track invitation.id) {
+              <tr data-testid="invite-row">
+                <td>{{ invitation.email }}</td>
+                <td>{{ invitation.role }}</td>
+                <td>
+                  <span class="status-chip" data-testid="invite-status">
+                    {{ invitation.status }}
+                  </span>
+                </td>
+                <td>{{ invitation.expires_at | date: 'mediumDate' }}</td>
+                <td>{{ invitation.invited_by ?? '—' }}</td>
+                <td class="row-actions">
+                  @if (canManage() && invitation.status === 'pending') {
+                    <button
+                      class="btn-link"
+                      type="button"
+                      [disabled]="revokingId() === invitation.id"
+                      (click)="revoke(invitation)"
+                      data-testid="invite-revoke"
+                    >
+                      {{ revokingId() === invitation.id ? 'Revoking…' : 'Revoke' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
       @if (revokeError(); as err) {
         <div class="banner error" role="alert" data-testid="invite-revoke-error">{{ err }}</div>
       }

@@ -1,9 +1,13 @@
-# Frontend Screens & Routes (v0.3.1)
+# Frontend Screens & Routes (v0.3.2)
 
-Final inventory for plan Steps 0–12 on `feat/frontend-api-coverage`.
+Inventory maintained for the UI-redesign release on `feat/ui-redesign`
+(supersedes the `feat/frontend-api-coverage` inventory; the API-coverage
+findings below are unchanged).
 Endpoint-by-endpoint coverage: `docs/FRONTEND_GAP_MATRIX.md`.
 Endpoints the UI needs but the backend does not expose:
 `docs/BACKEND_GAPS_FOR_UI.md`.
+Redesign plan, gates and screenshots: `docs/UI_REDESIGN_PLAN.md`,
+`docs/ui/before/` (15) + `docs/ui/after/` (18).
 
 ---
 
@@ -19,6 +23,7 @@ Role lists live in `frontend/src/app/core/guards/role.guard.ts`; the guard is
 | `/login`                                 | `auth/login`                               | public        | Keycloak authorize (PKCE, `idpHint: github`).                            |
 | `/github/callback`                       | `auth/github-callback`                     | **no guard**  | GitHub App post-install redirect; must render while the session restores. |
 | `/invite/accept`                         | `invitations/invite-accept`                | **no guard**  | Invitee has no session yet: public preview, explicit Accept.             |
+| `/help`                                  | `help`                                     | **no guard**  | Public explainer (redesign Step 9): `data: { shell: false }`, shared copy. |
 | `/dashboard`                             | `dashboard`                                | `WRITE_ROLES` | Real API stats (Step 10): repo counts + review totals + recent reviews.  |
 | `/repositories`                          | `repositories/repository-list`             | `ANY_ROLE`    | Install / connect / enable / disable / remove + selection modal.         |
 | `/repositories/:owner/:repo`             | `repositories/repository-detail`           | `ANY_ROLE`    | `owner/name` → repo UUID resolver (Step 2).                              |
@@ -52,6 +57,7 @@ error + retry / success** — and mutations disable their button while pending
 | landing               | — (public)                                                       | —                                               |
 | auth/login            | `GET /auth/keycloak/config` (bootstrap)                          | —                                               |
 | auth/github-callback  | `GET /github/status`, `POST /github/repos/selection`             | `github-callback.component.spec`                |
+| help (public)         | — (static copy; no endpoint — never faked data)                  | `help.component.spec` (8)                       |
 | dashboard             | `GET /repositories`, `GET /reviews` (+ `status_filter=pending`)  | `dashboard.component.spec` (7)                  |
 | repository-list       | `GET /repositories`, `POST …/enable|disable`, `DELETE`, `GET /github/repos`, `POST /github/repos/selection`, install URL | `repository-list.component.spec` (12) |
 | repository-detail     | `GET /repositories/{id}` (owner/name resolver), PR list          | `repository-detail.component.spec`              |
@@ -89,10 +95,15 @@ per route-group service incl. `api.service` and `llm-settings.service`),
   text).
 - **Nav** is cosmetic (`AuthContextService.can()`); the backend re-authorizes
   every request (org access → uniform 404 when not a member).
+- **Help** (redesign): `shared/help.copy.ts` is the single source of truth for
+  `/help` and every `app-help-popover` — plain-text interpolation only; the two
+  severity vocabularies (review comments `error|warning|suggestion|info` vs
+  scan findings `critical|high|medium|low|info`) are reconciled explicitly in
+  that copy.
 
 ---
 
-## Verification status (Step 11/12)
+## Verification status — v0.3.1 (previous release, plan Steps 11/12)
 
 **Gates** — `format:check` clean, `lint` 0 errors (1 pre-existing warning in
 `diff-view.component.ts`), `type-check` clean, `test:ci` **314 SUCCESS at the
@@ -123,3 +134,30 @@ not provided). Planned checks, to run against the rolled-out UI:
 | 10  | Scan-report enrichment (Step 3): tools-failed banner, OWASP chips, fix hints    | pending |
 | 11  | LLM key never displayed after save; precedence note matches backend behaviour   | pending |
 | 12  | `/platform` read-only for PA, hidden (and 403'd) for everyone else              | pending |
+
+---
+
+## Verification status — v0.3.2 (UI-redesign release, redesign Steps 0–12)
+
+**Gates** — `lint` 0/0, `type-check` clean, `format:check` clean,
+`test:ci` **453 SUCCESS** (up from 338; +2 in the Step 10 a11y pass), production
+build **449.01 kB raw / 125.53 kB transfer** (baseline before the redesign
+436.79 / 121.71; same 9 pre-existing warnings — 8 component-style budgets +
+js-sha256). One Conventional Commit per step, `b6f9eeb` … `docs: ui redesign`.
+
+**Cluster** — frontend-only release: `kubectl diff` showed exactly the image
+change (`frontend:v0.3.1` → `v0.3.2`), manifests applied with the
+keycloak-db-init Job filter, rollout green with every other pod untouched;
+smoke: `/` serves `main-HH5DOA56.js` (byte-identical to the local Step-10
+build), `/help` and `/login` → 200, `/api/v1/health` → `healthy`,
+`app-sidebar` marker present in the served bundle. Backend/worker remain on
+`v0.3.0`.
+
+**Responsive / visual captures** — `docs/ui/after/` (18 files): 6 public
+screens (`index`, `login`, `not-found`, `forbidden`, `github-callback`,
+`help`) × 1440×900 / 1024×768 / 390×844, chrome headless against the deployed
+cluster — same method and viewports as `docs/ui/before/` (15 files, v0.3.1).
+DOM-marker check confirms each URL renders its screen. **Authenticated
+screens are still not capturable** (no test accounts — Q3) — they remain
+covered only by the pending manual table above, which now applies to the
+redesigned UI.

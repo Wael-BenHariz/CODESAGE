@@ -7,7 +7,7 @@
 .state-note {
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
-  color: #666666;
+  color: var(--text-3);
   margin: 0;
 }
 
@@ -27,7 +27,7 @@
   label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    color: #666666;
+    color: var(--text-3);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -36,25 +36,25 @@
   select {
     font-family: 'JetBrains Mono', monospace;
     padding: 10px 12px;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-size: 13px;
-    color: #e5e5e5;
+    color: var(--text-1);
 
     &:focus {
       outline: none;
-      border-color: #00e87b;
+      border-color: var(--accent);
     }
 
     &:disabled {
-      background: #141414;
-      color: #666666;
+      background: var(--surface-1);
+      color: var(--text-3);
       cursor: not-allowed;
     }
 
     &::placeholder {
-      color: #444444;
+      color: var(--text-3);
     }
   }
 }
@@ -64,9 +64,9 @@
   font-size: 12px;
   padding: 10px 12px;
   border-radius: 4px;
-  border: 1px solid #2a2a2a;
-  background: #1a1a1a;
-  color: #a0a0a0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-2);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -75,14 +75,20 @@
   &.success {
     background: rgba(0, 232, 123, 0.06);
     border-color: rgba(0, 232, 123, 0.25);
-    color: #00e87b;
+    color: var(--accent);
   }
 
   &.error {
     background: rgba(255, 68, 68, 0.08);
     border-color: rgba(255, 68, 68, 0.3);
-    color: #ff4444;
+    color: var(--danger);
   }
+}
+
+/* Step 10 (responsive): the 6-column table keeps its intrinsic width inside a
+   horizontal scroller instead of pushing page-level scroll at 390px. */
+.table-wrap {
+  overflow-x: auto;
 }
 
 .invites-table {
@@ -95,19 +101,19 @@
   td {
     text-align: left;
     padding: 10px 12px;
-    border-bottom: 1px solid #1e1e1e;
-    color: #a0a0a0;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-2);
   }
 
   th {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #666666;
+    color: var(--text-3);
   }
 
   td {
-    color: #e5e5e5;
+    color: var(--text-1);
   }
 }
 
@@ -115,9 +121,9 @@
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid #2a2a2a;
-  background: #1a1a1a;
-  color: #a0a0a0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-2);
   text-transform: uppercase;
 }
 
@@ -128,7 +134,7 @@
 .btn-link {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #ff4444;
+  color: var(--danger);
   background: none;
   border: none;
   padding: 0;
@@ -136,7 +142,7 @@
   text-decoration: underline;
 
   &:hover:not(:disabled) {
-    color: #ff6666;
+    color: var(--danger);
   }
 
   &:disabled {

@@ -59,6 +59,7 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
     edited_summary: null,
     github_review_id: null,
     overall_severity: 'warning',
+    started_at: '2026-01-01T00:04:00Z',
     created_at: '2026-01-01T00:00:00Z',
     completed_at: '2026-01-01T00:05:00Z'
   };
@@ -75,11 +76,13 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
     ]);
     reviewApi = jasmine.createSpyObj<ReviewService>('ReviewService', [
       'getReviewDetail',
-      'getScanReport'
+      'getScanReport',
+      'getReviewStatus' // Step 7: polled by the embedded panel while running
     ]);
     // The component subscribes to the invalidation stream (readonly prop —
     // createSpyObj only spies methods, so attach the Subject by hand).
     Object.assign(reviewApi, { reviewDetailInvalidated$: invalidations$.asObservable() });
+    reviewApi.getReviewStatus.and.returnValue(of({ status: 'completed', progress: 100 }));
     // Default scan report: no findings/failures → adds nothing to the panel.
     reviewApi.getScanReport.and.returnValue(
       of({
@@ -107,6 +110,7 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
         edited_summary: null,
         github_review_id: null,
         overall_severity: null,
+        started_at: '2026-01-01T00:04:00Z',
         created_at: '2026-01-01T00:00:00Z',
         completed_at: null,
         comments_count: 0,
@@ -345,6 +349,54 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
     panel.editingSummary.set(false);
     expect(fixture.componentInstance.hasUnsavedSummaryEdit()).toBeFalse();
   });
+
+  // --- Step 7: page shell (plan §4.3) -----------------------------------------
+
+  describe('Step 7: page shell', () => {
+    it('renders a written state chip and the canonical GitHub link', () => {
+      pullRequests.getPullRequest.and.returnValue(of({ ...pr, state: 'merged' }));
+      create();
+
+      const chip = el().querySelector('.state-chip');
+      expect(chip?.textContent?.trim()).toBe('merged'); // text — never color-only
+      const link = el().querySelector('[data-testid="pr-gh-link"]') as HTMLAnchorElement;
+      expect(link).not.toBeNull();
+      expect(link.getAttribute('href')).toBe('https://github.com/acme/demo/pull/7');
+      expect(link.textContent).toContain('View on GitHub');
+    });
+
+    it('offers a confirmed Retry when the latest run failed (write role)', () => {
+      pullRequests.getPullRequest.and.returnValue(
+        of({ ...pr, reviewStatus: { status: 'failed', reviewId: 'rev-1' } })
+      );
+      create();
+
+      const retry = el().querySelector('[data-testid="retry-review"]') as HTMLButtonElement;
+      expect(retry).not.toBeNull();
+
+      retry.click();
+      fixture.detectChanges();
+      const dialog = el().querySelector('[data-testid="retry-dialog"]');
+      expect(dialog).not.toBeNull();
+      expect(pullRequests.triggerReview).not.toHaveBeenCalled(); // confirmation gates it
+
+      (dialog?.querySelector('.cd-confirm') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(pullRequests.triggerReview).toHaveBeenCalledWith('pr-1');
+      expect(el().querySelector('[data-testid="retry-dialog"]')).toBeNull();
+    });
+
+    it('keeps the Retry hidden for a read-only viewer', () => {
+      roleSignal.set({ role: 'NONE' });
+      pullRequests.getPullRequest.and.returnValue(
+        of({ ...pr, reviewStatus: { status: 'failed', reviewId: 'rev-1' } })
+      );
+      create();
+
+      expect(el().querySelector('[data-testid="retry-review"]')).toBeNull();
+      expect(el().querySelector('[data-testid="retry-dialog"]')).toBeNull();
+    });
+  });
 });
 
 describe('PrDetailComponent — shared review cache (one request per page load)', () => {
@@ -382,6 +434,7 @@ describe('PrDetailComponent — shared review cache (one request per page load)'
     edited_summary: null,
     github_review_id: null,
     overall_severity: 'warning',
+    started_at: '2026-01-01T00:04:00Z',
     created_at: '2026-01-01T00:00:00Z',
     completed_at: '2026-01-01T00:05:00Z'
   };

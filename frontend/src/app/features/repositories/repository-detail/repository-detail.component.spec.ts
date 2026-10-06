@@ -8,9 +8,10 @@ import { AuthService } from '../../../core/services/auth.service';
 import { RepositoryService } from '../../../core/services/repository.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { OrgSettingsService } from '../../../core/services/org-settings.service';
-import { Repository } from '../../../core/models/repository.model';
+import { PullRequestService } from '../../../core/services/pull-request.service';
+import { Repository, RepositoryDetail } from '../../../core/models/repository.model';
 
-describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 2)', () => {
+describe('RepositoryDetailComponent — detail header, tabs and guarded mutations (plan Step 6)', () => {
   let fixture: ComponentFixture<RepositoryDetailComponent>;
   let github: jasmine.SpyObj<RepositoryService>;
   let toast: { success: jasmine.Spy; error: jasmine.Spy };
@@ -34,13 +35,29 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
     updatedAt: '2026-01-02T00:00:00Z'
   };
 
+  /** GET /repositories/{id}/detail adds stats + the read-only settings block. */
+  const detail: RepositoryDetail = {
+    ...repo,
+    totalPrs: 7,
+    totalReviews: 3,
+    settings: {
+      autoReview: true,
+      reviewOnPush: false,
+      notifyOnFailure: true,
+      maxFilesPerReview: 50
+    }
+  };
+
   beforeEach(() => {
     roleSignal = signal({ role: 'DEVELOPER' });
     github = jasmine.createSpyObj<RepositoryService>('RepositoryService', [
-      'getRepository',
+      'getRepositoryDetail',
+      'updateRepository',
       'enableRepository',
       'disableRepository'
     ]);
+    github.getRepositoryDetail.and.returnValue(of(detail));
+    github.updateRepository.and.returnValue(of({ ...repo, defaultBranch: 'main' }));
     toast = { success: jasmine.createSpy('success'), error: jasmine.createSpy('error') };
 
     TestBed.configureTestingModule({
@@ -49,22 +66,36 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
         provideRouter([]), // the component template uses RouterLink
         { provide: RepositoryService, useValue: github },
         { provide: ToastService, useValue: toast },
-        // <app-site-header> → AuthContextService (no session in tests).
+        // Embedded <app-pr-list> (Pull requests tab).
+        {
+          provide: PullRequestService,
+          useValue: jasmine.createSpyObj<PullRequestService>('PullRequestService', [
+            'getPullRequests'
+          ])
+        },
         { provide: OrgSettingsService, useValue: { listOrgs: () => of([]) } },
         { provide: AuthService, useValue: { currentUser: roleSignal } }
       ]
     });
+    (
+      TestBed.inject(PullRequestService) as jasmine.SpyObj<PullRequestService>
+    ).getPullRequests.and.returnValue(of([]));
   });
 
   function create(): void {
     fixture = TestBed.createComponent(RepositoryDetailComponent);
     fixture.componentRef.setInput('owner', 'acme');
     fixture.componentRef.setInput('repo', 'demo');
-    fixture.detectChanges(); // ngOnInit → getRepository
+    fixture.detectChanges(); // ngOnInit → getRepositoryDetail
   }
 
   function el(): HTMLElement {
     return fixture.nativeElement as HTMLElement;
+  }
+
+  function openSettings(): void {
+    (el().querySelector('[data-testid="tab-settings"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
   }
 
   function toggleButton(): HTMLButtonElement {
@@ -72,7 +103,7 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
   }
 
   it('shows the loading state while the request is in flight', () => {
-    github.getRepository.and.returnValue(NEVER);
+    github.getRepositoryDetail.and.returnValue(NEVER);
     create();
 
     expect(el().querySelector('[data-testid="repo-loading"]')).not.toBeNull();
@@ -81,7 +112,9 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
   });
 
   it('shows an explicit error state on failure — never a blank content area', () => {
-    github.getRepository.and.returnValue(throwError(() => ({ status: 404, message: 'nope' })));
+    github.getRepositoryDetail.and.returnValue(
+      throwError(() => ({ status: 404, message: 'nope' }))
+    );
     create();
 
     expect(el().querySelector('[data-testid="repo-load-error"]')).not.toBeNull();
@@ -91,29 +124,50 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
   });
 
   it('retries from the error state and renders the repository on success', () => {
-    github.getRepository.and.returnValue(throwError(() => ({ status: 500, message: 'boom' })));
+    github.getRepositoryDetail.and.returnValue(
+      throwError(() => ({ status: 500, message: 'boom' }))
+    );
     create();
 
-    github.getRepository.and.returnValue(of(repo));
+    github.getRepositoryDetail.and.returnValue(of(detail));
     (el().querySelector('[data-testid="repo-load-error"] button') as HTMLButtonElement).click();
     fixture.detectChanges();
 
     expect(el().querySelector('[data-testid="repo-load-error"]')).toBeNull();
     expect(el().querySelector('h1')?.textContent).toContain('acme/demo');
-    expect(github.getRepository).toHaveBeenCalledTimes(2);
+    expect(github.getRepositoryDetail).toHaveBeenCalledTimes(2);
   });
 
-  it('renders the repository from the mapped model (owner/repo as separate args)', () => {
-    github.getRepository.and.returnValue(of(repo));
+  it('renders the detail view: header stats from GET /repositories/{id}/detail', () => {
     create();
 
-    expect(github.getRepository).toHaveBeenCalledWith('acme', 'demo');
+    expect(github.getRepositoryDetail).toHaveBeenCalledWith('acme', 'demo');
     expect(el().querySelector('[data-testid="repo-loading"]')).toBeNull();
-    expect(el().querySelector('[data-testid="repo-load-error"]')).toBeNull();
     expect(el().textContent).toContain('acme/demo');
     expect(el().textContent).toContain('TypeScript');
     expect(el().textContent).toContain('Enabled');
-    expect(el().querySelectorAll('.meta-item').length).toBe(6);
+    expect(el().querySelectorAll('.meta-item').length).toBe(7);
+    // The two stats only the detail endpoint provides:
+    expect(el().textContent).toContain('Pull requests'); // 7
+    expect(el().textContent).toContain('Completed reviews'); // 3
+  });
+
+  it('renders ARIA tabs: PR list embedded by default, Settings on click', () => {
+    create();
+
+    expect(el().querySelector('[data-testid="tab-prs"]')?.getAttribute('aria-selected')).toBe(
+      'true'
+    );
+    expect(el().querySelector('[data-testid="panel-prs"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="panel-prs"] app-pr-list')).not.toBeNull();
+
+    openSettings();
+
+    expect(el().querySelector('[data-testid="panel-settings"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="panel-prs"]')).toBeNull();
+    expect(el().querySelector('[data-testid="tab-settings"]')?.getAttribute('aria-selected')).toBe(
+      'true'
+    );
   });
 
   it('disables the toggle while pending, blocks a double submit, toasts success', () => {
@@ -124,9 +178,9 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
         subscriber.complete();
       };
     });
-    github.getRepository.and.returnValue(of(repo));
     github.disableRepository.and.returnValue(pending$);
     create();
+    openSettings();
 
     toggleButton().click();
     fixture.detectChanges();
@@ -143,23 +197,90 @@ describe('RepositoryDetailComponent — four states + guarded toggle (plan Step 
     fixture.detectChanges();
 
     expect(toast.success).toHaveBeenCalledWith('Reviews disabled.');
-    expect(github.getRepository).toHaveBeenCalledTimes(2); // reload on success
+    expect(github.getRepositoryDetail).toHaveBeenCalledTimes(2); // reload on success
     expect(toggleButton().disabled).toBeFalse();
   });
 
   it('shows a visible error, stays enabled and skips the reload when the toggle fails', () => {
-    github.getRepository.and.returnValue(of(repo));
     github.disableRepository.and.returnValue(
       throwError(() => ({ status: 403, message: 'denied' }))
     );
     create();
+    openSettings();
 
     toggleButton().click();
     fixture.detectChanges();
 
     expect(toast.error).toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
-    expect(github.getRepository).toHaveBeenCalledTimes(1); // no reload on error
+    expect(github.getRepositoryDetail).toHaveBeenCalledTimes(1); // no reload on error
     expect(toggleButton().disabled).toBeFalse();
+  });
+
+  it('hides the toggle for a read-only (NONE) role', () => {
+    roleSignal.set({ role: 'NONE' });
+    create();
+    openSettings();
+
+    expect(toggleButton()).toBeNull();
+  });
+
+  it('saves a changed default branch via PATCH and shows inline success', () => {
+    github.updateRepository.and.returnValue(of({ ...repo, defaultBranch: 'develop' }));
+    create();
+    openSettings();
+
+    const input = el().querySelector('[data-testid="branch-input"]') as HTMLInputElement;
+    const save = el().querySelector('[data-testid="branch-save"]') as HTMLButtonElement;
+    expect(save.disabled).toBeTrue(); // unchanged draft → no-op
+
+    input.value = 'develop';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(save.disabled).toBeFalse();
+    save.click();
+    fixture.detectChanges();
+
+    expect(github.updateRepository).toHaveBeenCalledWith('repo-1', {
+      default_branch: 'develop'
+    });
+    expect(fixture.componentInstance.repository()?.defaultBranch).toBe('develop');
+    expect(el().textContent).toContain('Default branch saved.');
+    expect(el().querySelector('.save-ok')?.getAttribute('role')).toBe('status');
+    expect(save.disabled).toBeTrue(); // saved → draft equals the value again
+  });
+
+  it('keeps the draft and shows an alert when the PATCH fails', () => {
+    github.updateRepository.and.returnValue(throwError(() => ({ status: 422, message: 'bad' })));
+    create();
+    openSettings();
+
+    const input = el().querySelector('[data-testid="branch-input"]') as HTMLInputElement;
+    input.value = 'develop';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    (el().querySelector('[data-testid="branch-save"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.branchSaving()).toBeFalse();
+    expect(fixture.componentInstance.branchDraft()).toBe('develop'); // draft kept
+    const err = el().querySelector('.save-err');
+    expect(err?.textContent).toContain("Couldn't save the default branch");
+    expect(err?.getAttribute('role')).toBe('alert');
+    expect(el().textContent).not.toContain('Default branch saved.');
+  });
+
+  it('shows the settings block read-only with the explicit note (proposal #17)', () => {
+    create();
+    openSettings();
+
+    const text = el().textContent ?? '';
+    expect(text).toContain('Auto review');
+    expect(text).toContain('Max files per review');
+    expect(text).toContain("isn't supported by the API yet");
+    // Nothing in the read-only block can pretend to save:
+    expect(el().querySelectorAll('.settings-readonly input').length).toBe(0);
+    expect(el().querySelectorAll('.settings-readonly button').length).toBe(0);
   });
 });

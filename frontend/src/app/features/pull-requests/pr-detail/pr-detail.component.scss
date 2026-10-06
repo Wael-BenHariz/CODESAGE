@@ -10,52 +10,9 @@
   justify-content: center;
   gap: 12px;
   padding: 64px;
-  color: #666666;
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-3);
+  font-family: var(--font-mono);
   font-size: 13px;
-}
-
-.error-state {
-  text-align: center;
-  padding: 64px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-
-  p {
-    margin: 0 0 16px;
-    color: #a0a0a0;
-  }
-
-  button {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    padding: 8px 16px;
-    border-radius: 4px;
-    border: 1px solid #2a2a2a;
-    background: #111111;
-    color: #e5e5e5;
-    cursor: pointer;
-
-    &:hover {
-      border-color: #00e87b;
-      color: #00e87b;
-    }
-  }
-}
-
-.spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #1e1e1e;
-  border-top-color: #00e87b;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .page-header {
@@ -71,14 +28,14 @@
 }
 
 .back-link {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
-  color: #666666;
+  color: var(--text-3);
   display: block;
   margin-bottom: 12px;
 
   &:hover {
-    color: #00e87b;
+    color: var(--accent);
   }
 }
 
@@ -90,14 +47,14 @@
   h1 {
     font-size: 22px;
     font-weight: 700;
-    color: #e5e5e5;
+    color: var(--text-1);
     margin: 0;
     letter-spacing: -0.02em;
   }
 }
 
-.state-badge {
-  font-family: 'JetBrains Mono', monospace;
+.state-chip {
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
@@ -106,19 +63,19 @@
   letter-spacing: 0.05em;
   flex-shrink: 0;
 
-  &.open {
-    background: rgba(0, 232, 123, 0.1);
-    color: #00e87b;
+  &.state-open {
+    background: var(--accent-dim);
+    color: var(--accent);
   }
 
-  &.closed {
-    background: rgba(255, 68, 68, 0.1);
-    color: #ff4444;
+  &.state-closed {
+    background: var(--danger-dim);
+    color: var(--danger);
   }
 
-  &.merged {
-    background: rgba(170, 0, 255, 0.1);
-    color: #aa00ff;
+  &.state-merged {
+    background: var(--purple-dim);
+    color: var(--purple-text);
   }
 }
 
@@ -126,13 +83,27 @@
   display: flex;
   gap: 12px;
   font-size: 13px;
-  color: #666666;
+  color: var(--text-3);
   margin-top: 8px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .pr-number {
-  color: #a0a0a0;
+  color: var(--text-2);
+}
+
+.pr-gh-link {
+  color: var(--accent);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 .header-actions {
@@ -146,7 +117,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
   padding: 10px 18px;
@@ -158,12 +129,29 @@
 }
 
 .btn-primary {
-  background: #00e87b;
-  color: #0a0a0a;
-  border-color: #00e87b;
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
 
   &:hover:not(:disabled) {
-    background: #00cc6d;
+    background: var(--accent-hover);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+/* Retry a failed run (plan §4.3) — visually secondary, never primary-green:
+   it re-queues an expensive run and hides nothing behind a bare icon. */
+.btn-retry {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+
+  &:hover:not(:disabled) {
+    background: var(--danger-dim);
   }
 
   &:disabled {
@@ -173,42 +161,42 @@
 }
 
 .review-status {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   padding: 8px 14px;
   border-radius: 4px;
 
   &.pending {
-    background: rgba(255, 170, 0, 0.1);
-    color: #ffaa00;
+    background: var(--warning-dim);
+    color: var(--warning);
   }
 
   &.in_progress {
-    background: rgba(0, 170, 255, 0.1);
-    color: #00aaff;
+    background: var(--info-dim);
+    color: var(--info);
   }
 
   &.processing {
-    background: rgba(0, 170, 255, 0.1);
-    color: #00aaff;
+    background: var(--info-dim);
+    color: var(--info);
   }
 
   &.ready_to_post {
-    background: rgba(177, 136, 255, 0.1);
-    color: #b188ff;
+    background: var(--purple-dim);
+    color: var(--purple-text);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   &.completed {
-    background: rgba(0, 232, 123, 0.1);
-    color: #00e87b;
+    background: var(--accent-dim);
+    color: var(--accent);
   }
 
   &.failed {
-    background: rgba(255, 68, 68, 0.1);
-    color: #ff4444;
+    background: var(--danger-dim);
+    color: var(--danger);
   }
 }
 
@@ -216,8 +204,8 @@
   display: flex;
   gap: 24px;
   padding: 16px 20px;
-  background: #111111;
-  border: 1px solid #1e1e1e;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   margin-bottom: 24px;
 }
@@ -229,22 +217,22 @@
 }
 
 .stat-value {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 18px;
   font-weight: 700;
 
   &.additions {
-    color: #00e87b;
+    color: var(--accent);
   }
 
   &.deletions {
-    color: #ff4444;
+    color: var(--danger);
   }
 }
 
 .stat-label {
   font-size: 12px;
-  color: #666666;
+  color: var(--text-3);
 }
 
 /* Retry shown when the shared review-stats request failed (never a 0). */
@@ -252,34 +240,34 @@
   align-self: center;
   font-size: 11px;
   padding: 4px 10px;
-  color: #999999;
+  color: var(--text-2);
   background: transparent;
-  border-color: #2a2a2a;
+  border-color: var(--border-strong);
 
   &:hover:not(:disabled) {
-    color: #e0e0e0;
-    border-color: #444444;
+    color: var(--text-1);
+    border-color: var(--border-control);
   }
 }
 
 .card {
-  background: #111111;
-  border: 1px solid #1e1e1e;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 24px;
   margin-bottom: 24px;
 
   h3 {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 14px;
     font-weight: 600;
-    color: #e5e5e5;
+    color: var(--text-1);
     margin: 0 0 16px;
   }
 }
 
 .description-content {
-  color: #a0a0a0;
+  color: var(--text-2);
   line-height: 1.6;
   white-space: pre-wrap;
   font-size: 14px;
@@ -288,12 +276,12 @@
 .diff-placeholder {
   padding: 48px;
   text-align: center;
-  background: #1a1a1a;
+  background: var(--surface-2);
   border-radius: 4px;
-  border: 1px dashed #2a2a2a;
+  border: 1px dashed var(--border-strong);
 
   p {
-    color: #666666;
+    color: var(--text-3);
     margin: 8px 0;
     font-size: 13px;
   }

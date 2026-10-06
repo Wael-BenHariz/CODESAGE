@@ -1,6 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { WritableSignal, signal } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { OrgSettingsComponent } from './org-settings.component';
@@ -20,6 +20,8 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
   let orgSvc: jasmine.SpyObj<OrgSettingsService>;
   let invitations: jasmine.SpyObj<InvitationService>;
   let roleSignal: WritableSignal<{ role: string } | null>;
+  /** Query params served to the component's ActivatedRoute (plan §4.4 nav). */
+  let routeParams: Record<string, string>;
 
   const orgSettings: OrgSettings = {
     orgId: 'org-1',
@@ -88,13 +90,22 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     // need HttpClient (it only reads InvitationService).
     invitations = jasmine.createSpyObj<InvitationService>('InvitationService', ['list']);
     invitations.list.and.returnValue(of([]));
+    routeParams = {};
 
     TestBed.configureTestingModule({
       imports: [OrgSettingsComponent],
       providers: [
-        // <app-site-header> carries routerLink directives → the router's
-        // ActivatedRoute must exist in the test injector.
         provideRouter([]),
+        // Step 8: the component reads ?view= from the ActivatedRoute (the
+        // getter serves the current routeParams — set it before create()).
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            get queryParamMap() {
+              return of(convertToParamMap(routeParams));
+            }
+          }
+        },
         { provide: OrgSettingsService, useValue: orgSvc },
         { provide: InvitationService, useValue: invitations },
         // The component only reads currentUser()?.role.
@@ -387,5 +398,93 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
 
     expect(component.orgForm.error).toContain('nope');
     expect(component.sectionReady('org')).toBeFalse();
+  });
+
+  // --- plan Step 8 (§4.4): sub-navigation + grouped Organization sections ---
+
+  it('splits the Organization overrides into five plain-language groups', () => {
+    create('ORG_ADMIN');
+
+    const titles = Array.from(el().querySelectorAll('.field-group-head h3')).map(
+      h => h.textContent?.trim() ?? ''
+    );
+    expect(titles).toEqual(['Scanners', 'AI agents', 'Limits', 'Posting', 'Model']);
+
+    const group = (id: string): HTMLElement | null =>
+      el().querySelector(`[data-testid="group-${id}"]`);
+    expect(group('scanners')?.querySelector('[data-testid="org-sonarqubeEnabled"]')).not.toBeNull();
+    expect(group('scanners')?.querySelector('[data-testid="org-postingMode"]')).toBeNull();
+    expect(group('agents')?.querySelector('[data-testid="org-enabledAgents"]')).not.toBeNull();
+    expect(
+      group('agents')?.querySelector('[data-testid="org-maxFindingsPerAgent"]')
+    ).not.toBeNull();
+    expect(group('limits')?.querySelector('[data-testid="org-diffCharCap"]')).not.toBeNull();
+    expect(
+      group('limits')?.querySelector('[data-testid="org-maxConcurrentReviews"]')
+    ).not.toBeNull();
+    expect(group('posting')?.querySelector('[data-testid="org-postingMode"]')).not.toBeNull();
+    expect(group('posting')?.querySelector('[data-testid="org-reviewTriggers"]')).not.toBeNull();
+    expect(group('posting')?.querySelector('[data-testid="org-minSeverityToPost"]')).not.toBeNull();
+    expect(group('model')?.querySelector('[data-testid="org-aiModel"]')).not.toBeNull();
+    // All ten fields render exactly once across the five groups.
+    expect(el().querySelectorAll('.setting-field').length).toBe(10);
+  });
+
+  it('keeps platform defaults/ceilings flat under their own h2', () => {
+    create('PLATFORM_ADMIN');
+    expect(el().querySelector('[data-testid="group-defaults"] .field-group-head')).toBeNull();
+    expect(el().querySelector('[data-testid="group-ceilings"] .field-group-head')).toBeNull();
+    expect(
+      el().querySelector('[data-testid="group-defaults"] [data-testid="defaults-postingMode"]')
+    ).not.toBeNull();
+    expect(
+      el().querySelector('[data-testid="group-ceilings"] [data-testid="ceilings-diffCharCap"]')
+    ).not.toBeNull();
+    // The platform admin reaches the Platform destination from the same nav
+    // (the screen itself keeps "Organization" marked current).
+    expect(el().querySelector('[data-testid="settings-nav-platform"]')).not.toBeNull();
+    expect(
+      el().querySelector('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')
+    ).toBe('page');
+  });
+
+  it('renders the Organization panel by default and marks its nav entry current', () => {
+    create('ORG_ADMIN');
+    expect(el().querySelector('[data-testid="members-view"]')).toBeNull();
+    expect(el().querySelector('[data-testid="group-scanners"]')).not.toBeNull();
+    expect(
+      el().querySelector('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')
+    ).toBe('page');
+    expect(
+      el().querySelector('[data-testid="settings-nav-ai"]')?.getAttribute('aria-current')
+    ).toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-platform"]')).toBeNull();
+  });
+
+  it('opens Members & invitations from ?view=members with role explanations', () => {
+    routeParams = { view: 'members' };
+    create('ORG_ADMIN');
+
+    expect(el().querySelector('[data-testid="members-view"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="role-explanations"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="role-developer"]')?.textContent).toContain(
+      'Trigger reviews'
+    );
+    expect(el().querySelector('[data-testid="role-reviewer"]')?.textContent).toContain(
+      'Validate findings'
+    );
+    expect(el().querySelector('[data-testid="role-org-admin"]')?.textContent).toContain(
+      'organization settings'
+    );
+    expect(el().querySelector('[data-testid="role-platform-admin"]')?.textContent).toContain(
+      'Platform-wide'
+    );
+    // The Organization panel is swapped out, not stacked below.
+    expect(el().querySelector('[data-testid="group-scanners"]')).toBeNull();
+    expect(
+      el().querySelector('[data-testid="settings-nav-members"]')?.getAttribute('aria-current')
+    ).toBe('page');
+    // The invitations list loads for the selected org.
+    expect(invitations.list).toHaveBeenCalled();
   });
 });
