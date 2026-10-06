@@ -4,7 +4,12 @@
   <nav class="nav">
     <div class="nav-inner">
       <a href="/" class="logo">
-        <span class="logo-icon">▣</span>
+        <span class="logo-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor" />
+            <path class="glyph" d="M7 9l3 3-3 3M12.5 15H17" />
+          </svg>
+        </span>
         <span class="logo-text">CodeSage</span>
       </a>
       <a routerLink="/login" class="nav-cta">Sign In →</a>
@@ -26,18 +31,16 @@
             <span class="cmd">codesage review</span>
             <span class="cursor"></span>
           </div>
+          <div class="line output"><span class="success">✓</span> Analyzing pull request…</div>
           <div class="line output">
-            <span class="success">✓</span> Analyzing pull request #42...
-          </div>
-          <div class="line output"><span class="success">✓</span> Found 3 issues in 12 files</div>
-          <div class="line output">
-            <span class="warning">⚠</span> Potential null reference in auth.ts:47
+            <span class="success">✓</span> SonarQube + Semgrep findings normalized
           </div>
           <div class="line output">
-            <span class="error">✗</span> Security: hardcoded credentials detected
+            <span class="warning">⚠</span> Potential null reference in auth.ts
           </div>
+          <div class="line output"><span class="error">✗</span> Hardcoded credentials detected</div>
           <div class="line output">
-            <span class="info">ℹ</span> Performance: consider memoizing computeHash()
+            <span class="info">ℹ</span> Consider memoizing computeHash()
           </div>
         </div>
       </div>
@@ -46,11 +49,11 @@
         <div class="badge-pill">AI-Powered Code Review</div>
         <h1>Ship cleaner code.<br /><span class="accent">Catch issues early.</span></h1>
         <p class="hero-desc">
-          Automated PR analysis with intelligent suggestions. Connect your GitHub repos and let AI
-          review every pull request before your team does.
+          Every pull request gets a static-analysis pass and a multi-agent AI review — then one
+          clear summary posted back to GitHub. Approve it first, or post automatically.
         </p>
         <div class="hero-actions">
-          <a routerLink="/login" class="btn btn-primary btn-lg">Get Started Free</a>
+          <a routerLink="/login" class="btn btn-primary btn-lg">Get Started</a>
           <a href="#features" class="btn btn-ghost btn-lg">See How It Works</a>
         </div>
       </div>
@@ -60,8 +63,8 @@
   <section id="features" class="features">
     <div class="features-inner">
       <div class="section-header">
-        <span class="section-label">Features</span>
-        <h2>Everything you need for<br />better code reviews</h2>
+        <span class="section-label">How it works</span>
+        <h2>Analysis, review and verdict —<br />in one pass</h2>
       </div>
       <div class="features-grid">
         <div class="feature-card">
@@ -78,12 +81,12 @@
               <path d="m21 21-4.35-4.35" />
             </svg>
           </div>
-          <h3>Automated Analysis</h3>
+          <h3>Static analysis first</h3>
           <p>
-            AI reviews every pull request automatically, catching bugs, security issues, and code
-            smells before humans do.
+            SonarQube and Semgrep scan every pull request. Findings from both tools arrive in one
+            normalized report, deduplicated across engines.
           </p>
-          <div class="feature-tag">AI-Powered</div>
+          <div class="feature-tag">SonarQube + Semgrep</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">
@@ -100,12 +103,12 @@
               />
             </svg>
           </div>
-          <h3>Smart Suggestions</h3>
+          <h3>Multi-agent AI review</h3>
           <p>
-            Actionable feedback with code examples and best practice recommendations tailored to
-            your codebase.
+            Specialist agents cover security, complexity, performance, style and tests — a synthesis
+            step then merges their findings into one summary.
           </p>
-          <div class="feature-tag">Context-Aware</div>
+          <div class="feature-tag">5 specialist agents</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">
@@ -121,10 +124,10 @@
               <path d="M7 11V7a5 5 0 0110 0v4" />
             </svg>
           </div>
-          <h3>Secure Integration</h3>
+          <h3>Secure by default</h3>
           <p>
-            GitHub OAuth and App integration with encrypted token management. Your code never leaves
-            GitHub's infrastructure.
+            GitHub App permissions, Keycloak sign-in, and per-user LLM keys encrypted at rest. Your
+            code stays inside GitHub's infrastructure.
           </p>
           <div class="feature-tag">Encrypted</div>
         </div>
@@ -141,12 +144,12 @@
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
             </svg>
           </div>
-          <h3>Real-time Updates</h3>
+          <h3>Reviews you control</h3>
           <p>
-            Instant notifications when reviews complete. Track progress and see results as they
-            happen.
+            Watch the pipeline run, then post automatically or stage the summary for approval —
+            decided per organization.
           </p>
-          <div class="feature-tag">Live</div>
+          <div class="feature-tag">Staged or automatic</div>
         </div>
       </div>
     </div>
@@ -154,7 +157,15 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <span class="footer-logo">▣ CodeSage</span>
+      <span class="footer-logo">
+        <span class="logo-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14">
+            <rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor" />
+            <path class="glyph" d="M7 9l3 3-3 3M12.5 15H17" />
+          </svg>
+        </span>
+        CodeSage
+      </span>
       <span class="footer-copy">Built with FastAPI + Angular</span>
     </div>
   </footer>

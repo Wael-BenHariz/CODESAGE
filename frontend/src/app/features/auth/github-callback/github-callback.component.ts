@@ -4,13 +4,14 @@ import { RouterLink } from '@angular/router';
 import { ActivatedRoute, Router } from '@angular/router';
 import { GithubAppService } from '../../../core/services/github-app.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { SpinnerComponent } from '../../../shared/components/spinner/spinner.component';
 
 type CallbackState = 'processing' | 'success' | 'error';
 
 @Component({
   selector: 'app-github-callback',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, SpinnerComponent],
   templateUrl: './github-callback.component.html',
   styleUrl: './github-callback.component.scss'
 })
