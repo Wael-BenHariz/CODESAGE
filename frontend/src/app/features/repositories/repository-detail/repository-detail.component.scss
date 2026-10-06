@@ -1,166 +1,326 @@
+// Repository detail (plan §4.2) — tokens only, frozen palette.
+// This file was a LIGHT-theme leftover (background:white cards, #1a202c h1,
+// #4a5568 copy, indigo #667eea hover): on the dark app its heading and body
+// text were near-invisible and the card flashed white. Every value below is
+// now a token — the indigo hover consolidates to --accent (documented AA/
+// palette fix, no hue outside the token set).
 .repo-detail-page {
   max-width: 1000px;
   margin: 0 auto;
-  padding: 32px;
+  padding: var(--space-6);
 }
 
-.loading {
-  text-align: center;
-  padding: 48px;
-  color: #718096;
-}
-
-.error-state {
-  text-align: center;
-  padding: 48px 32px;
-  color: #999999;
-  background: #111111;
-  border: 1px solid #1e1e1e;
-  border-radius: 6px;
-
-  p {
-    margin-bottom: 16px;
-  }
-}
-
-.btn {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  color: #e0e0e0;
-  background: transparent;
-  border: 1px solid #2a2a2a;
-
-  &:hover:not(:disabled) {
-    border-color: #667eea;
-  }
+.state-slot {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-6) 0;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 24px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
 }
 
 .back-link {
-  color: #718096;
+  color: var(--text-3);
   text-decoration: none;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 
   &:hover {
-    color: #667eea;
+    color: var(--accent);
   }
 }
 
 h1 {
-  font-size: 28px;
-  color: #1a202c;
+  font-size: var(--font-size-2xl);
+  color: var(--text-1);
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
-.toggle-btn {
-  padding: 12px 24px;
-  border-radius: 6px;
-  font-size: 14px;
+.status-badge {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--danger-dim);
+  color: var(--danger);
+  text-transform: uppercase;
   font-weight: 600;
-  cursor: pointer;
-  background: #edf2f7;
-  border: none;
-  color: #4a5568;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #e2e8f0;
-  }
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
 
   &.enabled {
-    background: #c6f6d5;
-    color: #2f855a;
-
-    &:hover {
-      background: #9ae6b4;
-    }
+    background: var(--accent-dim);
+    color: var(--accent);
   }
 }
 
 .repo-info-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
 }
 
 .description {
-  color: #4a5568;
-  margin: 0 0 24px;
+  color: var(--text-3);
+  margin: 0 0 var(--space-5);
 }
 
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .meta-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .label {
-  font-size: 12px;
-  color: #718096;
+  font-size: var(--font-size-xs);
+  color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-family: var(--font-mono);
 }
 
 .value {
-  font-size: 16px;
+  font-size: var(--font-size-md);
   font-weight: 600;
-  color: #2d3748;
+  color: var(--text-1);
+}
+
+// ─── Tabs + panels ───
+
+.tab-panels {
+  margin-top: var(--space-5);
+}
+
+.tabpanel {
+  outline: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+// ─── Settings tab ───
+
+.settings-heading {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  margin: var(--space-5) 0 var(--space-3);
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.setting-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.setting-label {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.setting-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-3);
+  line-height: var(--line-height-base);
+}
+
+.toggle-btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  transition: all var(--motion-base) var(--motion-ease);
+
+  &:hover:not(:disabled) {
+    background: var(--surface-3);
+    color: var(--text-1);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 
   &.enabled {
-    color: #2f855a;
-  }
-}
+    background: var(--accent-dim);
+    border-color: rgba(0, 232, 123, 0.3);
+    color: var(--accent);
 
-.actions-section {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-
-  h2 {
-    font-size: 18px;
-    color: #1a202c;
-    margin: 0 0 16px;
-  }
-}
-
-.action-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.action-btn {
-  padding: 12px 24px;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.2s;
-
-  &.primary {
-    background: #667eea;
-    color: white;
-
-    &:hover {
-      background: #5a67d8;
+    &:hover:not(:disabled) {
+      background: rgba(0, 232, 123, 0.18);
     }
+  }
+}
+
+.branch-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.branch-form {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.branch-input {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-1);
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.btn {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all var(--motion-fast) var(--motion-ease);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-1);
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+
+  &:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+}
+
+.save-ok {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--accent);
+  margin: var(--space-2) 0 0;
+}
+
+.save-err {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--danger);
+  margin: var(--space-2) 0 0;
+}
+
+// Read-only settings block (proposal #17 — no update route exists).
+.settings-readonly {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.setting-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+
+  dt {
+    color: var(--text-3);
+  }
+
+  dd {
+    margin: 0;
+    color: var(--text-1);
+    font-weight: 600;
+  }
+}
+
+.settings-note {
+  font-size: var(--font-size-xs);
+  color: var(--text-3);
+  margin: var(--space-3) 0 0;
+  line-height: var(--line-height-base);
+}
+
+// Embedded PR list (tab 1) renders without the detail's own card chrome.
+.tabpanel app-pr-list {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .repo-detail-page {
+    padding: var(--space-4);
+  }
+
+  .page-header {
+    flex-wrap: wrap;
+  }
+
+  .setting-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

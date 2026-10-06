@@ -4,11 +4,13 @@ import { NEVER, of, throwError } from 'rxjs';
 
 import { PrListComponent } from './pr-list.component';
 import { PullRequestService } from '../../../core/services/pull-request.service';
-import { AuthService } from '../../../core/services/auth.service';
-import { OrgSettingsService } from '../../../core/services/org-settings.service';
-import { PullRequest } from '../../../core/models/pull-request.model';
+import {
+  PullRequest,
+  PullRequestReviewRef,
+  PullRequestState
+} from '../../../core/models/pull-request.model';
 
-describe('PrListComponent — four states + call contract (plan Step 2)', () => {
+describe('PrListComponent — four states, filters, pagination (plan Step 6)', () => {
   let fixture: ComponentFixture<PrListComponent>;
   let github: jasmine.SpyObj<PullRequestService>;
 
@@ -30,6 +32,14 @@ describe('PrListComponent — four states + call contract (plan Step 2)', () => 
     updatedAt: '2026-01-02T00:00:00Z'
   };
 
+  const makePr = (number: number, state: PullRequestState, author = 'octocat'): PullRequest => ({
+    ...pr,
+    id: `pr-${number}`,
+    number,
+    state,
+    author: { login: author, avatarUrl: '' }
+  });
+
   beforeEach(() => {
     github = jasmine.createSpyObj<PullRequestService>('PullRequestService', ['getPullRequests']);
 
@@ -37,10 +47,7 @@ describe('PrListComponent — four states + call contract (plan Step 2)', () => 
       imports: [PrListComponent],
       providers: [
         provideRouter([]), // the component template uses RouterLink
-        { provide: PullRequestService, useValue: github },
-        // <app-site-header> → AuthContextService (no session in tests).
-        { provide: AuthService, useValue: { currentUser: () => null } },
-        { provide: OrgSettingsService, useValue: { listOrgs: () => of([]) } }
+        { provide: PullRequestService, useValue: github }
       ]
     });
   });
@@ -54,6 +61,10 @@ describe('PrListComponent — four states + call contract (plan Step 2)', () => 
 
   function el(): HTMLElement {
     return fixture.nativeElement as HTMLElement;
+  }
+
+  function stateChips(): HTMLButtonElement[] {
+    return Array.from(el().querySelectorAll('.filter-btn'));
   }
 
   it('shows an explicit error state on failure, not "No pull requests found"', () => {
@@ -118,5 +129,141 @@ describe('PrListComponent — four states + call contract (plan Step 2)', () => 
     create();
 
     expect(github.getPullRequests).toHaveBeenCalledWith('acme', 'demo');
+  });
+
+  // --- Step 6: written state chips, no review badge, embedded --------------
+
+  it('labels the row state with text (never color-only, emoji icons gone)', () => {
+    github.getPullRequests.and.returnValue(of([makePr(1, 'open'), makePr(2, 'merged')]));
+    create();
+
+    const chips = el().querySelectorAll('.state-chip');
+    expect(chips.length).toBe(2);
+    expect(chips[0].textContent?.trim()).toBe('open');
+    expect(chips[1].textContent?.trim()).toBe('merged');
+    expect(el().textContent).not.toContain('🟢');
+    expect(el().textContent).not.toContain('🟣');
+  });
+
+  it('never renders a review badge on rows — even when the model carries one (gap 7)', () => {
+    const review: PullRequestReviewRef = { status: 'completed', reviewId: 'rev-1' };
+    github.getPullRequests.and.returnValue(of([{ ...pr, reviewStatus: review }]));
+    create();
+
+    expect(el().querySelectorAll('.pr-item').length).toBe(1);
+    expect(el().querySelector('.pr-review-status')).toBeNull();
+    expect(el().textContent).not.toContain('completed');
+  });
+
+  it('hides the standalone page header when embedded in repository-detail', () => {
+    github.getPullRequests.and.returnValue(of([pr]));
+    create();
+    expect(el().querySelector('h1')?.textContent).toContain('Pull Requests');
+
+    fixture.componentRef.setInput('embedded', true);
+    fixture.detectChanges();
+
+    expect(el().querySelector('h1')).toBeNull();
+    expect(el().querySelectorAll('.pr-item').length).toBe(1); // list unaffected
+  });
+
+  // --- Step 6: state + author filters (client-side over the window) --------
+
+  it('filters rows by state, and "closed" counts merged rows too', () => {
+    github.getPullRequests.and.returnValue(
+      of([makePr(1, 'open'), makePr(2, 'closed'), makePr(3, 'merged')])
+    );
+    create();
+
+    const chips = stateChips();
+    expect(chips.map(c => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      'All 3',
+      'Open 1',
+      'Closed 2'
+    ]);
+
+    chips[2].click(); // Closed (includes merged)
+    fixture.detectChanges();
+    expect(el().querySelectorAll('.pr-item').length).toBe(2);
+    expect(fixture.componentInstance.filter()).toBe('closed');
+
+    chips[1].click(); // Open
+    fixture.detectChanges();
+    expect(el().querySelectorAll('.pr-item').length).toBe(1);
+    expect(el().textContent).toContain('Fix the thing');
+  });
+
+  it('filters rows by author (case-insensitive substring) with a clear path back', () => {
+    github.getPullRequests.and.returnValue(
+      of([makePr(1, 'open', 'octocat'), makePr(2, 'open', 'Hubot')])
+    );
+    create();
+
+    const input = el().querySelector('[data-testid="pr-author-filter"]') as HTMLInputElement;
+    input.value = 'hub';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(el().querySelectorAll('.pr-item').length).toBe(1);
+    expect(el().textContent).toContain('#2');
+
+    input.value = 'nobody';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(el().querySelectorAll('.pr-item').length).toBe(0);
+    expect(el().textContent).toContain('No pull requests match your filters');
+    expect(el().textContent).not.toContain('No pull requests found'); // not the empty state
+
+    (el().querySelector('[data-testid="clear-pr-filters"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(el().querySelectorAll('.pr-item').length).toBe(2);
+    expect(input.value).toBe('');
+  });
+
+  // --- Step 6: pagination (pageSize rows per page) -------------------------
+
+  it('pages the rows 10 at a time with working prev/next controls', () => {
+    const rows = Array.from({ length: 11 }, (_, i) => makePr(i + 1, 'open'));
+    github.getPullRequests.and.returnValue(of(rows));
+    create();
+
+    expect(el().querySelectorAll('.pr-item').length).toBe(10);
+    const pager = el().querySelector('[data-testid="pr-pagination"]');
+    expect(pager).not.toBeNull();
+    expect(pager?.textContent).toContain('Page 1 of 2');
+    expect(pager?.textContent).toContain('1–10 of 11');
+
+    const buttons = Array.from(el().querySelectorAll('.page-btn'));
+    expect((buttons[0] as HTMLButtonElement).disabled).toBeTrue(); // first page
+
+    (buttons[1] as HTMLButtonElement).click(); // Next
+    fixture.detectChanges();
+
+    expect(el().querySelectorAll('.pr-item').length).toBe(1);
+    expect(el().textContent).toContain('#11');
+    const after = Array.from(el().querySelectorAll('.page-btn')) as HTMLButtonElement[];
+    expect(after[1].disabled).toBeTrue(); // last page
+    expect(after[0].disabled).toBeFalse();
+
+    after[0].click(); // Previous
+    fixture.detectChanges();
+    expect(el().querySelectorAll('.pr-item').length).toBe(10);
+  });
+
+  it('resets to page 1 when a state filter changes', () => {
+    const rows = Array.from({ length: 12 }, (_, i) => makePr(i + 1, 'open'));
+    github.getPullRequests.and.returnValue(of(rows));
+    create();
+
+    const next = Array.from(el().querySelectorAll('.page-btn'))[1] as HTMLButtonElement;
+    next.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.page()).toBe(2);
+
+    stateChips()[1].click(); // Open → re-slice
+    fixture.detectChanges();
+    expect(fixture.componentInstance.page()).toBe(1);
   });
 });

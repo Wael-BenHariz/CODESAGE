@@ -2,12 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map, of, switchMap } from 'rxjs';
 
 import { ApiService } from './api.service';
-import { Repository } from '../models/repository.model';
+import { Repository, RepositoryDetail } from '../models/repository.model';
 import { GitHubRepo } from '../models/github-app.model';
 import {
   RepositoryDto,
+  RepositoryDetailDto,
   RepositoryListDto,
   toRepository,
+  toRepositoryDetail,
   toRepositoryList
 } from './mappers/repository.mapper';
 
@@ -101,6 +103,29 @@ export class RepositoryService {
       switchMap(id => this.api.get<RepositoryDto>(`/repositories/${id}`)),
       map(toRepository)
     );
+  }
+
+  /**
+   * `GET /repositories/{uuid}/detail` — resolves the owner/name URL segment
+   * first; adds the header stats (`total_prs`, `total_reviews`) and the
+   * always-default `settings` block (read-only, proposal #17).
+   */
+  getRepositoryDetail(owner: string, repo: string): Observable<RepositoryDetail> {
+    return this.resolveId(owner, repo).pipe(
+      switchMap(id => this.api.get<RepositoryDetailDto>(`/repositories/${id}/detail`)),
+      map(toRepositoryDetail)
+    );
+  }
+
+  /**
+   * `PATCH /repositories/{uuid}` — the only fields the API accepts today
+   * (`enabled` / `default_branch`; see docs/BACKEND_GAPS_FOR_UI.md #17).
+   */
+  updateRepository(
+    id: string,
+    patch: { enabled?: boolean; default_branch?: string }
+  ): Observable<Repository> {
+    return this.api.patch<RepositoryDto>(`/repositories/${id}`, patch).pipe(map(toRepository));
   }
 
   enableRepository(id: string): Observable<Repository> {

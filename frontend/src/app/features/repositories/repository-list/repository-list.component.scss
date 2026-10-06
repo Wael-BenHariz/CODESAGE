@@ -12,21 +12,21 @@
 
   .header-left {
     .back-link {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 13px;
-      color: #666666;
+      color: var(--text-3);
       display: block;
       margin-bottom: 8px;
 
       &:hover {
-        color: #00e87b;
+        color: var(--accent);
       }
     }
 
     h1 {
       font-size: 24px;
       font-weight: 700;
-      color: #e5e5e5;
+      color: var(--text-1);
       margin: 0;
       letter-spacing: -0.02em;
     }
@@ -46,60 +46,42 @@
 }
 
 .filter-btn {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 6px 14px;
   background: transparent;
-  border: 1px solid #1e1e1e;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  color: #666666;
+  color: var(--text-3);
   cursor: pointer;
   transition: all 0.1s ease;
 
   .count {
-    color: #444444;
+    color: var(--text-3);
   }
 
   &:hover {
-    border-color: #2a2a2a;
-    color: #a0a0a0;
+    border-color: var(--border-strong);
+    color: var(--text-2);
   }
 
   &.active {
     background: rgba(0, 232, 123, 0.1);
     border-color: rgba(0, 232, 123, 0.2);
-    color: #00e87b;
+    color: var(--accent);
 
     .count {
-      color: #00e87b;
+      color: var(--accent);
     }
   }
 }
 
-.loading {
+// Loading now renders the shared app-spinner primitive (its label carries
+// the loading copy) — the local spinner/keyframes block is gone.
+.state-slot {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 64px;
-  color: #666666;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-}
-
-.spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #1e1e1e;
-  border-top-color: #00e87b;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  padding: var(--space-6) 0;
 }
 
 .empty {
@@ -107,7 +89,7 @@
   padding: 64px;
 
   p {
-    color: #666666;
+    color: var(--text-3);
     margin: 0 0 16px;
     font-size: 14px;
   }
@@ -120,14 +102,14 @@
 }
 
 .repo-card {
-  background: #111111;
-  border: 1px solid #1e1e1e;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 20px;
   transition: border-color 0.15s ease;
 
   &:hover {
-    border-color: #2a2a2a;
+    border-color: var(--border-strong);
   }
 }
 
@@ -139,24 +121,24 @@
 }
 
 .repo-name {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 600;
-  color: #e5e5e5;
+  color: var(--text-1);
   text-decoration: none;
 
   &:hover {
-    color: #00e87b;
+    color: var(--accent);
   }
 }
 
 .status-badge {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 3px;
   background: rgba(255, 68, 68, 0.1);
-  color: #ff4444;
+  color: var(--danger);
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -164,13 +146,13 @@
 
   &.enabled {
     background: rgba(0, 232, 123, 0.1);
-    color: #00e87b;
+    color: var(--accent);
   }
 }
 
 .repo-desc {
   font-size: 13px;
-  color: #666666;
+  color: var(--text-3);
   margin: 0 0 14px;
   line-height: 1.5;
 }
@@ -183,19 +165,19 @@
 }
 
 .lang-badge {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 2px 8px;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 3px;
-  color: #a0a0a0;
+  color: var(--text-2);
 }
 
 .meta-item {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: #666666;
+  color: var(--text-3);
 }
 
 .repo-actions {
@@ -203,13 +185,13 @@
   gap: 8px;
   align-items: center;
   padding-top: 14px;
-  border-top: 1px solid #1e1e1e;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .action-link {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #00e87b;
+  color: var(--accent);
   text-decoration: none;
   margin-right: auto;
 
@@ -223,7 +205,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
   padding: 6px 12px;
@@ -240,12 +222,12 @@
 }
 
 .btn-primary {
-  background: #00e87b;
-  color: #0a0a0a;
-  border-color: #00e87b;
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
 
   &:hover:not(:disabled) {
-    background: #00cc6d;
+    background: var(--accent-hover);
   }
 
   &:disabled {
@@ -256,16 +238,16 @@
 
 .btn-ghost {
   background: transparent;
-  color: #666666;
+  color: var(--text-3);
   border-color: transparent;
 
   &:hover {
-    color: #a0a0a0;
-    background: #1a1a1a;
+    color: var(--text-2);
+    background: var(--surface-2);
   }
 
   &.danger {
-    color: #ff4444;
+    color: var(--danger);
 
     &:hover {
       background: rgba(255, 68, 68, 0.1);
@@ -282,7 +264,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: var(--z-dialog);
   animation: fadeIn 0.2s ease;
 }
 
@@ -296,8 +278,8 @@
 }
 
 .modal {
-  background: #111111;
-  border: 1px solid #1e1e1e;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   width: 90%;
   max-width: 680px;
@@ -323,25 +305,25 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--border-subtle);
 
   h2 {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 16px;
     font-weight: 600;
-    color: #e5e5e5;
+    color: var(--text-1);
     margin: 0;
   }
 }
 
 .close-btn {
   font-size: 24px;
-  color: #666666;
+  color: var(--text-3);
   line-height: 1;
   padding: 4px;
 
   &:hover {
-    color: #e5e5e5;
+    color: var(--text-1);
   }
 }
 
@@ -362,14 +344,14 @@
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
-  background: #1a1a1a;
+  background: var(--surface-2);
   border: 1px solid transparent;
   border-radius: 4px;
   transition: all 0.1s ease;
 
   &:hover {
-    background: #222222;
-    border-color: #2a2a2a;
+    background: var(--surface-3);
+    border-color: var(--border-strong);
   }
 }
 
@@ -382,10 +364,10 @@
 }
 
 .repo-select-name {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
-  color: #e5e5e5;
+  color: var(--text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -393,7 +375,7 @@
 
 .repo-select-desc {
   font-size: 12px;
-  color: #666666;
+  color: var(--text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -407,11 +389,11 @@
 }
 
 .private-badge {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   padding: 2px 6px;
   background: rgba(255, 68, 68, 0.1);
-  color: #ff4444;
+  color: var(--danger);
   border-radius: 3px;
   text-transform: uppercase;
   font-weight: 600;
@@ -427,27 +409,27 @@
   text-align: center;
 
   p {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
-    color: #ff5555;
+    color: var(--danger);
     margin: 0;
   }
 }
 
 .save-error {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #ff5555;
+  color: var(--danger);
   margin-top: 12px;
   text-align: center;
 }
 
 .selection-note {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #666666;
-  background: #111111;
-  border: 1px solid #1e1e1e;
+  color: var(--text-3);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   padding: 10px 14px;
   margin-bottom: 24px;
@@ -457,9 +439,173 @@
     border: none;
     padding: 0;
     font: inherit;
-    color: #00e87b;
+    color: var(--accent);
     cursor: pointer;
     text-decoration: underline;
     margin-left: 4px;
+  }
+}
+
+// ─── Toolbar: search · status filter · view toggle (Step 6) ───
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+
+  .filters {
+    margin-bottom: 0;
+  }
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-3);
+
+  &:focus-within {
+    border-color: var(--accent);
+  }
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-1);
+
+  &::placeholder {
+    color: var(--text-3);
+  }
+}
+
+.view-toggle {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: 6px var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all var(--motion-fast) var(--motion-ease);
+
+  &:hover {
+    border-color: var(--border-strong);
+    color: var(--text-2);
+  }
+
+  &.active {
+    background: var(--accent-dim);
+    border-color: rgba(0, 232, 123, 0.2);
+    color: var(--accent);
+  }
+}
+
+// ─── Table view ───
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.repo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+
+  th,
+  td {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+
+  th {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-3);
+    background: var(--surface-2);
+  }
+
+  td {
+    color: var(--text-2);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  tbody tr:hover {
+    background: var(--surface-2);
+  }
+
+  .repo-name {
+    font-size: var(--font-size-sm);
+  }
+
+  .row-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
+
+// ─── Responsive ───
+
+@media (max-width: 760px) {
+  .page-header {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+
+    .search-box {
+      max-width: none;
+    }
+
+    .filters {
+      flex-wrap: wrap;
+    }
+
+    .view-toggle {
+      margin-left: 0;
+    }
+  }
+
+  .repo-grid {
+    grid-template-columns: 1fr;
   }
 }

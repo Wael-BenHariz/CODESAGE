@@ -1,4 +1,4 @@
-import { Repository } from '../../models/repository.model';
+import { Repository, RepositoryDetail } from '../../models/repository.model';
 import { PaginatedResponse } from '../../models/pagination.model';
 
 /**
@@ -57,4 +57,31 @@ export function toRepository(dto: RepositoryDto): Repository {
 
 export function toRepositoryList(dto: RepositoryListDto): Repository[] {
   return (dto?.items ?? []).map(toRepository);
+}
+
+/** Wire shape of `GET /repositories/{id}/detail` (RepositoryDetail schema). */
+export interface RepositoryDetailDto extends RepositoryDto {
+  settings?: {
+    auto_review?: boolean;
+    review_on_push?: boolean;
+    notify_on_failure?: boolean;
+    max_files_per_review?: number;
+  } | null;
+  total_prs?: number;
+  total_reviews?: number;
+}
+
+/** Defaults mirror backend `RepositorySettings` (schemas/repository.py). */
+export function toRepositoryDetail(dto: RepositoryDetailDto): RepositoryDetail {
+  return {
+    ...toRepository(dto),
+    totalPrs: dto.total_prs ?? 0,
+    totalReviews: dto.total_reviews ?? 0,
+    settings: {
+      autoReview: dto.settings?.auto_review ?? true,
+      reviewOnPush: dto.settings?.review_on_push ?? false,
+      notifyOnFailure: dto.settings?.notify_on_failure ?? true,
+      maxFilesPerReview: dto.settings?.max_files_per_review ?? 50
+    }
+  };
 }

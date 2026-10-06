@@ -13,11 +13,13 @@ import { Repository } from '../../../core/models/repository.model';
 import { User } from '../../../core/models/user.model';
 
 /**
- * The install CTA (window.location.href) and Remove (window.confirm) are
- * render-asserted only — firing them would navigate or block the Karma
- * runner page (same class of hazard as the documented beforeunload rule).
+ * The install CTA (window.location.href) is render-asserted only — firing it
+ * would navigate away from the Karma runner page (same class of hazard as the
+ * documented beforeunload rule). Remove/disable no longer use window.confirm:
+ * they open the app-confirm-dialog primitive, so the full confirm flow IS
+ * tested here (Step 6).
  */
-describe('RepositoryListComponent — grid, filters and connect modal', () => {
+describe('RepositoryListComponent — grid, filters, search, views and connect modal', () => {
   let fixture: ComponentFixture<RepositoryListComponent>;
   let component: RepositoryListComponent;
   let repos: jasmine.SpyObj<RepositoryService>;
@@ -77,6 +79,7 @@ describe('RepositoryListComponent — grid, filters and connect modal', () => {
     repos.getRepositories.and.returnValue(of([repo('api', true), repo('web', false)]));
     repos.enableRepository.and.callFake((id: string) => of(repo(id, true)));
     repos.disableRepository.and.callFake((id: string) => of(repo(id, false)));
+    repos.deleteRepository.and.returnValue(of(undefined));
 
     github = {
       githubInstalled: installed,
@@ -162,11 +165,97 @@ describe('RepositoryListComponent — grid, filters and connect modal', () => {
     expect(repos.getRepositories).toHaveBeenCalledTimes(2); // post-action refresh
   });
 
-  it('disables an enabled repo', () => {
+  it('confirms before disabling an enabled repo, then runs the action', () => {
     component.toggleRepo(repo('api', true));
+    fixture.detectChanges();
+
+    // Destructive → the confirm dialog opens first, nothing has fired yet.
+    expect(repos.disableRepository).not.toHaveBeenCalled();
+    expect(el().querySelector('[data-testid="repo-confirm"]')).not.toBeNull();
+
+    component.confirmPending();
+    fixture.detectChanges();
 
     expect(repos.disableRepository).toHaveBeenCalledWith('repo-api');
+    expect(repos.getRepositories).toHaveBeenCalledTimes(2); // post-action refresh
+    expect(el().querySelector('[data-testid="repo-confirm"]')).toBeNull(); // closed
+  });
+
+  it('deletes only after an explicit confirmation (dialog, not window.confirm)', () => {
+    component.deleteRepo(repo('api', true));
+    fixture.detectChanges();
+
+    expect(repos.deleteRepository).not.toHaveBeenCalled();
+    expect(el().textContent).toContain('Remove acme/api from CodeSage?');
+
+    component.confirmPending();
+    fixture.detectChanges();
+
+    expect(repos.deleteRepository).toHaveBeenCalledWith('repo-api');
     expect(repos.getRepositories).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancelling the dialog runs nothing', () => {
+    component.deleteRepo(repo('api', true));
+    fixture.detectChanges();
+
+    component.cancelConfirm();
+    fixture.detectChanges();
+
+    expect(repos.deleteRepository).not.toHaveBeenCalled();
+    expect(component.pendingConfirm()).toBeNull();
+    expect(el().querySelector('[data-testid="repo-confirm"]')).toBeNull();
+  });
+
+  it('a failed confirm keeps the dialog open with an inline alert', () => {
+    repos.disableRepository.and.returnValue(throwError(() => new Error('boom')));
+    component.toggleRepo(repo('api', true));
+    component.confirmPending();
+    fixture.detectChanges();
+
+    expect(component.confirmBusy()).toBeFalse();
+    expect(el().querySelector('[data-testid="repo-confirm"]')).not.toBeNull();
+    expect(el().querySelector('.cd-error')?.textContent).toContain("Couldn't disable acme/api");
+    expect(el().querySelector('.cd-error')?.getAttribute('role')).toBe('alert');
+    expect(repos.getRepositories).toHaveBeenCalledTimes(1); // no refresh on failure
+  });
+
+  it('filters by search term over full name and description', () => {
+    component.search.set('api');
+    fixture.detectChanges();
+    expect(el().querySelectorAll('.repo-card').length).toBe(1);
+
+    component.search.set('nothing-matches');
+    fixture.detectChanges();
+    expect(el().querySelectorAll('.repo-card').length).toBe(0);
+    expect(el().textContent).toContain('No repositories match your search or filters');
+
+    // …and the empty-filter branch offers a way back.
+    (el().querySelector('[data-testid="clear-filters"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(component.search()).toBe('');
+    expect(el().querySelectorAll('.repo-card').length).toBe(2);
+  });
+
+  it('switches between the card grid and the table view', () => {
+    expect(el().querySelector('[data-testid="repo-grid"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="view-cards"]')?.getAttribute('aria-pressed')).toBe(
+      'true'
+    );
+
+    (el().querySelector('[data-testid="view-table"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(el().querySelector('[data-testid="repo-table"]')).not.toBeNull();
+    expect(el().querySelectorAll('.repo-card').length).toBe(0);
+    expect(el().querySelectorAll('tbody tr').length).toBe(2);
+    expect(el().querySelector('[data-testid="view-table"]')?.getAttribute('aria-pressed')).toBe(
+      'true'
+    );
+
+    (el().querySelector('[data-testid="view-cards"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el().querySelector('[data-testid="repo-grid"]')).not.toBeNull();
   });
 
   it('shows the connect CTA when the App is installed but no repo exists', () => {

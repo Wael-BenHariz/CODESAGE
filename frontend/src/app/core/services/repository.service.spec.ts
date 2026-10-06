@@ -3,7 +3,7 @@ import { of, throwError } from 'rxjs';
 
 import { ApiError, ApiService } from './api.service';
 import { RepositoryService } from './repository.service';
-import { Repository } from '../models/repository.model';
+import { Repository, RepositoryDetail } from '../models/repository.model';
 import { RepositoryListDto, toRepository } from './mappers/repository.mapper';
 
 describe('RepositoryService (/repositories group)', () => {
@@ -33,7 +33,7 @@ describe('RepositoryService (/repositories group)', () => {
   };
 
   beforeEach(() => {
-    api = jasmine.createSpyObj<ApiService>('ApiService', ['get', 'post', 'delete']);
+    api = jasmine.createSpyObj<ApiService>('ApiService', ['get', 'post', 'patch', 'delete']);
     TestBed.configureTestingModule({
       providers: [{ provide: ApiService, useValue: api }]
     });
@@ -140,5 +140,40 @@ describe('RepositoryService (/repositories group)', () => {
     expect(repo.fullName).toBe('acme/api');
     // Regression guard: /repositories/{owner}/{repo} never existed on the API.
     expect(api.get).not.toHaveBeenCalledWith('/repositories/acme/api');
+  });
+
+  it('getRepositoryDetail resolves owner/name → GET /repositories/{uuid}/detail and maps stats + settings', () => {
+    api.get.and.returnValues(
+      of({ items: [dto], total: 1, page: 1, per_page: 100, pages: 1 }),
+      of({
+        ...dto,
+        total_prs: 7,
+        total_reviews: 3,
+        settings: { auto_review: false, max_files_per_review: 25 }
+      })
+    );
+
+    let detail!: RepositoryDetail;
+    service.getRepositoryDetail('acme', 'api').subscribe(d => (detail = d));
+
+    expect(api.get).toHaveBeenCalledWith('/repositories/repo-1/detail');
+    expect(detail.totalPrs).toBe(7);
+    expect(detail.totalReviews).toBe(3);
+    expect(detail.settings.autoReview).toBeFalse(); // wire value wins
+    expect(detail.settings.maxFilesPerReview).toBe(25);
+    expect(detail.settings.reviewOnPush).toBeFalse(); // schema default when absent
+    expect(detail.fullName).toBe('acme/api'); // still a full Repository
+  });
+
+  it('updateRepository PATCHes only the writable fields and maps the response', () => {
+    api.patch.and.returnValue(of({ ...dto, default_branch: 'develop' }));
+
+    let repo!: Repository;
+    service.updateRepository('repo-1', { default_branch: 'develop' }).subscribe(r => (repo = r));
+
+    expect(api.patch).toHaveBeenCalledWith('/repositories/repo-1', {
+      default_branch: 'develop'
+    });
+    expect(repo.defaultBranch).toBe('develop');
   });
 });

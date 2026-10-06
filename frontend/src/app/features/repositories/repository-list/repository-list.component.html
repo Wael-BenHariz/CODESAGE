@@ -16,24 +16,100 @@
     }
   </header>
 
-  <div class="filters">
-    <button class="filter-btn" [class.active]="filter() === 'all'" (click)="setFilter('all')">
-      All <span class="count">({{ repositories().length }})</span>
-    </button>
-    <button
-      class="filter-btn"
-      [class.active]="filter() === 'enabled'"
-      (click)="setFilter('enabled')"
-    >
-      Enabled <span class="count">({{ openCount }})</span>
-    </button>
-    <button
-      class="filter-btn"
-      [class.active]="filter() === 'disabled'"
-      (click)="setFilter('disabled')"
-    >
-      Disabled <span class="count">({{ disabledCount }})</span>
-    </button>
+  <div class="toolbar">
+    <div class="search-box">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="search"
+        class="search-input"
+        placeholder="Search repositories…"
+        aria-label="Search repositories"
+        [value]="search()"
+        (input)="onSearchInput($event)"
+        data-testid="repo-search"
+      />
+    </div>
+
+    <div class="filters" role="group" aria-label="Filter repositories by status">
+      <button class="filter-btn" [class.active]="filter() === 'all'" (click)="setFilter('all')">
+        All <span class="count">({{ repositories().length }})</span>
+      </button>
+      <button
+        class="filter-btn"
+        [class.active]="filter() === 'enabled'"
+        (click)="setFilter('enabled')"
+      >
+        Enabled <span class="count">({{ openCount }})</span>
+      </button>
+      <button
+        class="filter-btn"
+        [class.active]="filter() === 'disabled'"
+        (click)="setFilter('disabled')"
+      >
+        Disabled <span class="count">({{ disabledCount }})</span>
+      </button>
+    </div>
+
+    <div class="view-toggle" role="group" aria-label="View mode">
+      <button
+        type="button"
+        class="view-btn"
+        [class.active]="viewMode() === 'cards'"
+        [attr.aria-pressed]="viewMode() === 'cards'"
+        (click)="viewMode.set('cards')"
+        data-testid="view-cards"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+        </svg>
+        Cards
+      </button>
+      <button
+        type="button"
+        class="view-btn"
+        [class.active]="viewMode() === 'table'"
+        [attr.aria-pressed]="viewMode() === 'table'"
+        (click)="viewMode.set('table')"
+        data-testid="view-table"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+        Table
+      </button>
+    </div>
   </div>
 
   @if (selectedPending.length > 0) {
@@ -48,13 +124,14 @@
   }
 
   @if (isLoading()) {
-    <div class="loading">
-      <div class="spinner"></div>
-      <span>Loading repositories...</span>
+    <div class="state-slot" data-testid="repos-list-loading">
+      <app-spinner label="Loading repositories..." />
     </div>
   } @else if (filteredRepos.length === 0 && repositories().length === 0) {
-    <div class="empty">
-      <p>No repositories connected yet</p>
+    <app-empty-state
+      title="No repositories connected yet"
+      message="Connect a GitHub repository to start reviewing pull requests."
+    >
       @if (nav().write) {
         @if (!githubInstalled()) {
           <button class="btn btn-primary" (click)="installGitHubApp()">Install GitHub App</button>
@@ -64,13 +141,64 @@
           </button>
         }
       }
-    </div>
+    </app-empty-state>
   } @else if (filteredRepos.length === 0) {
-    <div class="empty">
-      <p>No repositories match the current filter</p>
+    <app-empty-state
+      title="No repositories match your search or filters"
+      message="Try a different term, or clear what's applied."
+    >
+      <button class="btn btn-ghost" data-testid="clear-filters" (click)="clearFilters()">
+        Clear search &amp; filters
+      </button>
+    </app-empty-state>
+  } @else if (viewMode() === 'table') {
+    <div class="table-wrap" data-testid="repo-table">
+      <table class="repo-table">
+        <thead>
+          <tr>
+            <th scope="col">Repository</th>
+            <th scope="col">Status</th>
+            <th scope="col">Language</th>
+            <th scope="col">Visibility</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (repo of filteredRepos; track repo.id) {
+            <tr>
+              <td>
+                <a [routerLink]="['/repositories', repo.owner, repo.name]" class="repo-name">
+                  {{ repo.fullName }}
+                </a>
+              </td>
+              <td>
+                <span class="status-badge" [class.enabled]="repo.enabled">
+                  {{ repo.enabled ? 'enabled' : 'disabled' }}
+                </span>
+              </td>
+              <td>{{ repo.language || '—' }}</td>
+              <td>{{ repo.private ? 'Private' : 'Public' }}</td>
+              <td class="row-actions">
+                <a
+                  [routerLink]="['/repositories', repo.owner, repo.name, 'pulls']"
+                  class="action-link"
+                >
+                  Pull requests
+                </a>
+                @if (nav().write) {
+                  <button class="btn btn-ghost" (click)="toggleRepo(repo)">
+                    {{ repo.enabled ? 'Disable' : 'Enable' }}
+                  </button>
+                  <button class="btn btn-ghost danger" (click)="deleteRepo(repo)">Remove</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
     </div>
   } @else {
-    <div class="repo-grid">
+    <div class="repo-grid" data-testid="repo-grid">
       @for (repo of filteredRepos; track repo.id) {
         <div class="repo-card">
           <div class="repo-header">
@@ -112,16 +240,17 @@
       (click)="onOverlayClick($event)"
       (keyup.escape)="closeConnectModal()"
     >
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Connect Repository">
         <div class="modal-header">
           <h2>Connect Repository</h2>
-          <button class="close-btn" (click)="closeConnectModal()">×</button>
+          <button class="close-btn" type="button" aria-label="Close" (click)="closeConnectModal()">
+            ×
+          </button>
         </div>
         <div class="modal-body">
           @if (isLoadingGitHubRepos()) {
-            <div class="loading">
-              <div class="spinner"></div>
-              <span>Loading your GitHub repositories...</span>
+            <div class="state-slot">
+              <app-spinner label="Loading your GitHub repositories..." />
             </div>
           } @else if (modalError()) {
             <div class="modal-error">
@@ -180,5 +309,19 @@
         </div>
       </div>
     </div>
+  }
+
+  @if (pendingConfirm(); as pending) {
+    <app-confirm-dialog
+      [title]="confirmTitle"
+      [message]="confirmMessage"
+      [confirmLabel]="confirmActionLabel"
+      [tone]="pending.kind === 'delete' ? 'danger' : 'default'"
+      [busy]="confirmBusy()"
+      [error]="confirmError() ?? ''"
+      [testid]="'repo-confirm'"
+      (confirmed)="confirmPending()"
+      (cancelled)="cancelConfirm()"
+    />
   }
 </div>
