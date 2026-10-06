@@ -1,12 +1,14 @@
 # UI Redesign Plan — CodeSage frontend
 
-**Status:** Steps 0–10 complete (`docs: ui redesign plan`, `feat(web): design tokens…`,
+**Status:** Steps 0–12 complete — `docs: ui redesign plan`, `feat(web): design tokens…`,
 `shared ui primitives`, `application shell`, `public screens on design tokens`,
 `dashboard walkthrough…`, `repositories`, `review walkthrough`, `settings walkthrough…`,
-`contextual help…`, `chore(web): accessibility, responsive and performance pass`) —
-gates green through 453 tests
+`contextual help…`, `chore(web): accessibility, responsive and performance pass`,
+`chore(web): release frontend v0.3.2` (cluster smoke green), `docs: ui redesign` (this
+commit) — gates green through **453 tests**, shipped as frontend **v0.3.2**, 18
+after-captures in `docs/ui/after/` (§10.1)
 **Branch:** `feat/ui-redesign` (from `feat/roles-org-settings-staged-reviews`, the current
-release branch carrying frontend v0.3.1)
+release branch carrying frontend v0.3.1 → released as v0.3.2)
 **Ground rules:** frozen palette · no backend changes · no fake data · no new runtime
 dependencies · security rules unchanged (escaped text only, write-only LLM key) ·
 one commit per step with `lint` + `type-check` + `format:check` + `test:ci` green
@@ -478,3 +480,20 @@ The product owner delegated all open decisions ("do whatever is recommended"). T
   × 1440/1024/390 = **15 files**. Authenticated screens pending test accounts (Q3).
 - Palette extracted (§2): 3 source groups, 22 live-palette colors + 5 severity colors +
   legacy stragglers, contrast computed for every text-bearing pair.
+
+### 10.1 Final results (Step 11 — shipped)
+
+- Gates: `lint` 0/0 · `type-check` clean · `format:check` clean · `test:ci`
+  **453 SUCCESS** (baseline 338; +2 in the Step 10 a11y pass).
+- Bundle: initial **449.01 kB** raw / 125.53 kB transfer (baseline 436.79 / 121.71 →
+  +12.22 / +3.82 kB), same 9 pre-existing warnings (8 component-style budgets + js-sha256).
+- Cluster: frontend-only release to `127.0.0.1:5000/codesage/frontend:v0.3.2` —
+  `kubectl diff` = image tag only, apply with the keycloak-db-init Job filter, rollout
+  green with every other pod untouched; smoke: `/` serves `main-HH5DOA56.js` (byte-equal
+  to the local Step-10 build), `/help` + `/login` → 200, `/api/v1/health` → `healthy`,
+  `app-sidebar` marker present. Backend/worker stay on v0.3.0.
+- After-screenshots (`docs/ui/after/`, Chrome headless against the deployed v0.3.2 UI):
+  `index`, `login`, `not-found`, `forbidden`, `github-callback`, `help` ×
+  1440/1024/390 = **18 files**; each URL verified by DOM marker (6/6) and file
+  dimensions/size parity with the before-set. Authenticated screens still pending test
+  accounts (Q3) — the one known capture limitation, unchanged from Step 0.
