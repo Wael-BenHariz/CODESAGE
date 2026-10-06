@@ -1,0 +1,228 @@
+// ─── CodeSage design tokens ───────────────────────────────────────────────────
+// Single source of truth for the (FROZEN) palette and the UI scales.
+// Rules (docs/UI_REDESIGN_PLAN.md §2.3):
+//   * Every color below is an existing color of the shipped UI — no new hues
+//     may be added here. New shades are only ever produced by mixing these
+//     values (Sass mix() or CSS color-mix()).
+//   * `--text-3` is the documented WCAG AA fix for the old `#666666` muted
+//     text: mix(#a0a0a0, #666666, 75%) — same neutral family, contrast ≥ 4.5
+//     on every surface step (see plan §8/Q2).
+//   * Components consume the CSS custom properties (var(--…)); SCSS may also
+//     use these $-variables at build time.
+
+// ─── Surfaces ───
+$surface-0: #0a0a0a; // page background
+$surface-1: #111111; // cards / panels
+$surface-2: #1a1a1a; // inputs / wells
+$surface-3: #222222; // elevated menus
+$surface-hover: #2a2a2a; // hover state
+$surface-sunken: #050505; // code blocks, recessed areas
+
+// ─── Borders ───
+$border-subtle: #1e1e1e; // decorative separators
+$border-strong: #2a2a2a; // card / control outlines
+$border-control: #3a3a3a; // emphasized control outlines
+// Interactive controls always carry a visible text/icon label, so their
+// boundary is not the only affordance (WCAG 1.4.11); the focus ring below
+// is the state indicator and passes with the accent color.
+
+// ─── Text ───
+$text-1: #e5e5e5; // primary
+$text-2: #a0a0a0; // secondary
+$text-3: mix(#a0a0a0, #666666, 75%); // muted — AA-fixed step (was #666666)
+$text-inverse: #0a0a0a; // on accent/solid fills
+
+// ─── Status / semantic ───
+$accent: #00e87b; // primary accent + success
+$accent-hover: #00cc6d;
+$accent-dim: rgba(0, 232, 123, 0.1);
+$success: #00e87b;
+$warning: #ffaa00;
+$warning-dim: rgba(255, 170, 0, 0.1);
+$danger: #ff4444;
+$danger-dim: rgba(255, 68, 68, 0.1);
+$info: #00aaff;
+$info-dim: rgba(0, 170, 255, 0.1);
+$purple: #a855f7;
+$purple-text: #b188ff; // AA-safe purple text on surfaces ≥ $surface-2
+$purple-dim: rgba(177, 136, 255, 0.1); // dim built on the AA-safe step
+
+// ─── Severity scale (kept from the shipped review panel — plan §2.4 Option A) ─
+// Colour is never the only signal: badges also render an icon + text label.
+$sev-critical: #f56565; // scan: critical · comments: error
+$sev-high: #ed8936; // scan: high
+$sev-medium: #ecc94b; // scan: medium · comments: warning
+$sev-low: #4299e1; // scan: low · comments: suggestion
+$sev-info: #a0aec0; // scan: info · comments: info
+$sev-critical-dim: rgba(245, 101, 101, 0.1);
+$sev-high-dim: rgba(237, 137, 54, 0.1);
+$sev-medium-dim: rgba(236, 201, 75, 0.1);
+$sev-low-dim: rgba(66, 153, 225, 0.1);
+$sev-info-dim: rgba(160, 174, 192, 0.1);
+
+// ─── Typography ───
+$font-sans:
+  'Inter',
+  -apple-system,
+  BlinkMacSystemFont,
+  'Segoe UI',
+  sans-serif;
+$font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, monospace;
+
+$font-size-xs: 11px; // badges, meta
+$font-size-sm: 13px; // UI / mono default
+$font-size-md: 15px; // body
+$font-size-lg: 18px;
+$font-size-xl: 22px;
+$font-size-2xl: 28px;
+$font-size-3xl: 34px;
+
+$font-weight-regular: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+
+$line-height-tight: 1.25;
+$line-height-base: 1.5;
+$line-height-relaxed: 1.65;
+
+// ─── Spacing (4px grid) ───
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 24px;
+$space-6: 32px;
+$space-7: 48px;
+$space-8: 64px;
+
+// ─── Radius ───
+$radius-xs: 2px; // buttons, inputs (shipped)
+$radius-sm: 4px; // chips, badges (shipped)
+$radius-md: 6px; // cards (shipped)
+$radius-lg: 8px; // large cards
+$radius-full: 999px; // pills, avatars
+
+// ─── Elevation (existing black alphas) ───
+$shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+$shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+$shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+// ─── Motion ───
+$motion-fast: 100ms;
+$motion-base: 200ms;
+$motion-slow: 300ms;
+$motion-ease: ease;
+
+// ─── Z-index ───
+$z-base: 0;
+$z-sticky: 100;
+$z-sidebar: 200;
+$z-drawer: 300;
+$z-popover: 400;
+$z-toast: 500;
+$z-dialog: 600;
+
+// ─── Breakpoints (unchanged) ───
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+
+// ─── CSS custom properties ───
+// Consumed by components as var(--…). Kept 1:1 with the SCSS values above.
+:root {
+  // surfaces
+  --surface-0: #{$surface-0};
+  --surface-1: #{$surface-1};
+  --surface-2: #{$surface-2};
+  --surface-3: #{$surface-3};
+  --surface-hover: #{$surface-hover};
+  --surface-sunken: #{$surface-sunken};
+
+  // borders
+  --border-subtle: #{$border-subtle};
+  --border-strong: #{$border-strong};
+  --border-control: #{$border-control};
+
+  // text
+  --text-1: #{$text-1};
+  --text-2: #{$text-2};
+  --text-3: #{$text-3};
+  --text-inverse: #{$text-inverse};
+
+  // status / semantic
+  --accent: #{$accent};
+  --accent-hover: #{$accent-hover};
+  --accent-dim: #{$accent-dim};
+  --success: #{$success};
+  --warning: #{$warning};
+  --warning-dim: #{$warning-dim};
+  --danger: #{$danger};
+  --danger-dim: #{$danger-dim};
+  --info: #{$info};
+  --info-dim: #{$info-dim};
+  --purple: #{$purple};
+  --purple-text: #{$purple-text};
+  --purple-dim: #{$purple-dim};
+
+  // severity
+  --sev-critical: #{$sev-critical};
+  --sev-high: #{$sev-high};
+  --sev-medium: #{$sev-medium};
+  --sev-low: #{$sev-low};
+  --sev-info: #{$sev-info};
+  --sev-critical-dim: #{$sev-critical-dim};
+  --sev-high-dim: #{$sev-high-dim};
+  --sev-medium-dim: #{$sev-medium-dim};
+  --sev-low-dim: #{$sev-low-dim};
+  --sev-info-dim: #{$sev-info-dim};
+
+  // typography
+  --font-sans: #{$font-sans};
+  --font-mono: #{$font-mono};
+  --font-size-xs: #{$font-size-xs};
+  --font-size-sm: #{$font-size-sm};
+  --font-size-md: #{$font-size-md};
+  --font-size-lg: #{$font-size-lg};
+  --font-size-xl: #{$font-size-xl};
+  --font-size-2xl: #{$font-size-2xl};
+  --font-size-3xl: #{$font-size-3xl};
+
+  // spacing
+  --space-1: #{$space-1};
+  --space-2: #{$space-2};
+  --space-3: #{$space-3};
+  --space-4: #{$space-4};
+  --space-5: #{$space-5};
+  --space-6: #{$space-6};
+  --space-7: #{$space-7};
+  --space-8: #{$space-8};
+
+  // radius
+  --radius-xs: #{$radius-xs};
+  --radius-sm: #{$radius-sm};
+  --radius-md: #{$radius-md};
+  --radius-lg: #{$radius-lg};
+  --radius-full: #{$radius-full};
+
+  // elevation
+  --shadow-sm: #{$shadow-sm};
+  --shadow-md: #{$shadow-md};
+  --shadow-lg: #{$shadow-lg};
+  --shadow-xl: #{$shadow-xl};
+
+  // motion
+  --motion-fast: #{$motion-fast};
+  --motion-base: #{$motion-base};
+  --motion-slow: #{$motion-slow};
+  --motion-ease: #{$motion-ease};
+
+  // z-index
+  --z-sticky: #{$z-sticky};
+  --z-sidebar: #{$z-sidebar};
+  --z-drawer: #{$z-drawer};
+  --z-popover: #{$z-popover};
+  --z-toast: #{$z-toast};
+  --z-dialog: #{$z-dialog};
+}
