@@ -272,6 +272,13 @@ select.input {
 
 // Reduced motion (rule 9): kill decorative animation and transitions.
 @media (prefers-reduced-motion: reduce) {
+  // …but the loading spinner is the state indicator itself — a frozen
+  // spinner would communicate nothing, so it stays animated.
+  .cs-spinner {
+    animation-duration: 0.9s !important;
+    animation-iteration-count: infinite !important;
+  }
+
   *,
   *::before,
   *::after {
