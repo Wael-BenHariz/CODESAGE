@@ -4,6 +4,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { PlatformUser } from '../../../core/models/user.model';
 import { OrgSettingsService, OrgSummary } from '../../../core/services/org-settings.service';
 import { UserService } from '../../../core/services/user.service';
+import { SettingsNavComponent } from '../../../shared/components/settings-nav/settings-nav.component';
 
 type PanelState = 'loading' | 'error' | 'ready';
 
@@ -30,7 +31,7 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-platform-admin',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, SettingsNavComponent],
   templateUrl: './platform-admin.component.html',
   styleUrl: './platform-admin.component.scss'
 })

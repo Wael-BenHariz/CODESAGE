@@ -1,10 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { OrgInvitationsComponent } from '../org-invitations/org-invitations.component';
+import {
+  SettingsNavComponent,
+  SettingsNavTab
+} from '../../../shared/components/settings-nav/settings-nav.component';
 import {
   AGENT_DOMAINS,
   CeilingPatch,
@@ -26,16 +31,20 @@ import {
 } from '../../../core/services/org-settings.service';
 
 /**
- * Org + platform settings page (Step 5).
+ * Org + platform settings page (Step 5; walkthrough structure Step 8, plan
+ * §4.4).
  *
  * Three sections share one field renderer: `org` (the selected org's
- * overrides), `defaults` and `ceilings` (PLATFORM_ADMIN only). Save
- * semantics follow the backend contract — only dirty fields are sent
- * (absent = keep) and the per-field "Reset to default" button PUTs an
- * explicit `null`. 422 responses render inline next to the offending
- * field. The route guard (ADMIN_ROLES + org-membership elevation) is the
- * gate; the effective role computed here only disables editing — the
- * backend re-checks every request.
+ * overrides — grouped into Scanners / AI agents / Limits / Posting / Model),
+ * `defaults` and `ceilings` (PLATFORM_ADMIN only). The shared
+ * `app-settings-nav` sits on top; `?view=members` swaps the Organization
+ * panel for Members & invitations (role explanations + invitations) without a
+ * new route. Save semantics follow the backend contract — only dirty fields
+ * are sent (absent = keep) and the per-field "Reset to default" button PUTs an
+ * explicit `null`. 422 responses render inline next to the offending field.
+ * The route guard (ADMIN_ROLES + org-membership elevation) is the gate; the
+ * effective role computed here only disables editing — the backend re-checks
+ * every request.
  */
 type Section = 'org' | 'defaults' | 'ceilings';
 type FieldKind = 'number' | 'boolean' | 'multi' | 'enum' | 'text';
@@ -115,6 +124,58 @@ interface SectionUi {
   subtitle: string;
 }
 
+/**
+ * plan §4.4 — one plain-language group of the Organization section. Every
+ * field keeps its exact renderer/testid; grouping only changes where the
+ * group's own h3 + description sit above them.
+ */
+interface FieldGroup {
+  readonly id: string;
+  /** `null` = untitled (platform defaults/ceilings keep their section h2). */
+  readonly title: string | null;
+  readonly description: string;
+  readonly keys: readonly SettingKey[];
+}
+
+/** The five Organization groups (plan §4.4). All ten SETTING_KEYS, once each. */
+const ORG_GROUPS: readonly FieldGroup[] = [
+  {
+    id: 'scanners',
+    title: 'Scanners',
+    description:
+      'SonarQube and Semgrep run in parallel on every review — findings from both engines are merged and de-duplicated.',
+    keys: ['sonarqubeEnabled', 'semgrepEnabled']
+  },
+  {
+    id: 'agents',
+    title: 'AI agents',
+    description:
+      'Which of the five specialists run on every review, and how many findings each may return.',
+    keys: ['enabledAgents', 'maxFindingsPerAgent']
+  },
+  {
+    id: 'limits',
+    title: 'Limits',
+    description:
+      'Caps that keep review runs predictable — each numeric field shows its ceiling, and a value above it is rejected (422).',
+    keys: ['diffCharCap', 'maxConcurrentReviews']
+  },
+  {
+    id: 'posting',
+    title: 'Posting',
+    description:
+      'What queues a review, the lowest severity that reaches the GitHub comment, and whether it posts immediately or waits for approval.',
+    keys: ['reviewTriggers', 'minSeverityToPost', 'postingMode']
+  },
+  {
+    id: 'model',
+    title: 'Model',
+    description:
+      'The model name this organization contributes to review runs — empty inherits the platform default (it never changes anyone’s provider or API key).',
+    keys: ['aiModel']
+  }
+];
+
 /** Mutable form state for one section — dirty keys drive partial PUTs. */
 class FormScope {
   values: Partial<Record<SettingKey, SettingValue>> = {};
@@ -132,13 +193,14 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-org-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, OrgInvitationsComponent],
+  imports: [CommonModule, FormsModule, OrgInvitationsComponent, SettingsNavComponent],
   templateUrl: './org-settings.component.html',
   styleUrl: './org-settings.component.scss'
 })
 export class OrgSettingsComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly orgSettings = inject(OrgSettingsService);
+  private readonly route = inject(ActivatedRoute);
 
   // Template constants.
   readonly SETTING_KEYS = SETTING_KEYS;
@@ -162,8 +224,19 @@ export class OrgSettingsComponent implements OnInit {
   readonly loadError = signal<string | null>(null);
   readonly platformError = signal<string | null>(null);
 
+  /** plan §4.4 — in-page panel picked by /settings/org?view= (no new routes). */
+  readonly view = signal<'organization' | 'members'>('organization');
+  readonly navActive = computed<SettingsNavTab>(() =>
+    this.view() === 'members' ? 'members' : 'organization'
+  );
+
   ngOnInit(): void {
     this.load();
+    // Sub-navigation: the shared nav links carry ?view= — the same component
+    // instance is reused across the query change, so subscribe once.
+    this.route.queryParamMap.subscribe(params => {
+      this.view.set(params.get('view') === 'members' ? 'members' : 'organization');
+    });
   }
 
   // --- loading ---------------------------------------------------------------
@@ -268,6 +341,14 @@ export class OrgSettingsComponent implements OnInit {
 
   fieldsFor(section: Section): readonly SettingKey[] {
     return section === 'ceilings' ? NUMERIC_KEYS : SETTING_KEYS;
+  }
+
+  /** Field groups per section: org → the five plan §4.4 groups, platform → flat. */
+  groupsFor(section: Section): readonly FieldGroup[] {
+    if (section === 'org') {
+      return ORG_GROUPS;
+    }
+    return [{ id: section, title: null, description: '', keys: this.fieldsFor(section) }];
   }
 
   formFor(section: Section): FormScope {

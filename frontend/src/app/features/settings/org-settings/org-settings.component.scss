@@ -1,5 +1,5 @@
 /* Org + platform settings page — mirrors the settings page design language
-   (dark theme, JetBrains Mono labels, #00e87b accent). */
+   (dark theme, JetBrains Mono labels, var(--accent) accent). */
 
 .settings-page {
   max-width: 860px;
@@ -13,7 +13,7 @@
   h1 {
     font-size: 24px;
     font-weight: 700;
-    color: #e5e5e5;
+    color: var(--text-1);
     margin: 0;
     letter-spacing: -0.02em;
   }
@@ -22,7 +22,7 @@
 .page-subtitle {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: #666666;
+  color: var(--text-3);
   margin: 8px 0 0;
   line-height: 1.6;
 }
@@ -34,7 +34,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 16px;
     font-weight: 600;
-    color: #e5e5e5;
+    color: var(--text-1);
     margin: 0 0 4px;
   }
 }
@@ -42,13 +42,13 @@
 .section-subtitle {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #666666;
+  color: var(--text-3);
   margin: 0 0 16px;
 }
 
 .card {
-  background: #111111;
-  border: 1px solid #1e1e1e;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 24px;
   display: flex;
@@ -59,7 +59,7 @@
 .state-note {
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
-  color: #666666;
+  color: var(--text-3);
   margin: 0;
 }
 
@@ -70,7 +70,7 @@
   gap: 16px;
   flex-wrap: wrap;
   padding-bottom: 8px;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--border-subtle);
 
   .field {
     flex: 1;
@@ -81,7 +81,7 @@
 .role-badge {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #00e87b;
+  color: var(--accent);
   background: rgba(0, 232, 123, 0.06);
   border: 1px solid rgba(0, 232, 123, 0.25);
   border-radius: 4px;
@@ -97,7 +97,7 @@
   label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    color: #666666;
+    color: var(--text-3);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -106,25 +106,25 @@
   select {
     font-family: 'JetBrains Mono', monospace;
     padding: 10px 12px;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-size: 13px;
-    color: #e5e5e5;
+    color: var(--text-1);
 
     &:focus {
       outline: none;
-      border-color: #00e87b;
+      border-color: var(--accent);
     }
 
     &:disabled {
-      background: #141414;
-      color: #666666;
+      background: var(--surface-1);
+      color: var(--text-3);
       cursor: not-allowed;
     }
 
     &::placeholder {
-      color: #444444;
+      color: var(--text-3);
     }
   }
 }
@@ -134,7 +134,7 @@
   flex-direction: column;
   gap: 6px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid var(--border-subtle);
 
   &:last-of-type {
     border-bottom: none;
@@ -151,26 +151,26 @@
   select {
     font-family: 'JetBrains Mono', monospace;
     padding: 10px 12px;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-size: 13px;
-    color: #e5e5e5;
+    color: var(--text-1);
     max-width: 320px;
 
     &:focus {
       outline: none;
-      border-color: #00e87b;
+      border-color: var(--accent);
     }
 
     &:disabled {
-      background: #141414;
-      color: #666666;
+      background: var(--surface-1);
+      color: var(--text-3);
       cursor: not-allowed;
     }
 
     &::placeholder {
-      color: #444444;
+      color: var(--text-3);
     }
   }
 }
@@ -184,7 +184,7 @@
   label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    color: #666666;
+    color: var(--text-3);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -193,7 +193,7 @@
 .ceiling-hint {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #00e87b;
+  color: var(--accent);
 }
 
 .check-row {
@@ -208,13 +208,13 @@
   gap: 8px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
-  color: #a0a0a0;
+  color: var(--text-2);
   cursor: pointer;
 
   input[type='checkbox'] {
     width: 16px;
     height: 16px;
-    accent-color: #00e87b;
+    accent-color: var(--accent);
     cursor: pointer;
 
     &:disabled {
@@ -235,11 +235,11 @@
 .inherit-hint {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #666666;
+  color: var(--text-3);
 }
 
 .inherit-hint {
-  color: #444444;
+  color: var(--text-3);
 }
 
 .override-chip {
@@ -247,7 +247,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #00e87b;
+  color: var(--accent);
   border: 1px solid rgba(0, 232, 123, 0.3);
   border-radius: 3px;
   padding: 2px 6px;
@@ -256,7 +256,7 @@
 .btn-link {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #ff4444;
+  color: var(--danger);
   background: none;
   border: none;
   padding: 0;
@@ -264,7 +264,7 @@
   text-decoration: underline;
 
   &:hover:not(:disabled) {
-    color: #ff6666;
+    color: var(--danger);
   }
 
   &:disabled {
@@ -276,7 +276,7 @@
 .field-error {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #ff4444;
+  color: var(--danger);
 }
 
 .banner {
@@ -284,9 +284,9 @@
   font-size: 12px;
   padding: 10px 12px;
   border-radius: 4px;
-  border: 1px solid #2a2a2a;
-  background: #1a1a1a;
-  color: #a0a0a0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-2);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -295,19 +295,19 @@
   &.info {
     background: rgba(0, 232, 123, 0.06);
     border-color: rgba(0, 232, 123, 0.25);
-    color: #00e87b;
+    color: var(--accent);
   }
 
   &.success {
     background: rgba(0, 232, 123, 0.06);
     border-color: rgba(0, 232, 123, 0.25);
-    color: #00e87b;
+    color: var(--accent);
   }
 
   &.error {
     background: rgba(255, 68, 68, 0.08);
     border-color: rgba(255, 68, 68, 0.3);
-    color: #ff4444;
+    color: var(--danger);
   }
 }
 
@@ -334,12 +334,12 @@
 }
 
 .btn-primary {
-  background: #00e87b;
-  color: #0a0a0a;
-  border-color: #00e87b;
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
 
   &:hover:not(:disabled) {
-    background: #00cc6d;
+    background: var(--accent-hover);
   }
 
   &:disabled {
@@ -349,17 +349,98 @@
 }
 
 .btn-secondary {
-  background: #1a1a1a;
-  color: #a0a0a0;
-  border-color: #2a2a2a;
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-color: var(--border-strong);
 
   &:hover:not(:disabled) {
-    background: #222222;
-    color: #e5e5e5;
+    background: var(--surface-3);
+    color: var(--text-1);
   }
 
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+}
+
+/* --- plan Step 8 (§4.4): grouped org fields + Members view ---------------- */
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field-group + .field-group {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+}
+
+.field-group-head h3 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.field-group-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  margin: 4px 0 0;
+}
+
+.roles-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.role-list {
+  margin: 0;
+}
+
+.role-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-subtle);
+
+  dt,
+  dd {
+    margin: 0;
+  }
+
+  dd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.6;
+  }
+}
+
+.role-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.role-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  margin: var(--space-3) 0 0;
+}
+
+@media (max-width: 640px) {
+  .role-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
   }
 }

@@ -20,7 +20,7 @@ describe('SettingsComponent — AI model settings', () => {
   let component: SettingsComponent;
   let svc: jasmine.SpyObj<LlmSettingsService>;
   let orgSvc: jasmine.SpyObj<OrgSettingsService>;
-  /** Writable view of the fake session user (role drives the org link). */
+  /** Writable view of the fake session user (role drives the org nav entries). */
   let authSignal: ReturnType<typeof signal<{ role: string } | null>>;
 
   const savedConfig: LLMSettings = {
@@ -71,11 +71,11 @@ describe('SettingsComponent — AI model settings', () => {
       imports: [SettingsComponent],
       providers: [
         provideHttpClient(),
-        // SettingsComponent imports RouterModule (org-settings link).
+        // app-settings-nav carries routerLink directives → the router.
         provideRouter([]),
         { provide: LlmSettingsService, useValue: svc },
         { provide: OrgSettingsService, useValue: orgSvc },
-        // Only currentUser().role is read by the org-link logic; null
+        // Only currentUser().role is read by the nav's capability check; null
         // mirrors the real AuthService in tests (no Keycloak session).
         { provide: AuthService, useValue: { currentUser: authSignal } },
         // AuthService (injected by the component) depends on KeycloakService.
@@ -222,12 +222,14 @@ describe('SettingsComponent — AI model settings', () => {
     expect(text).toContain('Retry');
   });
 
-  it('hides the org-settings link when the caller manages no org', () => {
+  it('hides the Organization nav entries when the caller manages no org', () => {
     expect(orgSvc.listOrgs).toHaveBeenCalled();
-    expect(el().querySelector('[data-testid="org-settings-link"]')).toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-ai"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-organization"]')).toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-members"]')).toBeNull();
   });
 
-  it('shows the org-settings link for an ORG_ADMIN membership (effective role)', () => {
+  it('shows the Organization + Members nav entries for an ORG_ADMIN membership (effective role)', () => {
     // DEVELOPER claim + ORG_ADMIN membership → effective ORG_ADMIN (plan §2).
     authSignal.set({ role: 'DEVELOPER' });
     orgSvc.listOrgs.and.returnValue(
@@ -235,11 +237,12 @@ describe('SettingsComponent — AI model settings', () => {
     );
     const fresh = TestBed.createComponent(SettingsComponent);
     fresh.detectChanges();
-    const link = (fresh.nativeElement as HTMLElement).querySelector(
-      '[data-testid="org-settings-link"]'
-    );
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toBe('/settings/org');
+    const root = fresh.nativeElement as HTMLElement;
+    const orgLink = root.querySelector('[data-testid="settings-nav-organization"]');
+    expect(orgLink).not.toBeNull();
+    expect(orgLink?.getAttribute('href')).toBe('/settings/org?view=organization');
+    expect(root.querySelector('[data-testid="settings-nav-members"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="settings-nav-platform"]')).toBeNull();
   });
 
   it('stays hidden when listing orgs fails (fail closed)', () => {
@@ -247,7 +250,9 @@ describe('SettingsComponent — AI model settings', () => {
     const fresh = TestBed.createComponent(SettingsComponent);
     fresh.detectChanges();
     expect(
-      (fresh.nativeElement as HTMLElement).querySelector('[data-testid="org-settings-link"]')
+      (fresh.nativeElement as HTMLElement).querySelector(
+        '[data-testid="settings-nav-organization"]'
+      )
     ).toBeNull();
   });
 

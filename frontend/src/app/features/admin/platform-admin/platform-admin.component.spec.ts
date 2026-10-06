@@ -187,4 +187,12 @@ describe('PlatformAdminComponent — /users + orgs (plan Step 9)', () => {
     expect(component.usersState()).toBe('ready');
     expect(component.orgsState()).toBe('ready');
   });
+
+  it('shows the settings sub-nav with Platform marked current (plan Step 8)', () => {
+    create();
+    expect(q('[data-testid="settings-nav"]')).not.toBeNull();
+    expect(q('[data-testid="settings-nav-ai"]')).not.toBeNull();
+    expect(q('[data-testid="settings-nav-platform"]')?.getAttribute('aria-current')).toBe('page');
+    expect(q('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')).toBeNull();
+  });
 });
