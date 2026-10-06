@@ -6,12 +6,11 @@ import { RepositoryService } from '../../../core/services/repository.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
-import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-repository-detail',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink],
   templateUrl: './repository-detail.component.html',
   styleUrl: './repository-detail.component.scss'
 })

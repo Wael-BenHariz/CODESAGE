@@ -3,12 +3,11 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { PullRequest } from '../../../core/models/pull-request.model';
-import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-pr-list',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink],
   templateUrl: './pr-list.component.html',
   styleUrl: './pr-list.component.scss'
 })

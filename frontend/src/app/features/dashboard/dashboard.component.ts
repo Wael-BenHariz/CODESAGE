@@ -8,7 +8,6 @@ import { ReviewService } from '../../core/services/review.service';
 import { Repository } from '../../core/models/repository.model';
 import { ReviewSummary } from '../../core/models/review.model';
 import { User } from '../../core/models/user.model';
-import { SiteHeaderComponent } from '../../shared/components/site-header/site-header.component';
 
 type SectionState = 'loading' | 'error' | 'ready';
 
@@ -32,7 +31,7 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, SiteHeaderComponent],
+  imports: [CommonModule, RouterLink],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
 })

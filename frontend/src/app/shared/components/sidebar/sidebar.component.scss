@@ -1,0 +1,113 @@
+// App sidebar (plan Step 3) — tokens only, frozen palette.
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 240px;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  padding: var(--space-4) var(--space-3);
+  background: var(--surface-1);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-1);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-md);
+  letter-spacing: -0.01em;
+
+  &:hover {
+    color: var(--text-1);
+  }
+}
+
+.brand-mark svg {
+  color: var(--accent);
+
+  .glyph {
+    stroke: var(--text-inverse);
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-4);
+}
+
+.nav-group-label {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+
+  &:hover {
+    background: var(--surface-hover);
+    color: var(--text-1);
+  }
+
+  // routerLinkActive also sets aria-current="page" (default) — the active
+  // state is never colour-only.
+  &.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+}
+
+.nav-icon {
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+    transform: translateX(-100%);
+    transition: transform var(--motion-base) var(--motion-ease);
+    box-shadow: var(--shadow-lg);
+
+    &.open {
+      transform: translateX(0);
+    }
+  }
+}

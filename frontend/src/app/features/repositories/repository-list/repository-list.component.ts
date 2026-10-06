@@ -7,12 +7,11 @@ import { GitHubAppRepo } from '../../../core/models/github-app.model';
 import { RepositoryService } from '../../../core/services/repository.service';
 import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
-import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 @Component({
   selector: 'app-repository-list',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink],
   templateUrl: './repository-list.component.html',
   styleUrl: './repository-list.component.scss'
 })

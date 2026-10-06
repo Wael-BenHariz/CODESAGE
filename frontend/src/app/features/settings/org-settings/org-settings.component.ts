@@ -24,7 +24,6 @@ import {
   effectiveRole,
   parseSettingsError
 } from '../../../core/services/org-settings.service';
-import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 /**
  * Org + platform settings page (Step 5).
@@ -133,7 +132,7 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-org-settings',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, FormsModule, OrgInvitationsComponent],
+  imports: [CommonModule, FormsModule, OrgInvitationsComponent],
   templateUrl: './org-settings.component.html',
   styleUrl: './org-settings.component.scss'
 })

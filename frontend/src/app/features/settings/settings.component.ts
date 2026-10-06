@@ -9,7 +9,6 @@ import {
   LlmSettingsService
 } from '../../core/services/llm-settings.service';
 import { OrgSettingsService, canManageSettings } from '../../core/services/org-settings.service';
-import { SiteHeaderComponent } from '../../shared/components/site-header/site-header.component';
 
 type LLMProvider = 'groq' | 'openai' | 'anthropic' | 'gemini' | 'ollama';
 
@@ -51,7 +50,7 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss'
 })

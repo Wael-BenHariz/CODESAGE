@@ -1,15 +1,22 @@
-import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { signal, WritableSignal } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { Component } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter, Router } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 
-import { SiteHeaderComponent } from './site-header.component';
+import { TopbarComponent } from './topbar.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { OrgSettingsService, OrgSummary } from '../../../core/services/org-settings.service';
 import { User } from '../../../core/models/user.model';
 
-describe('SiteHeaderComponent', () => {
-  let fixture: ComponentFixture<SiteHeaderComponent>;
+@Component({
+  standalone: true,
+  template: ''
+})
+class StubComponent {}
+
+describe('TopbarComponent', () => {
+  let fixture: ComponentFixture<TopbarComponent>;
   let auth: {
     currentUser: WritableSignal<User | null>;
     logout: jasmine.Spy;
@@ -39,9 +46,18 @@ describe('SiteHeaderComponent', () => {
     orgSvc.listOrgs.and.returnValue(orgs);
   }
 
-  function render(role: string | null): void {
-    auth.currentUser.set(role ? user(role) : null);
-    fixture = TestBed.createComponent(SiteHeaderComponent);
+  function render(): void {
+    fixture = TestBed.createComponent(TopbarComponent);
+    fixture.detectChanges();
+  }
+
+  function el(): HTMLElement {
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  /** ensureOrgs() resolves in a microtask — flush before DOM assertions. */
+  async function flushOrgs(): Promise<void> {
+    await fixture.whenStable();
     fixture.detectChanges();
   }
 
@@ -56,70 +72,30 @@ describe('SiteHeaderComponent', () => {
     setOrgs(of([]));
 
     TestBed.configureTestingModule({
-      imports: [SiteHeaderComponent],
+      imports: [TopbarComponent],
       providers: [
-        provideRouter([]),
+        provideRouter([
+          { path: 'dashboard', component: StubComponent },
+          { path: 'repositories/:owner/:repo/pulls/:number', component: StubComponent }
+        ]),
         { provide: AuthService, useValue: auth },
         { provide: OrgSettingsService, useValue: orgSvc }
       ]
     });
   });
 
-  afterEach(() => {
-    localStorage.removeItem('codesage_active_org');
-  });
+  afterEach(() => localStorage.removeItem('codesage_active_org'));
 
-  function el(): HTMLElement {
-    return fixture.nativeElement as HTMLElement;
-  }
+  it('renders the header element even without a session, with no user menu', () => {
+    render();
 
-  function linkTexts(): string[] {
-    return Array.from(el().querySelectorAll('.nav-link')).map(a => (a.textContent ?? '').trim());
-  }
-
-  it('shows read-only navigation to a NONE-role user', () => {
-    render('NONE');
-
-    expect(linkTexts()).toEqual(['Repositories']);
-    expect(el().querySelector('[data-testid="nav-org-settings"]')).toBeNull();
-  });
-
-  it('shows Dashboard and Settings to a write role', () => {
-    render('DEVELOPER');
-
-    const links = linkTexts();
-    expect(links).toContain('Dashboard');
-    expect(links).toContain('Repositories');
-    expect(links).toContain('Settings');
-    expect(links).not.toContain('Organization');
-  });
-
-  it('adds the Organization entry for an ORG_ADMIN', () => {
-    render('ORG_ADMIN');
-
-    expect(el().querySelector('[data-testid="nav-org-settings"]')).not.toBeNull();
-  });
-
-  it('adds the Platform entry only for a PLATFORM_ADMIN (plan Step 9)', () => {
-    render('PLATFORM_ADMIN');
-    expect(el().querySelector('[data-testid="nav-platform"]')).not.toBeNull();
-
-    render('ORG_ADMIN');
-    expect(el().querySelector('[data-testid="nav-platform"]')).toBeNull();
-
-    render('DEVELOPER');
-    expect(el().querySelector('[data-testid="nav-platform"]')).toBeNull();
-  });
-
-  it('does not render the user menu without a session profile', () => {
-    render(null);
-
-    expect(el().querySelector('.user-menu')).toBeNull();
     expect(el().querySelector('[data-testid="site-header"]')).not.toBeNull();
+    expect(el().querySelector('.user-menu')).toBeNull();
   });
 
   it('logs out and switches account through AuthService', () => {
-    render('DEVELOPER');
+    auth.currentUser.set(user('DEVELOPER'));
+    render();
 
     const buttons = Array.from(el().querySelectorAll('button'));
     buttons.find(b => b.textContent?.includes('Logout'))?.click();
@@ -130,7 +106,8 @@ describe('SiteHeaderComponent', () => {
   });
 
   it('renders the avatar only when the profile carries one', () => {
-    render('DEVELOPER');
+    auth.currentUser.set(user('DEVELOPER'));
+    render();
     expect(el().querySelector('.user-avatar')).not.toBeNull();
 
     auth.currentUser.set({ ...user('DEVELOPER', '') });
@@ -138,19 +115,21 @@ describe('SiteHeaderComponent', () => {
     expect(el().querySelector('.user-avatar')).toBeNull();
   });
 
-  /**
-   * `ensureOrgs()` resolves through a promise (firstValueFrom), so the orgs
-   * signal updates in a microtask — flush it before asserting DOM that
-   * depends on the loaded list.
-   */
-  async function flushOrgs(): Promise<void> {
-    await fixture.whenStable();
+  it('shows the effective role badge', () => {
+    auth.currentUser.set(user('ORG_ADMIN'));
+    render();
+
+    expect(el().querySelector('[data-testid="role-badge"]')?.textContent?.trim()).toBe('ORG_ADMIN');
+
+    auth.currentUser.set(user('NONE'));
     fixture.detectChanges();
-  }
+    expect(el().querySelector('[data-testid="role-badge"]')?.textContent?.trim()).toBe('NONE');
+  });
 
   it('hides the org switcher for a single org', async () => {
     setOrgs(of([org('only', 'ORG_ADMIN', 'single')]));
-    render('ORG_ADMIN');
+    auth.currentUser.set(user('ORG_ADMIN'));
+    render();
     await flushOrgs();
 
     expect(el().querySelector('[data-testid="org-switcher"]')).toBeNull();
@@ -158,7 +137,8 @@ describe('SiteHeaderComponent', () => {
 
   it('shows the org switcher with one option per org once loaded', async () => {
     setOrgs(of([org('a', 'ORG_ADMIN', 'alpha'), org('b', 'DEVELOPER', 'beta')]));
-    render('ORG_ADMIN');
+    auth.currentUser.set(user('ORG_ADMIN'));
+    render();
     await flushOrgs();
 
     const select = el().querySelector('[data-testid="org-switcher"]') as HTMLSelectElement | null;
@@ -168,7 +148,8 @@ describe('SiteHeaderComponent', () => {
 
   it('switching the org persists the id and updates the selection', async () => {
     setOrgs(of([org('a', 'ORG_ADMIN', 'alpha'), org('b', 'DEVELOPER', 'beta')]));
-    render('ORG_ADMIN');
+    auth.currentUser.set(user('ORG_ADMIN'));
+    render();
     await flushOrgs();
 
     const select = el().querySelector('[data-testid="org-switcher"]') as HTMLSelectElement;
@@ -179,16 +160,49 @@ describe('SiteHeaderComponent', () => {
     expect(select.value).toBe('b');
   });
 
-  it('renders the header even when the org list fails to load', () => {
+  it('renders the top bar even when the org list fails to load', async () => {
     setOrgs(throwError(() => new Error('network down')));
     auth.currentUser.set(user('ORG_ADMIN'));
-
-    fixture = TestBed.createComponent(SiteHeaderComponent);
-    fixture.detectChanges();
+    render();
+    await flushOrgs();
 
     expect(el().querySelector('[data-testid="site-header"]')).not.toBeNull();
-    // Role-based entries still render from the profile — orgs only drive the switcher.
-    expect(linkTexts()).toContain('Organization');
     expect(el().querySelector('[data-testid="org-switcher"]')).toBeNull();
+    expect(el().querySelector('.user-menu')).not.toBeNull();
+  });
+
+  it('mirrors the drawer state onto the burger aria-expanded and emits toggles', () => {
+    render();
+    const burger = el().querySelector('[data-testid="nav-toggle"]') as HTMLButtonElement;
+
+    expect(burger.getAttribute('aria-expanded')).toBe('false');
+    expect(burger.getAttribute('aria-controls')).toBe('app-sidebar');
+
+    const spy = jasmine.createSpy('toggleNav');
+    fixture.componentInstance.toggleNav.subscribe(spy);
+    burger.click();
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    fixture.componentRef.setInput('navOpen', true);
+    fixture.detectChanges();
+    expect(burger.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('builds breadcrumbs from the current route', async () => {
+    render();
+    expect(el().querySelector('.crumbs')).toBeNull();
+
+    const router = TestBed.inject(Router);
+    await router.navigate(['/repositories/acme/api/pulls/42']);
+    fixture.detectChanges();
+
+    const crumbs = el().querySelector('.crumbs') as HTMLElement;
+    const items = Array.from(crumbs.querySelectorAll('li')).map(li => li.textContent?.trim());
+    expect(items).toEqual(['Repositories/', 'acme/api/', 'Pull requests/', '#42']);
+
+    const current = crumbs.querySelector('[aria-current="page"]');
+    expect(current?.textContent?.trim()).toBe('#42');
+    // Every non-final crumb is a real link.
+    expect(crumbs.querySelectorAll('a').length).toBe(3);
   });
 });

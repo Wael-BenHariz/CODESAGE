@@ -20,7 +20,6 @@ import { navVisibility } from '../../../core/guards/role.guard';
 import { PullRequest } from '../../../core/models/pull-request.model';
 import { ReviewStats, deriveReviewStats } from '../../../core/services/mappers/pull-request.mapper';
 import { ReviewPanelComponent } from '../review-panel/review-panel.component';
-import { SiteHeaderComponent } from '../../../shared/components/site-header/site-header.component';
 
 /**
  * Stats-bar state for the two review tiles (plan Step 2, Q1/Option 1):
@@ -39,7 +38,7 @@ export type ReviewStatsState =
 @Component({
   selector: 'app-pr-detail',
   standalone: true,
-  imports: [SiteHeaderComponent, CommonModule, RouterLink, ReviewPanelComponent],
+  imports: [CommonModule, RouterLink, ReviewPanelComponent],
   templateUrl: './pr-detail.component.html',
   styleUrl: './pr-detail.component.scss'
 })
