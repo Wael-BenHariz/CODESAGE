@@ -69,6 +69,17 @@ describe('GithubCallbackComponent — install callback (Keycloak session)', () =
     expect(fixture.componentInstance.state()).toBe('processing');
   });
 
+  it('renders the status line as the page heading (Step 10 a11y)', () => {
+    (auth.isAuthenticated as jasmine.Spy).and.returnValue(true);
+
+    const fixture = TestBed.createComponent(GithubCallbackComponent);
+    fixture.detectChanges();
+
+    const heading = fixture.nativeElement.querySelector('h1.status') as HTMLElement | null;
+    expect(heading).not.toBeNull();
+    expect(heading?.textContent).toBe(fixture.componentInstance.statusMessage());
+  });
+
   it('falls back to the login page when no Keycloak session exists', fakeAsync(() => {
     const fixture = TestBed.createComponent(GithubCallbackComponent);
     fixture.detectChanges();

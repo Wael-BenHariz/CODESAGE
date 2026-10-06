@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -22,6 +22,7 @@ export type SettingsNavTab = 'ai' | 'organization' | 'members' | 'platform';
 @Component({
   selector: 'app-settings-nav',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   template: `
     <nav class="settings-nav" aria-label="Settings sections" data-testid="settings-nav">

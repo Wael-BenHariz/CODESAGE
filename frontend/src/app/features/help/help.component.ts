@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { SeverityBadgeComponent } from '../../shared/components/severity-badge/severity-badge.component';
@@ -23,11 +23,14 @@ import {
 @Component({
   selector: 'app-help',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, SeverityBadgeComponent],
   templateUrl: './help.component.html',
   styleUrl: './help.component.scss'
 })
 export class HelpComponent {
+  // Static content only — OnPush keeps the app's event-driven change detection
+  // from re-walking this page (Step 10 performance pass).
   readonly pipelineSteps = PIPELINE_STEPS;
   readonly severities = SEVERITY_COPY;
   readonly scaleNote = SEVERITY_SCALE_NOTE;

@@ -3,7 +3,7 @@
     @if (state() === 'processing') {
       <app-spinner label="Finishing GitHub setup…" />
     }
-    <p class="status" [class.error]="!isSuccess()">{{ statusMessage() }}</p>
+    <h1 class="status" [class.error]="!isSuccess()">{{ statusMessage() }}</h1>
 
     @if (state() === 'error') {
       <button class="retry-btn" (click)="retry()">Try again</button>

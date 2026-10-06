@@ -21,6 +21,9 @@
       color: var(--accent);
       font-family: var(--font-mono);
       font-size: 0.9rem;
+      // h1 (the page's only heading, Step 10) keeps the old <p> look — the
+      // global reset would otherwise bold it to 600.
+      font-weight: 400;
 
       &.error {
         color: var(--danger);

@@ -1,4 +1,12 @@
-import { Component, ElementRef, HostListener, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  HostListener,
+  inject,
+  input,
+  signal
+} from '@angular/core';
 
 /**
  * Contextual "?" help popover (plan §4.5) — a disclosure button that opens a
@@ -13,6 +21,7 @@ import { Component, ElementRef, HostListener, inject, input, signal } from '@ang
 @Component({
   selector: 'app-help-popover',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <button
       type="button"

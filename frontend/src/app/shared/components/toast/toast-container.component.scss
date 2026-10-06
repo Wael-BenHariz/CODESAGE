@@ -2,7 +2,7 @@
   position: fixed;
   bottom: 16px;
   right: 16px;
-  z-index: 1000;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -14,24 +14,31 @@
   align-items: flex-start;
   gap: 8px;
   padding: 12px 14px;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
-  background: #1f2937;
-  color: #f9fafb;
+  box-shadow: var(--shadow-lg);
+  background: var(--surface-3);
+  color: var(--text-1);
   font-size: 14px;
   line-height: 1.4;
 }
 
+// Legacy light-theme solids (slate/green/red/blue) → the app's dim+colour
+// pairs (same pattern as the org-invitations banner): palette-derived alpha
+// backgrounds with full-strength text, all AA on dark surfaces.
 .toast-success {
-  background: #14532d;
+  background: var(--accent-dim);
+  color: var(--success);
 }
 
 .toast-error {
-  background: #7f1d1d;
+  background: var(--danger-dim);
+  color: var(--danger);
 }
 
 .toast-info {
-  background: #1e3a5f;
+  background: var(--info-dim);
+  color: var(--info);
 }
 
 .toast-message {

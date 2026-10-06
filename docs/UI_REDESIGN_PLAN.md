@@ -1,9 +1,10 @@
 # UI Redesign Plan — CodeSage frontend
 
-**Status:** Steps 0–9 complete (`docs: ui redesign plan`, `feat(web): design tokens…`,
+**Status:** Steps 0–10 complete (`docs: ui redesign plan`, `feat(web): design tokens…`,
 `shared ui primitives`, `application shell`, `public screens on design tokens`,
 `dashboard walkthrough…`, `repositories`, `review walkthrough`, `settings walkthrough…`,
-`contextual help…`) — gates green through 451 tests
+`contextual help…`, `chore(web): accessibility, responsive and performance pass`) —
+gates green through 453 tests
 **Branch:** `feat/ui-redesign` (from `feat/roles-org-settings-staged-reviews`, the current
 release branch carrying frontend v0.3.1)
 **Ground rules:** frozen palette · no backend changes · no fake data · no new runtime
@@ -88,7 +89,7 @@ There are **two palettes** in the tree:
    user sees.
 2. **Dead palette** — `src/styles/_variables.scss` (light blue `#0066cc`, GitHub grays …).
    **Imported nowhere** (verified: no `@import 'variables'` anywhere). Kept untouched as
-   part of the inventory; candidates for deletion in Step 10 (dead-style cleanup).
+   part of the inventory; deleted in Step 10 (dead-style cleanup).
 3. **Legacy stragglers** — a few components still carry pre-redesign _light_ (Chakra) colors:
    `diff-view`, `toast-container`, `loading`/`error` shared components, parts of
    `review-panel` and `repository-detail`, and PR-state inline colors in `pr-detail.ts`.
@@ -433,6 +434,7 @@ The product owner delegated all open decisions ("do whatever is recommended"). T
   | `shared/error` text (4.15/3.04)                          | error component          | tokenized onto dark: `--danger` on `--danger-dim`                                                                                             | component moves to the dark theme anyway           |
   | `repository-detail` `#667eea` on `#edf2f7` (3.25)        | legacy buttons           | `--accent`/`--purple-text` tokens (component restyles to dark)                                                                                | shipped colors                                     |
   | `--border-control #3a3a3a` vs `--surface-0` (1.74)       | interactive borders      | border uses `--text-3` step (`#808080`, 4.6) **only where the border is the sole affordance**; decorative separators stay `#1e1e1e`/`#2a2a2a` | mix of existing neutrals                           |
+  | `#666666`/`#444444` left hard-coded in `platform-admin` + `org-invitations` (1.9–3.4) | two files never tokenized (Step 10) | same `--text-3` step as the global fix                                                                                                  | identical midpoint mix, applied late               |
 
 - **Q3 → no test accounts will be provided; best effort instead.** Public screens are
   captured (15 files). For authenticated screens the redesign is verified with the
