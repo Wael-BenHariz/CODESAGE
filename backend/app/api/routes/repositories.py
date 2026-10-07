@@ -5,25 +5,32 @@ Repository management and configuration endpoints.
 
 import logging
 import secrets
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import GitHubInstallation, OAuthToken, Repository, User, WatchedRepo
+from app.db.models import (
+    GitHubInstallation,
+    OAuthToken,
+    Org,
+    OrgMember,
+    Repository,
+    User,
+    WatchedRepo,
+)
 from app.schemas.repository import (
-    RepositoryResponse,
-    RepositoryUpdate,
-    RepositoryListResponse,
     RepositoryDetail,
+    RepositoryListResponse,
+    RepositoryResponse,
     RepositorySettings,
+    RepositoryUpdate,
 )
 from app.security.dependencies import get_current_user
-from app.security.roles import require_developer
+from app.security.roles import ROLE_PLATFORM_ADMIN, require_developer
 from app.services import repo_tenant
 from app.services.github import github_service
 from app.services.org_provisioning import provision_installation_org
@@ -39,13 +46,14 @@ installation_states: dict[str, int | None] = {}
 
 class GitHubRepoInfo(BaseModel):
     """GitHub repository info from the GitHub API."""
+
     id: int
     name: str
     full_name: str
     private: bool
     default_branch: str
-    description: Optional[str] = None
-    language: Optional[str] = None
+    description: str | None = None
+    language: str | None = None
     stargazers_count: int = 0
     forks_count: int = 0
     open_issues_count: int = 0
@@ -82,7 +90,9 @@ async def get_github_app_install_url(
 @router.post("/installations/sync", response_model=GitHubInstallationSyncResponse)
 async def sync_github_app_installation(
     installation_id: int = Query(..., description="GitHub App installation ID"),
-    state: Optional[str] = Query(None, description="Optional installation state returned by GitHub"),
+    state: str | None = Query(
+        None, description="Optional installation state returned by GitHub"
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_developer),
 ):
@@ -162,7 +172,9 @@ async def _get_user_installations(
 ) -> list[GitHubInstallation]:
     token_record = await _get_current_oauth_token(db, current_user)
     if token_record:
-        github_installations = await github_service.get_user_app_installations(token_record.access_token)
+        github_installations = await github_service.get_user_app_installations(
+            token_record.access_token
+        )
         github_installation_ids = [item["id"] for item in github_installations]
         if github_installation_ids:
             result = await db.execute(
@@ -173,7 +185,9 @@ async def _get_user_installations(
             return list(result.scalars().all())
 
     result = await db.execute(
-        select(GitHubInstallation).where(GitHubInstallation.account_id == current_user.github_id)
+        select(GitHubInstallation).where(
+            GitHubInstallation.account_id == current_user.github_id
+        )
     )
     return list(result.scalars().all())
 
@@ -186,7 +200,9 @@ async def _ensure_installation_accessible_to_user(
     if installation.account_id != current_user.github_id:
         token_record = await _get_current_oauth_token(db, current_user)
         if token_record:
-            github_installations = await github_service.get_user_app_installations(token_record.access_token)
+            github_installations = await github_service.get_user_app_installations(
+                token_record.access_token
+            )
             accessible_ids = {item["id"] for item in github_installations}
             if installation.installation_id in accessible_ids:
                 return
@@ -222,7 +238,9 @@ async def _upsert_installation(
     installation_id = installation_data.get("id")
     account = installation_data.get("account", {})
     result = await db.execute(
-        select(GitHubInstallation).where(GitHubInstallation.installation_id == installation_id)
+        select(GitHubInstallation).where(
+            GitHubInstallation.installation_id == installation_id
+        )
     )
     record = result.scalar_one_or_none()
 
@@ -394,7 +412,9 @@ async def _set_repository_enabled(
     return RepositoryResponse.model_validate(repo)
 
 
-@router.post("/connect", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/connect", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED
+)
 async def connect_repository(
     github_repo_id: int = Query(..., description="GitHub repository ID"),
     db: AsyncSession = Depends(get_db),
@@ -424,7 +444,9 @@ async def connect_repository(
     selected_repo: dict | None = None
     for installation in installations:
         repos = await github_service.get_installed_repos(installation.installation_id)
-        selected_repo = next((repo for repo in repos if repo.get("id") == github_repo_id), None)
+        selected_repo = next(
+            (repo for repo in repos if repo.get("id") == github_repo_id), None
+        )
         if selected_repo:
             selected_installation = installation
             break
@@ -456,46 +478,67 @@ async def list_repositories(
     current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
-    enabled: Optional[bool] = Query(None, description="Filter by enabled status"),
-    search: Optional[str] = Query(None, description="Search by name"),
+    enabled: bool | None = Query(None, description="Filter by enabled status"),
+    search: str | None = Query(None, description="Search by name"),
 ):
     """
     List all repositories accessible by the current user.
     """
-    # Build base query for user's installations
-    query = (
-        select(Repository)
-        .join(GitHubInstallation)
-        .where(GitHubInstallation.account_id == current_user.github_id)
-    )
-    count_query = (
-        select(func.count(Repository.id))
-        .join(GitHubInstallation)
-        .where(GitHubInstallation.account_id == current_user.github_id)
-    )
-    
+    # Visibility (plan §2 F3): an installation's repositories are listed for
+    # (a) the GitHub account that owns the installation (the installer) and
+    # (b) members of the org seeded from that installation. Without (b) an
+    # org member who did not install the App — e.g. an invited REVIEWER, whose
+    # github_id never matches account_id — sees an empty list, the SPA's
+    # owner/name resolution dead-ends in a nil-UUID 404, and every deep link
+    # shows "not found". PLATFORM_ADMIN bypasses both branches (F2 read),
+    # mirroring GET /reviews.
+    query = select(Repository).join(GitHubInstallation)
+    count_query = select(func.count(Repository.id)).join(GitHubInstallation)
+
+    if current_user.role != ROLE_PLATFORM_ADMIN:
+        scope_parts = []
+        if current_user.github_id is not None:
+            scope_parts.append(GitHubInstallation.account_id == current_user.github_id)
+        member_installations = (
+            select(GitHubInstallation.id)
+            .join(Org, Org.installation_id == GitHubInstallation.installation_id)
+            .join(
+                OrgMember,
+                and_(
+                    OrgMember.org_id == Org.id,
+                    OrgMember.user_id == current_user.id,
+                ),
+            )
+        )
+        scope_parts.append(GitHubInstallation.id.in_(member_installations))
+        scope = scope_parts[0] if len(scope_parts) == 1 else or_(*scope_parts)
+        query = query.where(scope)
+        count_query = count_query.where(scope)
+
     # Apply filters
     if enabled is not None:
         query = query.where(Repository.enabled == enabled)
         count_query = count_query.where(Repository.enabled == enabled)
-    
+
     if search:
-        search_filter = Repository.name.ilike(f"%{search}%") | Repository.full_name.ilike(f"%{search}%")
+        search_filter = Repository.name.ilike(
+            f"%{search}%"
+        ) | Repository.full_name.ilike(f"%{search}%")
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
-    
+
     # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
-    
+
     # Get paginated results
     offset = (page - 1) * per_page
     query = query.offset(offset).limit(per_page).order_by(Repository.created_at.desc())
-    
+
     result = await db.execute(query)
     repos = result.scalars().all()
     watched = await _watched_state_map(db, current_user.id)
-    
+
     return RepositoryListResponse(
         items=[
             # Badge truth: watched_repos is the review switch; no watched row
@@ -527,13 +570,13 @@ async def get_repository(
         .where(Repository.id == repository_id)
     )
     repo = result.scalar_one_or_none()
-    
+
     if not repo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found",
         )
-    
+
     watched = await _watched_state_map(db, current_user.id)
     return RepositoryResponse.model_validate(repo).model_copy(
         update={"enabled": watched.get(repo.github_repo_id, False)}
@@ -558,22 +601,23 @@ async def get_repository_detail(
         .where(Repository.id == repository_id)
     )
     repo = result.scalar_one_or_none()
-    
+
     if not repo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found",
         )
-    
+
     # Get review stats - join through PullRequest since Review has pull_request_id FK
-    from app.db.models import Review, PullRequest
+    from app.db.models import PullRequest, Review
+
     reviews_count = await db.execute(
         select(func.count(Review.id))
         .join(PullRequest, Review.pull_request_id == PullRequest.id)
         .where(PullRequest.repository_id == repository_id)
         .where(Review.status == "completed")
     )
-    
+
     watched = await _watched_state_map(db, current_user.id)
     return RepositoryDetail(
         id=str(repo.id),
@@ -603,17 +647,15 @@ async def update_repository(
     """
     Update repository configuration.
     """
-    result = await db.execute(
-        select(Repository).where(Repository.id == repository_id)
-    )
+    result = await db.execute(select(Repository).where(Repository.id == repository_id))
     repo = result.scalar_one_or_none()
-    
+
     if not repo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found",
         )
-    
+
     # Update fields
     transition: str | None = None
     if update_data.enabled is not None:
@@ -623,7 +665,7 @@ async def update_repository(
         )
     if update_data.default_branch is not None:
         repo.default_branch = update_data.default_branch
-    
+
     await db.commit()
     await db.refresh(repo)
     await _mirror_repo_tenant(
@@ -666,17 +708,15 @@ async def delete_repository(
     Delete a repository from CodeSage.
     This removes the webhook and stops tracking.
     """
-    result = await db.execute(
-        select(Repository).where(Repository.id == repository_id)
-    )
+    result = await db.execute(select(Repository).where(Repository.id == repository_id))
     repo = result.scalar_one_or_none()
-    
+
     if not repo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found",
         )
-    
+
     # Drop the watched (review) switch so removal sticks: a later webhook
     # event recreates the repository row but stays gated off without it.
     watched_result = await db.execute(
