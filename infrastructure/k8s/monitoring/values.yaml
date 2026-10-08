@@ -51,7 +51,12 @@ grafana:
       memory: 192Mi
     limits:
       cpu: 500m
-      memory: 512Mi
+      # 512Mi was OOMKilled (exit 137) while browsing the heavier
+      # dashboards — Grafana 13 + 37 provisioned dashboards + panel
+      # rendering spikes past it. Memory is plentiful on this node
+      # (~34% used); only CPU is the scarce resource, so raising the
+      # limit costs nothing in the CPU budget (requests unchanged).
+      memory: 1Gi
 
   service:
     type: ClusterIP
