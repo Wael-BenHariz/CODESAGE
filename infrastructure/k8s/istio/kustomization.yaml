@@ -1,5 +1,8 @@
 # Istio security policies for the codesage namespace — plan Phase 1.
-# Apply AFTER istiod is up (Phase 0: `istioctl install --set profile=minimal`):
+# Apply AFTER istiod is up and the namespace is labeled for injection
+# (full sequence: APPLY_ORDER.md Step 3b):
+#   istioctl install -f infrastructure/k8s/istio/istio-operator.yaml -y
+#   kubectl label namespace codesage istio-injection=enabled
 #   kubectl apply -k infrastructure/k8s/istio/
 #
 # Layered model (faas k8s/07-istio reference, adapted):
