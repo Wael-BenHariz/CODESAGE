@@ -13,4 +13,10 @@ kubectl create namespace sonarqube
 helm install sonarqube sonarqube/sonarqube \
   --namespace sonarqube \
   --set community.enabled=true \
+  --set persistence.enabled=true \
   --set monitoringPasscode="<monitoring-passcode>"
+
+# persistence.enabled=true is REQUIRED: the chart defaults to emptyDir for
+# /opt/sonarqube/data, so any pod recreation silently wiped the H2 database —
+# including every API token (2026-10-08 incident: backend got HTTP 401 on
+# api/projects/create until a new token was minted). Keep data on a PVC.
