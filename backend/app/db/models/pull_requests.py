@@ -2,12 +2,19 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
+from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.db.models.repositories import Repository
+    from app.db.models.reviews import Review
+    from app.db.models.workspaces import Workspace
 
 if TYPE_CHECKING:
     from app.db.models.repositories import Repository
@@ -165,10 +172,24 @@ class PullRequest(Base):
         onupdate=func.now(),
         index=True,
     )
+    
+    # Workspace association
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Reference to the workspace",
+    )
 
     # Relationships
     repository: Mapped["Repository"] = relationship(
         "Repository",
+        back_populates="pull_requests",
+    )
+    
+    workspace: Mapped["Workspace"] = relationship(
+        "Workspace",
         back_populates="pull_requests",
     )
 

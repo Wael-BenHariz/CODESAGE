@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.db.models.orgs import OrgMember
     from app.db.models.reviews import Review
     from app.db.models.watched_repos import WatchedRepo
+    from app.db.models.workspaces import Workspace, WorkspaceMember
 
 
 class User(Base):
@@ -167,6 +168,63 @@ class User(Base):
         "OrgMember",
         back_populates="user",
         cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    # Workspace relationships
+    workspace_memberships: Mapped[list["WorkspaceMember"]] = relationship(
+        "WorkspaceMember",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    owned_workspaces: Mapped[list["Workspace"]] = relationship(
+        "Workspace",
+        foreign_keys="[Workspace.owner_user_id]",
+        back_populates="owner_user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    # Dismissal request relationships
+    dismissal_requests_made: Mapped[list["DismissalRequest"]] = relationship(
+        "DismissalRequest",
+        foreign_keys="[DismissalRequest.requested_by]",
+        back_populates="requested_by_user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    dismissal_requests_resolved: Mapped[list["DismissalRequest"]] = relationship(
+        "DismissalRequest",
+        foreign_keys="[DismissalRequest.resolved_by]",
+        back_populates="resolved_by_user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    # Install request relationships
+    install_requests_made: Mapped[list["InstallRequest"]] = relationship(
+        "InstallRequest",
+        foreign_keys="[InstallRequest.requested_by]",
+        back_populates="requested_by_user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    install_requests_resolved: Mapped[list["InstallRequest"]] = relationship(
+        "InstallRequest",
+        foreign_keys="[InstallRequest.resolved_by]",
+        back_populates="resolved_by_user",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    
+    # Notification relationships
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification",
+        back_populates="user",
         lazy="select",
     )
 

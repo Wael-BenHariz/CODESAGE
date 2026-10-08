@@ -8,7 +8,9 @@ reviews or repositories this release.
 """
 
 from typing import TYPE_CHECKING
+from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -25,6 +27,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.users import User
+    from app.db.models.workspaces import Workspace
 
 
 class Org(Base):
@@ -84,6 +87,12 @@ class Org(Base):
         back_populates="org",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    
+    # Workspace relationship
+    workspace: Mapped["Workspace"] = relationship(
+        "Workspace",
+        back_populates="orgs",
     )
 
     settings: Mapped["OrgSetting | None"] = relationship(
@@ -337,6 +346,15 @@ class PlatformSetting(Base):
         String(128),
         nullable=True,
         comment="Platform default LLM model (NULL = system default)",
+    )
+    
+    # Workspace association
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Reference to the workspace",
     )
 
     # created_at / updated_at are inherited from Base (as in Repository).

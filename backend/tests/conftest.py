@@ -192,6 +192,174 @@ async def user(db):
     return row
 
 
+@pytest_asyncio.fixture
+async def personal_workspace(db, user):
+    """A personal workspace for the test user."""
+    from app.db.models.workspaces import Workspace
+    
+    workspace = Workspace(
+        type="PERSONAL",
+        name=f"{user.login}'s Personal Workspace",
+        owner_user_id=user.id,
+    )
+    db.add(workspace)
+    await db.commit()
+    await db.refresh(workspace)
+    return workspace
+
+
+@pytest_asyncio.fixture
+async def org_workspace(db):
+    """An organization workspace for testing."""
+    from app.db.models.workspaces import Workspace
+    
+    workspace = Workspace(
+        type="ORG",
+        name="Test Organization",
+        github_account_login="test-org",
+    )
+    db.add(workspace)
+    await db.commit()
+    await db.refresh(workspace)
+    return workspace
+
+
+@pytest_asyncio.fixture
+async def workspace_member(db, org_workspace, user):
+    """A workspace member in the organization workspace with DEVELOPER role."""
+    from app.db.models.workspaces import WorkspaceMember
+    
+    member = WorkspaceMember(
+        workspace_id=org_workspace.id,
+        user_id=user.id,
+        role="DEVELOPER",
+    )
+    db.add(member)
+    await db.commit()
+    await db.refresh(member)
+    return member
+
+
+@pytest_asyncio.fixture
+async def org_admin_user(db):
+    """A user with ORG_ADMIN role in an organization workspace."""
+    from app.db.models.users import User
+    from app.db.models.workspaces import Workspace, WorkspaceMember
+    
+    # Create user
+    user = User(
+        github_id=444555666,
+        login="org-admin-user",
+        keycloak_id="kc-sub-org-admin",
+        role="DEVELOPER",  # Global role, workspace role will be ORG_ADMIN
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    # Create organization workspace
+    workspace = Workspace(
+        type="ORG",
+        name="Admin Test Organization",
+        github_account_login="admin-test-org",
+    )
+    db.add(workspace)
+    await db.commit()
+    await db.refresh(workspace)
+    
+    # Add user as ORG_ADMIN in the workspace
+    member = WorkspaceMember(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="ORG_ADMIN",
+    )
+    db.add(member)
+    await db.commit()
+    await db.refresh(member)
+    
+    return user, workspace, member
+
+
+@pytest_asyncio.fixture
+async def reviewer_user(db):
+    """A user with REVIEWER role in an organization workspace."""
+    from app.db.models.users import User
+    from app.db.models.workspaces import Workspace, WorkspaceMember
+    
+    # Create user
+    user = User(
+        github_id=777888999,
+        login="reviewer-user",
+        keycloak_id="kc-sub-reviewer",
+        role="DEVELOPER",  # Global role, workspace role will be REVIEWER
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    # Create organization workspace
+    workspace = Workspace(
+        type="ORG",
+        name="Reviewer Test Organization",
+        github_account_login="reviewer-test-org",
+    )
+    db.add(workspace)
+    await db.commit()
+    await db.refresh(workspace)
+    
+    # Add user as REVIEWER in the workspace
+    member = WorkspaceMember(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="REVIEWER",
+    )
+    db.add(member)
+    await db.commit()
+    await db.refresh(member)
+    
+    return user, workspace, member
+
+
+@pytest_asyncio.fixture
+async def developer_user(db):
+    """A user with DEVELOPER role in an organization workspace."""
+    from app.db.models.users import User
+    from app.db.models.workspaces import Workspace, WorkspaceMember
+    
+    # Create user
+    user = User(
+        github_id=111222333,
+        login="developer-user",
+        keycloak_id="kc-sub-developer",
+        role="DEVELOPER",  # Global role, workspace role will be DEVELOPER
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    
+    # Create organization workspace
+    workspace = Workspace(
+        type="ORG",
+        name="Developer Test Organization",
+        github_account_login="developer-test-org",
+    )
+    db.add(workspace)
+    await db.commit()
+    await db.refresh(workspace)
+    
+    # Add user as DEVELOPER in the workspace
+    member = WorkspaceMember(
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="DEVELOPER",
+    )
+    db.add(member)
+    await db.commit()
+    await db.refresh(member)
+    
+    return user, workspace, member
+
+
 @pytest.fixture(autouse=True)
 def mock_jwks(monkeypatch):
     """Serve the throwaway realm JWKS instead of hitting a real Keycloak."""

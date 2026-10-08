@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
+from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,6 +13,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.repositories import Repository
+    from app.db.models.workspaces import Workspace
 
 
 class GitHubInstallation(Base):
@@ -93,6 +96,15 @@ class GitHubInstallation(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    
+    # Workspace association
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Reference to the workspace",
+    )
 
     # Relationships
     repositories: Mapped[list["Repository"]] = relationship(
@@ -100,6 +112,12 @@ class GitHubInstallation(Base):
         back_populates="installation",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    
+    # Workspace relationship
+    workspace: Mapped["Workspace"] = relationship(
+        "Workspace",
+        back_populates="github_installations",
     )
 
     def __repr__(self) -> str:

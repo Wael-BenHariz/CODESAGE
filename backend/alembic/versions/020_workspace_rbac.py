@@ -137,6 +137,96 @@ def upgrade() -> None:
     op.create_index('ix_orgs_workspace_id', 'orgs', ['workspace_id'])
     
     # ### end Alembic commands ###
+    
+    # Data backfill: create personal workspaces for existing users
+    # and map existing organizations to org workspaces
+    from sqlalchemy import text
+    
+    # Create personal workspaces for all existing users
+    op.execute(
+        text("""
+        INSERT INTO workspaces (id, type, name, owner_user_id, created_at, updated_at)
+        SELECT 
+            gen_random_uuid() as id,
+            'PERSONAL' as type,
+            u.login || "'s Personal Workspace" as name,
+            u.id as owner_user_id,
+            NOW() as created_at,
+            NOW() as updated_at
+        FROM users u
+        WHERE NOT EXISTS (
+            SELECT 1 FROM workspaces w 
+            WHERE w.type = 'PERSONAL' AND w.owner_user_id = u.id
+        )
+        """)
+    )
+    
+    # Map existing organizations to org workspaces
+    op.execute(
+        text("""
+        INSERT INTO workspaces (id, type, name, github_account_login, created_at, updated_at)
+        SELECT 
+            gen_random_uuid() as id,
+            'ORG' as type,
+            o.name as name,
+            o.account_type || ':' || o.name as github_account_login,
+            NOW() as created_at,
+            NOW() as updated_at
+        FROM orgs o
+        WHERE NOT EXISTS (
+            SELECT 1 FROM workspaces w 
+            WHERE w.type = 'ORG' AND w.github_account_login = (o.account_type || ':' || o.name)
+        )
+        """)
+    )
+    
+    # Map existing user-org roles to workspace_members
+    op.execute(
+        text("""
+        INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+        SELECT 
+            gen_random_uuid() as id,
+            w.id as workspace_id,
+            om.user_id as user_id,
+            om.role as role,
+            NOW() as created_at,
+            NOW() as updated_at
+        FROM org_members om
+        JOIN orgs o ON om.org_id = o.id
+        JOIN workspaces w ON w.type = 'ORG' AND w.github_account_login = (o.account_type || ':' || o.name)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM workspace_members wm 
+            WHERE wm.workspace_id = w.id AND wm.user_id = om.user_id
+        )
+        """)
+    )
+    
+    # Assign existing repositories to the right workspace
+    op.execute(
+        text("""
+        UPDATE repositories r
+        SET workspace_id = w.id
+        FROM orgs o
+        JOIN workspaces w ON w.type = 'ORG' AND w.github_account_login = (o.account_type || ':' || o.name)
+        JOIN github_installations gi ON o.installation_id = gi.id
+        WHERE r.installation_id = gi.id
+        AND r.workspace_id IS NULL
+        """)
+    )
+    
+    # For repositories that don't belong to any organization (personal repositories),
+    # assign them to the user's personal workspace
+    op.execute(
+        text("""
+        UPDATE repositories r
+        SET workspace_id = w.id
+        FROM users u
+        JOIN workspaces w ON w.type = 'PERSONAL' AND w.owner_user_id = u.id
+        JOIN github_installations gi ON u.github_id = gi.account_id
+        WHERE r.installation_id = gi.id
+        AND r.workspace_id IS NULL
+        """)
+    )
 
 
 def downgrade() -> None:

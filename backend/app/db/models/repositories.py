@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
+from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,6 +15,7 @@ if TYPE_CHECKING:
     from app.db.models.github_installations import GitHubInstallation
     from app.db.models.pull_requests import PullRequest
     from app.db.models.webhook_events import WebhookEvent
+    from app.db.models.workspaces import Workspace
 
 
 class Repository(Base):
@@ -99,6 +102,15 @@ class Repository(Base):
         default=True,
         comment="Whether CodeSage is enabled for this repository",
     )
+    
+    # Workspace association
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Reference to the workspace",
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -132,6 +144,12 @@ class Repository(Base):
         back_populates="repository",
         cascade="all, delete-orphan",
         lazy="select",
+    )
+    
+    # Workspace relationship
+    workspace: Mapped["Workspace"] = relationship(
+        "Workspace",
+        back_populates="repositories",
     )
 
     def __repr__(self) -> str:
