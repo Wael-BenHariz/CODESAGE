@@ -243,14 +243,35 @@ jobs:
       - name: Frontend - Run tests
         run: npm run test:ci
         working-directory: frontend
+  # ============================================
+  # SonarQube Cloud Analysis
+  # ============================================
+  sonarqube:
+    name: SonarQube Cloud Analysis
+    runs-on: ubuntu-latest
+    needs: [code-quality, test]
 
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
   # ============================================
   # Build Docker Images
   # ============================================
   build:
     name: Build & Push Images
     runs-on: ubuntu-latest
-    needs: [security-scan, test]
+    needs: [security-scan, test,sonarqube]
     permissions:
       contents: read
       packages: write
