@@ -1,0 +1,276 @@
+# kube-prometheus-stack values for CodeSage — modelled on faas
+# k8s/05-monitoring/values.yaml, adapted for THIS cluster:
+#   * fullnameOverride `monitoring` → release-prefixed resources
+#     (monitoring-kube-prometheus, monitoring-grafana, …) so the
+#     prometheus-extra-scrape static target (postgres-exporter) and any
+#     dashboards can hard-reference service DNS.
+#   * storageClass `local-path` (k3s default provisioner — no ROOK/longhorn here)
+#   * kube-controller-manager / scheduler / etcd / kube-proxy DISABLED:
+#     k3s runs them differently (kine instead of etcd, no kube-proxy by
+#     default) — their default ServiceMonitors would never go UP.
+#   * Grafana dashboards: ALL dashboards are vendored/labeled ConfigMaps
+#     (kustomize, label grafana_dashboard=1) — the 3 we authored plus the
+#     9 pinned-revision community downloads in dashboards-downloads.yaml.
+#     The chart's gnetId download init is unused on grafana chart 13.3.1
+#     (no provider reads its output — see the Dashboards note below).
+#
+# Apply order:
+#   kubectl apply -k infrastructure/k8s/monitoring/   # secrets + dashboards
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace -f infrastructure/k8s/monitoring/values.yaml
+
+fullnameOverride: monitoring
+namespaceOverride: monitoring
+
+global:
+  storageClass: local-path
+
+# ---------------------------------------------------------------------------
+# Grafana (served via `kubectl -n monitoring port-forward svc/monitoring-grafana 3000:3000`)
+# ---------------------------------------------------------------------------
+grafana:
+  enabled: true
+
+  # admin/admin (grafana-admin-secret.yaml — change before any shared use)
+  admin:
+    existingSecret: grafana-admin-secret
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # GF_* env vars (GF_SECURITY_SECRET_KEY …) come from grafana-env-secret.yaml
+  envFromSecret: grafana-env-secret
+
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: local-path
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  # No Ingress on purpose — Grafana is reached with:
+  #   kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+  ingress:
+    enabled: false
+
+  # ------------------------------------------------------------------
+  # Datasource: kube-prometheus-stack's OWN default datasource
+  # (grafana-datasource-prometheus ConfigMap, name `Prometheus`,
+  # uid `prometheus`, url auto-wired to monitoring-prometheus:9090).
+  # We deliberately do NOT ship our own datasource ConfigMap — a second
+  # `Prometheus` datasource would collide (duplicate name). The sidecar
+  # still stays on for the dashboard providers below.
+  # ------------------------------------------------------------------
+  sidecar:
+    datasources:
+      enabled: true
+      defaultDatasourceEnabled: true
+      name: Prometheus
+      uid: prometheus
+      isDefaultDatasource: true
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+      label: grafana_dashboard
+      provider:
+        foldersFromFilesStructure: false
+      # allowUiUpdates=false → edits in the UI are NOT persisted (they would
+      # be lost on pod restart); edit JSON in the repo instead.
+      allowUiUpdates: false
+
+  # ------------------------------------------------------------------
+  # Dashboards — VENDORED, not chart-downloaded.
+  #
+  # The faas pattern (`dashboardProviders:` + `dashboards:` gnetId block)
+  # is a no-op on the grafana chart bundled with kube-prometheus-stack
+  # 13.3.1: that chart renders EXACTLY ONE dashboard provider
+  # (sidecarProvider -> sidecar.dashboards.folder = /tmp/dashboards,
+  # an emptyDir shared by the grafana-sc-dashboard sidecar and Grafana)
+  # and ignores `.Values.dashboardProviders` when provisioning. Its
+  # download-dashboards init container still runs, but writes to
+  # /var/lib/grafana/dashboards/<group> on the PVC where no provider
+  # reads it — dead files plus a pod-start dependency on grafana.com
+  # egress (a slow/blocked download delays rollout).
+  #
+  # So ALL non-authored dashboards live in dashboards-downloads.yaml as
+  # per-dashboard ConfigMaps labeled grafana_dashboard=1 — the same,
+  # proven path the 3 authored dashboards use. gnetId + revision for each
+  # are recorded in that file's header, and the DS_PROMETHEUS substitution
+  # the chart's sed used to do was applied at vendoring time.
+  # ------------------------------------------------------------------
+
+  # Optional SMTP — uncomment + add SMTP_PASSWORD to grafana-env-secret.
+  # notifiers: {}
+  # email:
+  #   enabled: true
+  #   fromAddress: grafana@codesage.local
+  #   smtp:
+  #     host: smtp.example.com:587
+  #     user: grafana@codesage.local
+
+# ---------------------------------------------------------------------------
+# Prometheus
+# ---------------------------------------------------------------------------
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "10GB"
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+    resources:
+      requests:
+        # 150m (not the chart's 200m): this 4-core node also runs the whole
+        # CodeSage stack + istiod + SonarQube — see APPLY_ORDER.md "CPU budget".
+        cpu: 150m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+    # Discover ServiceMonitors/PodMonitors in ALL namespaces (our authored
+    # jobs live in the monitoring namespace as a Secret, not a ServiceMonitor,
+    # but kube-prometheus-stack's own selectors must not hide anything).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
+    podMonitorSelector: {}
+    probeSelectorNilUsesHelmValues: false
+    probeNamespaceSelector: {}
+    probeSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleNamespaceSelector: {}
+    ruleSelector: {}
+
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    # Our extra jobs (prometheus-scrape-secret.yaml, key `extra-scrape.yaml`)
+    additionalScrapeConfigsSecret:
+      enabled: true
+      name: prometheus-extra-scrape
+      key: extra-scrape.yaml
+
+  service:
+    type: ClusterIP
+    port: 9090
+
+# ---------------------------------------------------------------------------
+# Alertmanager — same "route everything to the null receiver" pattern as faas
+# (alerts are collected but nothing is notified yet; wiring SMTP/webhooks is
+# a later step). NO external Secret: the chart renders its own from
+# `alertmanager.config` below, so only 3 secrets total are committed.
+# ---------------------------------------------------------------------------
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 120h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "null"
+    receivers:
+      - name: "null"
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+# k3s specifics: these four are NOT run the way kube-prometheus-stack's
+# default ServiceMonitors expect (kine instead of etcd, no kube-proxy,
+# control-plane on a different endpoint) → disable to avoid dead targets.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# kube-prometheus-stack's default rules/alerts: keep, but drop the noisy
+# Watchdog-style pages that fire on a single-node dev cluster.
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubeControllerManager: false
+    kubelet: true
+    kubeProxy: false
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeStateMetrics: true
+    windows: false
+
+# Prometheus Operator admission webhooks — fine on k3s (cert-manager not
+# required; the chart bootstraps its own CA).
+prometheusOperator:
+  admissionWebhooks:
+    patch:
+      enabled: true

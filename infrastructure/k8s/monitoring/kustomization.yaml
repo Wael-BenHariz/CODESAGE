@@ -1,0 +1,36 @@
+# Monitoring stack for CodeSage — plan Phase 2 (modelled on faas
+# k8s/05-monitoring). Namespace: monitoring (deliberately NOT mesh-injected:
+# Prometheus scrapes in plaintext, which the codesage AuthorizationPolicies
+# allow explicitly).
+#
+# Deploy order (secrets first so `grafana.admin.existingSecret` resolves):
+#   kubectl create namespace monitoring     # NOT mesh-injected, on purpose
+#   # --server-side is REQUIRED: dashboards-downloads.yaml holds a 468 KB
+#   # ConfigMap (Node Exporter Full) that exceeds client-side apply's 256 KB
+#   # last-applied-configuration annotation limit.
+#   kubectl apply -k infrastructure/k8s/monitoring/ --server-side
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring -f infrastructure/k8s/monitoring/values.yaml
+#   # postgres-exporter password is passed at install time, never committed:
+#   helm upgrade --install postgres-exporter prometheus-community/prometheus-postgres-exporter \
+#     --namespace monitoring \
+#     --set config.datasource.host=postgres-service.codesage.svc.cluster.local \
+#     --set config.datasource.port=5432 \
+#     --set config.datasource.user=codesage \
+#     --set config.datasource.password=<from backend secret DATABASE_URL> \
+#     --set config.datasource.database=codesage
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - grafana-admin-secret.yaml
+  - grafana-env-secret.yaml
+  - prometheus-scrape-secret.yaml
+  - dashboards-codesage-overview.yaml
+  - dashboards-repo-tenant.yaml
+  - dashboards-keycloak.yaml
+  # 9 vendored gnetId dashboards at pinned revisions (see file header for
+  # why they are ConfigMaps instead of the chart's dashboards: block)
+  - dashboards-downloads.yaml
