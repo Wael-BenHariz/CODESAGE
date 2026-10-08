@@ -1,0 +1,24 @@
+# Keycloak — deliberately public (same rationale as the faas reference:
+# faas k8s/07-istio/authorization-policy.yaml "allow-keycloak").
+#
+# Its flows are inherently pre-authentication: authorize endpoint, token
+# endpoint, PKCE code exchange, JWKS (/auth/realms/.../certs — fetched by
+# the Envoy jwtRules of every OTHER sidecar), the GitHub broker endpoint,
+# and account/console pages. Locking it behind a mesh JWT would deadlock
+# token issuance.
+#
+# Note: Keycloak still uses postgres (KC_DB_URL) — its own inbound is open,
+# its OUTBOUND is governed by authorization-policy-postgres.yaml on the
+# postgres side (server-side enforcement).
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-keycloak
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: keycloak
+  action: ALLOW
+  rules:
+    - {} # allow everything for this workload

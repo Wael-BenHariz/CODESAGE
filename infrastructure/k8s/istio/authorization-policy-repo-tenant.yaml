@@ -1,0 +1,44 @@
+# repo-tenant-service (Spring Boot) — three legitimate caller classes,
+# rules are ORed:
+#
+# 1) /actuator/health + /actuator/prometheus: scraped by Prometheus in the
+#    monitoring namespace (NOT injected -> plaintext source, so no peer
+#    identity exists to match) on the same port as the app (8085).
+#    Probe traffic never needs this — kubelet HTTP probes were rewritten
+#    to 127.0.0.1:15020 at injection.
+# 2) In-cluster mTLS callers: codesage-backend posts
+#    X-Service-Token to /api/v1/repos/internal/enable|disable
+#    (app/services/repo_tenant.py). Source namespace is derived from the
+#    workload certificate -> identities as cluster.local/ns/codesage/sa/*.
+#    mTLS is negotiated because both sides are injected (PERMISSIVE server
+#    still upgrades injected clients).
+# 3) Browser via ingress: ingress routes /api/v1/repos -> :8085 directly
+#    (infrastructure/k8s/base/ingress/ingress.yaml). The Angular interceptor
+#    attaches the Keycloak JWT, which RequestAuthentication validates ->
+#    requestPrincipals is set. (Today the SPA only calls backend paths,
+#    but the ingress route exists and this keeps it functional.)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: repo-tenant-allow
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: repo-tenant-service
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            paths:
+              - "/actuator/health"
+              - "/actuator/health/*"
+              - "/actuator/prometheus"
+    - from:
+        - source:
+            namespaces:
+              - "codesage"
+    - from:
+        - source:
+            requestPrincipals:
+              - "*"

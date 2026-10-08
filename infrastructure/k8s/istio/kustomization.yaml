@@ -1,0 +1,36 @@
+# Istio security policies for the codesage namespace — plan Phase 1.
+# Apply AFTER istiod is up (Phase 0: `istioctl install --set profile=minimal`):
+#   kubectl apply -k infrastructure/k8s/istio/
+#
+# Layered model (faas k8s/07-istio reference, adapted):
+#   1. PeerAuthentication PERMISSIVE  — plaintext ingress keeps working.
+#   2. RequestAuthentication x2      — validates both Keycloak issuers,
+#                                      feeds requestPrincipals.
+#   3. allow-nothing (deny floor)    — then per-workload allow-* opens up:
+#        frontend / keycloak / semgrep  = allow-all (public by design)
+#        backend                        = explicit public paths + require JWT
+#        repo-tenant                    = actuator + in-mesh + JWT callers
+#        postgres :5432                 = cluster pod CIDR (plaintext-safe)
+#        redis   :6379                  = codesage mTLS identity only
+#        OPTIONS (CORS) + :15090 (sidecar metrics) = namespace-wide
+#   4. ServiceEntry github.com / api.github.com — GitHub OAuth2 + App API
+#      egress registered for telemetry / future REGISTRY_ONLY.
+#
+# worker has no inbound listener -> covered by allow-nothing, no policy of
+# its own.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - peer-authentication.yaml
+  - request-authentication-public.yaml
+  - request-authentication-incluster.yaml
+  - authorization-policy.yaml
+  - authorization-policy-frontend.yaml
+  - authorization-policy-keycloak.yaml
+  - authorization-policy-backend.yaml
+  - authorization-policy-semgrep.yaml
+  - authorization-policy-repo-tenant.yaml
+  - authorization-policy-postgres.yaml
+  - authorization-policy-redis.yaml
+  - service-entry.yml

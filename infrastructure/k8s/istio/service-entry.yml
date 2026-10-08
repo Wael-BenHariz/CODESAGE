@@ -1,0 +1,59 @@
+# ServiceEntry — GitHub OAuth2 + GitHub App API egress (requested scope:
+# "a service-entry.yml for the github Oauth2").
+#
+# Server-to-server calls into GitHub made from this namespace:
+#   github.com        POST /login/oauth/access_token — OAuth2 token exchange,
+#                     twice over: backend/app/services/github.py (legacy
+#                     direct exchange) AND the Keycloak GitHub broker during
+#                     social login (realm configmap `github` IdP).
+#   api.github.com    backend/app/services/github_app.py — App-JWT ->
+#                     installation tokens, /installation/repositories,
+#                     file contents; review_posting.py posts the summary
+#                     review to /repos/.../pulls/.../reviews.
+#
+# Browser-only URLs (authorize redirect, /apps/.../installations/new,
+# avatars) never traverse the mesh — no entry needed. No raw.githubusercontent
+# / codeload usage exists in the codebase.
+#
+# Honest scope note: Istio's default egress is ALLOW_ALL, so connectivity
+# does not depend on these entries — they register the hosts in the mesh
+# registry so telemetry reports `destination_service=github.com` instead of
+# a bare IP, and they are the switchboard if meshConfig.outboundTrafficPolicy
+# is ever flipped to REGISTRY_ONLY (left off by default — SonarQube, Groq,
+# SMTP egress would otherwise need entries of their own first).
+#
+# exportTo "." = visible only in `codesage` (the only namespace whose
+# sidecars call GitHub: backend + keycloak).
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: github-oauth
+  namespace: codesage
+spec:
+  hosts:
+    - github.com
+  location: MESH_EXTERNAL
+  resolution: DNS
+  exportTo:
+    - "."
+  ports:
+    - number: 443
+      name: https
+      protocol: TLS
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: github-api
+  namespace: codesage
+spec:
+  hosts:
+    - api.github.com
+  location: MESH_EXTERNAL
+  resolution: DNS
+  exportTo:
+    - "."
+  ports:
+    - number: 443
+      name: https
+      protocol: TLS

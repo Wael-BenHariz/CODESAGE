@@ -1,0 +1,30 @@
+# RequestAuthentication — public (browser) issuer, namespace-wide.
+#
+# Tokens minted through KEYCLOAK_PUBLIC_URL carry
+#   iss = http://10.171.24.201/auth/realms/codesage-realm
+# (KEYCLOAK_PUBLIC_URL=http://10.171.24.201/auth + /realms/codesage-realm;
+#  matches KEYCLOAK_ALLOWED_ISSUERS on repo-tenant-service and the
+#  backend's `iss` from app/config.py).
+#
+# No selector -> applies to EVERY workload in codesage: Envoy validates
+# signature + expiry against the realm JWKS and exposes the result as
+# requestPrincipal for the AuthorizationPolicies.
+#   * forwardOriginalToken: true — the raw Authorization header keeps
+#     flowing to the app, which still does its own aud/azp + role checks.
+#   * A request with NO Authorization header passes untouched (public
+#     paths keep working). A garbage/foreign-issuer token is ignored
+#     (falls through as unauthenticated); an EXPIRED token for this issuer
+#     yields 401 at the sidecar — same outcome the app produced itself.
+#   * jwksUri uses the in-cluster Keycloak service so validation never
+#     depends on the external ingress path (issuer and JWKS URL are
+#     independent — only iss must match the token).
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt-public-issuer
+  namespace: codesage
+spec:
+  jwtRules:
+    - issuer: "http://10.171.24.201/auth/realms/codesage-realm"
+      jwksUri: "http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm/protocol/openid-connect/certs"
+      forwardOriginalToken: true

@@ -1,0 +1,65 @@
+# Backend API — the mesh-level JWT gate (confirmed decision:
+# "Require JWT at mesh": requestPrincipals required for every non-public
+# path; public paths listed explicitly).
+#
+# Enforcement order inside Envoy: RequestAuthentication first (validates
+# the token, sets requestPrincipal), then these rules. Rules are ORed.
+#
+# Traffic paths reaching this pod:
+#   * browser -> ingress-nginx -> :8000 (PLAINTEXT — ingress is not
+#     injected; PeerAuthentication is PERMISSIVE precisely for this) with
+#     `Authorization: Bearer <JWT>` attached by the Angular interceptor
+#     -> rule 2 matches.
+#   * GitHub webhook -> ingress -> POST /webhooks/github (HMAC, no JWT)
+#     -> rule 1b matches.
+#   * kubelet probes are rewritten to 127.0.0.1:15020 (pilot-agent) and
+#     never reach Envoy — no probe hole needed.
+#   * The app itself still validates JWT (aud/azp, roles, org_access) —
+#     mesh enforcement is defense-in-depth, not a replacement.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: backend-public-and-jwt
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: codesage-backend
+  action: ALLOW
+  rules:
+    # 1a) Public GETs — no token can exist yet on these flows:
+    #   /health*        liveness/readiness + orchestrator health checks
+    #   /auth/keycloak/config  SPA bootstrap BEFORE login (PKCE config)
+    #   /auth/logout    must work with an expired/absent token
+    #   /auth/github/app/callback  GitHub App Setup redirect lands here
+    #   /invitations/*  GET preview of an invite link (token in the URL,
+    #                   unauthenticated by design); POST .../accept is NOT
+    #                   covered — it falls through to rule 2 (JWT) and the
+    #                   app additionally requires get_current_user.
+    - to:
+        - operation:
+            methods:
+              - GET
+            paths:
+              - "/api/v1/health"
+              - "/api/v1/health/*"
+              - "/api/v1/auth/keycloak/config"
+              - "/api/v1/auth/logout"
+              - "/api/v1/auth/github/app/callback"
+              - "/api/v1/invitations/*"
+    # 1b) Public webhook — GitHub ships X-Hub-Signature-256, no JWT.
+    - to:
+        - operation:
+            methods:
+              - POST
+            paths:
+              - "/api/v1/webhooks/github"
+    # 2) Everything else (/repositories, /pull-requests, /reviews, /settings,
+    #    /orgs, /users, /platform, /github/*, /auth/me, /auth/install-url,
+    #    ...): a Keycloak-validated token MUST be present.
+    #    requestPrincipals is only ever populated by a RequestAuthentication
+    #    rule that PASSED — an absent/garbage token cannot match.
+    - from:
+        - source:
+            requestPrincipals:
+              - "*"
