@@ -30,15 +30,15 @@ data:
           },
           {
             "name": "ORG_ADMIN",
-            "description": "Administers one organization: org settings, invitations, member roles"
+            "description": "Administers one organization: org settings, invitations, member roles (DEPRECATED: use workspace roles instead)",
           },
           {
             "name": "REVIEWER",
-            "description": "Validates review findings (confirm / false positive / severity override) in their orgs"
+            "description": "Validates review findings (confirm / false positive / severity override) in their orgs (DEPRECATED: use workspace roles instead)",
           },
           {
             "name": "DEVELOPER",
-            "description": "Can install GitHub App, manage repos, view own reviews, staged-post controls"
+            "description": "Can install GitHub App, manage repos, view own reviews, staged-post controls (DEPRECATED: use workspace roles instead)",
           },
           {
             "name": "SUPER_ADMIN",
@@ -56,27 +56,6 @@ data:
           "path": "/platform-admins",
           "realmRoles": [
             "PLATFORM_ADMIN"
-          ]
-        },
-        {
-          "name": "org-admins",
-          "path": "/org-admins",
-          "realmRoles": [
-            "ORG_ADMIN"
-          ]
-        },
-        {
-          "name": "reviewers",
-          "path": "/reviewers",
-          "realmRoles": [
-            "REVIEWER"
-          ]
-        },
-        {
-          "name": "developers",
-          "path": "/developers",
-          "realmRoles": [
-            "DEVELOPER"
           ]
         },
         {
@@ -159,7 +138,7 @@ data:
               "consentRequired": false,
               "config": {
                 "user.attribute": "githubLogin",
-                "claim.name": "githubLogin",
+                "claim.name": "github_login",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.token.type": "accessToken",

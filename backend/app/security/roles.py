@@ -6,19 +6,20 @@ mirror written by ``get_current_user`` — guards never trust it.
 
 The four roles form a strict ladder (high → low):
 
-    PLATFORM_ADMIN > ORG_ADMIN > REVIEWER > DEVELOPER
+    PLATFORM_ADMIN > ORG_ADMIN > REVIEWER > DEVELOPER > NONE
 
 ``NONE`` is an internal, read-only sentinel (fail-closed): it has **no
 ladder position**, is never assignable in Keycloak and never stored in
 ``org_members``. It derives from unrecognized/missing role claims and from
 the legacy ``GUEST`` claim via the one-release compatibility map.
 
-Layout (v0.3.0, docs/PLAN_ROLES_SETTINGS_STAGED.md §2):
+Layout (v0.4.0):
   - legacy claims (``SUPER_ADMIN``, ``GUEST``) are mapped through
-    ``_COMPAT_MAP`` — **remove in v0.4.0** together with the old realm
+    ``_COMPAT_MAP`` — **removed in v0.4.0** together with the old realm
     roles/groups;
-  - the GitHub-broker ``DEVELOPER`` fallback (F1) is **temporary** — remove
-    once every realm user has a group.
+  - the GitHub-broker ``DEVELOPER`` fallback (F1) is **removed** — 
+    GitHub-brokered logins now receive ``NONE`` role and gain roles
+    through workspace membership only.
 """
 
 import logging
@@ -75,18 +76,15 @@ def derive_role(
     1. Claims pass through the one-release compat map
        (``SUPER_ADMIN→PLATFORM_ADMIN``, ``GUEST→NONE``, ``DEVELOPER→
        DEVELOPER``); new names pass through unchanged.
-    2. Precedence: ``PLATFORM_ADMIN > NONE > ORG_ADMIN > REVIEWER >
-       DEVELOPER`` — an explicit legacy read-only claim (``GUEST`` → ``NONE``)
-       beats role grants, mirroring today's ``SUPER_ADMIN > GUEST >
-       DEVELOPER`` (fail-closed: an explicit downgrade is honored).
+    2. Precedence: ``PLATFORM_ADMIN > ORG_ADMIN > REVIEWER > DEVELOPER >
+       NONE`` — an explicit legacy read-only claim (``GUEST`` → ``NONE``)
+       is treated as the lowest rank (fail-closed: an explicit downgrade
+       is honored but still below DEVELOPER).
     3. **No recognized or legacy claim at all** (e.g. only ``default-roles-*``
        or an unknown name):
-       - **TEMPORARY (F1)** and ``via_github`` (GitHub-brokered session) →
-         ``DEVELOPER`` — the pre-existing broker behavior (commit 183ffd9)
-         kept so GitHub sign-ins stay usable without a Keycloak role
-         assignment. Logs a structured warning (subject, derived role, no
-         secrets) each time. **Remove once every realm user has a group**
-         (plan §6 follow-up);
+       - ``via_github`` (GitHub-brokered session) → ``NONE``
+         (no automatic DEVELOPER role; roles come from workspace membership
+         only);
        - otherwise → ``NONE`` (fail-closed).
 
     A token with *no* role claim at all never reaches this function —
@@ -97,23 +95,12 @@ def derive_role(
 
     if ROLE_PLATFORM_ADMIN in mapped:
         return ROLE_PLATFORM_ADMIN
-    if ROLE_NONE in mapped:  # explicit legacy read-only downgrade wins
-        return ROLE_NONE
     for role in (ROLE_ORG_ADMIN, ROLE_REVIEWER, ROLE_DEVELOPER):
         if role in mapped:
             return role
-
-    # Reached only when no recognized/legacy claim matched the ladder above.
-    if via_github:
-        # TEMPORARY (F1): GitHub-brokered sessions keep deriving DEVELOPER
-        # until every realm user has a group — plan §6 follow-up.
-        logger.warning(
-            "role_fallback_broker_developer subject=%s derived=%s claims=%s",
-            subject or "unknown",
-            ROLE_DEVELOPER,
-            sorted(roles),
-        )
-        return ROLE_DEVELOPER
+    if ROLE_NONE in mapped:  # explicit legacy read-only downgrade
+        return ROLE_NONE
+    # No recognized or legacy claim at all
     return ROLE_NONE
 
 
@@ -150,7 +137,7 @@ def require_role(*allowed: str):
 
 # Route-table shorthands (Step 8):
 #   reads            → any authenticated role (get_current_user; NONE reads too)
-#   mutations        → require_developer    (all four roles, NONE excluded)
+#   mutations        → require_developer    (all roles except NONE)
 #   review validate  → require_reviewer     (REVIEWER+; Step 9)
 #   user admin       → require_super_admin  (PLATFORM_ADMIN)
 require_developer = require_role(
