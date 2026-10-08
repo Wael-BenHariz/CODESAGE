@@ -1,6 +1,6 @@
 /**
- * Org invitation shapes (plan Step 12) — mirrors of the Step 11 backend
- * schemas, snake_case exactly as the API returns them.
+ * Org invitation shapes (plan Step 12 + repo-scoped grants) — mirrors of
+ * the backend schemas, snake_case exactly as the API returns them.
  */
 
 /** The only roles an invitation may grant (backend Literal + migration 017 CHECK). */
@@ -17,6 +17,16 @@ export interface OrgInvitation {
   expires_at: string;
   created_at: string;
   invited_by: string | null;
+  /** `repositories.id` rows granted with `role` — empty = org-only invite. */
+  repository_ids: string[];
+  /** The same ids resolved to `owner/repo` for display (backend joins them). */
+  repositories: string[];
+  /**
+   * Joined GitHub-collaborator failures from the accept pass, null when
+   * everything succeeded (or the invite was never accepted). Presence here
+   * is a warning, never an error — the invite itself is valid.
+   */
+  github_error: string | null;
 }
 
 /** Public GET /invitations/{token} — masked address, no inviter identity. */
@@ -24,6 +34,8 @@ export interface InvitationPreview {
   org_name: string;
   role: InvitableRole;
   email_masked: string;
+  /** What the link grants: `owner/repo` names (ids are never exposed). */
+  repositories: string[];
 }
 
 /** POST /invitations/{token}/accept. */
@@ -33,6 +45,16 @@ export interface InvitationAcceptResult {
   role: string;
   /** Authoritative server-side verdict (both addresses present and different). */
   email_mismatch: boolean;
+  /** GitHub collaborator failures for the granted repos (null = all good). */
+  github_error: string | null;
+}
+
+/** POST /orgs/{orgId}/invitations body — one role for the whole selection. */
+export interface InvitationCreatePayload {
+  email: string;
+  role: InvitableRole;
+  /** `repositories.id` rows; omitted/empty keeps the org-only behaviour. */
+  repository_ids?: string[];
 }
 
 /**

@@ -37,8 +37,13 @@ export class RepositoryService {
   private readonly idCache = new Map<string, string>();
 
   /** `GET /repositories` — paginated envelope, mapped to `Repository[]`. */
-  getRepositories(): Observable<Repository[]> {
-    return this.api.get<RepositoryListDto>('/repositories').pipe(map(toRepositoryList));
+  getRepositories(params?: { page?: number; per_page?: number }): Observable<Repository[]> {
+    // No params → the identical single-argument call as before (default
+    // envelope; keeps existing expectations and the URL clean).
+    const request = params
+      ? this.api.get<RepositoryListDto>('/repositories', params)
+      : this.api.get<RepositoryListDto>('/repositories');
+    return request.pipe(map(toRepositoryList));
   }
 
   /**

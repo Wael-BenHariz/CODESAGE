@@ -3,8 +3,8 @@ import { Observable } from 'rxjs';
 
 import { ApiService } from './api.service';
 import {
-  InvitableRole,
   InvitationAcceptResult,
+  InvitationCreatePayload,
   InvitationPreview,
   OrgInvitation
 } from '../models/invitation.model';
@@ -26,10 +26,12 @@ export class InvitationService {
     return this.api.get<OrgInvitation[]>(`/orgs/${orgId}/invitations`);
   }
 
-  create(
-    orgId: string,
-    payload: { email: string; role: InvitableRole }
-  ): Observable<OrgInvitation> {
+  /**
+   * Creates an invitation. `repository_ids` (optional) grants the one
+   * selected role on each repository — the backend validates every id
+   * against the org's GitHub installation and 400s on a foreign one.
+   */
+  create(orgId: string, payload: InvitationCreatePayload): Observable<OrgInvitation> {
     return this.api.post<OrgInvitation>(`/orgs/${orgId}/invitations`, payload);
   }
 

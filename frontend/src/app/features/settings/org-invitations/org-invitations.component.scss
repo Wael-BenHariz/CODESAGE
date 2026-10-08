@@ -85,7 +85,7 @@
   }
 }
 
-/* Step 10 (responsive): the 6-column table keeps its intrinsic width inside a
+/* Step 10 (responsive): the 7-column table keeps its intrinsic width inside a
    horizontal scroller instead of pushing page-level scroll at 390px. */
 .table-wrap {
   overflow-x: auto;
@@ -161,4 +161,93 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* --- repo-scoped invitations (one role for a whole selection) --------------- */
+
+.repo-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.repo-options {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+
+.repo-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-1);
+  cursor: pointer;
+  min-width: 0;
+
+  input {
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex: none;
+  }
+}
+
+.repo-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-badge {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.repos-cell {
+  max-width: 340px;
+}
+
+.muted {
+  color: var(--text-3);
+}
+
+/* A stored github_error is a warning, not an error: the invitation itself
+   is valid — only the GitHub App side failed (e.g. missing permission). */
+.github-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: help;
 }

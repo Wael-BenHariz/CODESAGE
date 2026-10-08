@@ -3,6 +3,7 @@
 from app.db.models.github_installations import GitHubInstallation
 from app.db.models.oauth_tokens import OAuthToken
 from app.db.models.org_invitations import OrgInvitation
+from app.db.models.org_member_repos import OrgMemberRepo
 from app.db.models.orgs import Org, OrgMember, OrgSetting, PlatformSetting
 from app.db.models.pull_requests import PullRequest
 from app.db.models.repositories import Repository
@@ -20,6 +21,7 @@ __all__ = [
     "Org",
     "OrgInvitation",
     "OrgMember",
+    "OrgMemberRepo",
     "OrgSetting",
     "PlatformSetting",
     "PullRequest",

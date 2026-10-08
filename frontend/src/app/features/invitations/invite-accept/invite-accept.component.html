@@ -40,6 +40,20 @@
             <dt>Invited</dt>
             <dd data-testid="invite-masked-email">{{ preview()!.email_masked }}</dd>
           </div>
+          <div>
+            <dt>Repositories</dt>
+            <dd data-testid="invite-repos">
+              @if (preview()!.repositories.length === 0) {
+                <span class="state-note">Organization access only</span>
+              } @else {
+                <ul class="repo-list">
+                  @for (repo of preview()!.repositories; track repo) {
+                    <li data-testid="invite-repo">{{ repo }}</li>
+                  }
+                </ul>
+              }
+            </dd>
+          </div>
         </dl>
 
         @if (!auth.isAuthenticated()) {
@@ -119,6 +133,14 @@
           <p class="state-note" data-testid="invite-mismatch-note">
             The invitation was addressed to a different email address than this account.
           </p>
+        }
+        @if (result()!.github_error; as ghError) {
+          <div class="banner warning" role="status" data-testid="invite-github-warning">
+            <span>
+              You have access, but the GitHub App could not add you as a collaborator on every
+              repository: {{ ghError }}
+            </span>
+          </div>
         }
         <a routerLink="/dashboard" class="btn btn-primary" data-testid="invite-dashboard">
           Go to dashboard

@@ -22,7 +22,8 @@ describe('InviteAcceptComponent — public invite landing (plan Step 12)', () =>
   const preview: InvitationPreview = {
     org_name: 'acme',
     role: 'REVIEWER',
-    email_masked: 'jo***@example.com'
+    email_masked: 'jo***@example.com',
+    repositories: []
   };
 
   const user = (email: string): User => ({
@@ -164,7 +165,13 @@ describe('InviteAcceptComponent — public invite landing (plan Step 12)', () =>
     spyOn(auth, 'currentUser').and.returnValue(user('jo@example.com'));
     invitations.preview.and.returnValue(of(preview));
     invitations.accept.and.returnValue(
-      of({ org_id: 'org-1', org_name: 'acme', role: 'REVIEWER', email_mismatch: false })
+      of({
+        org_id: 'org-1',
+        org_name: 'acme',
+        role: 'REVIEWER',
+        email_mismatch: false,
+        github_error: null
+      })
     );
 
     create();
@@ -185,7 +192,13 @@ describe('InviteAcceptComponent — public invite landing (plan Step 12)', () =>
     spyOn(auth, 'currentUser').and.returnValue(user('jane@other.com'));
     invitations.preview.and.returnValue(of(preview));
     invitations.accept.and.returnValue(
-      of({ org_id: 'org-1', org_name: 'acme', role: 'REVIEWER', email_mismatch: true })
+      of({
+        org_id: 'org-1',
+        org_name: 'acme',
+        role: 'REVIEWER',
+        email_mismatch: true,
+        github_error: null
+      })
     );
 
     create();
@@ -222,5 +235,48 @@ describe('InviteAcceptComponent — public invite landing (plan Step 12)', () =>
     const button = q('invite-accept-btn') as HTMLButtonElement;
     expect(button.disabled).toBeFalse();
     expect(fixture.componentInstance.state()).toBe('ready');
+  });
+
+  // --- repo-scoped invitations ----------------------------------------------
+
+  it('lists the granted repositories on the preview (names only, no ids)', () => {
+    invitations.preview.and.returnValue(of({ ...preview, repositories: ['acme/api', 'acme/web'] }));
+
+    create();
+
+    const repos = Array.from(el().querySelectorAll('[data-testid="invite-repo"]'));
+    expect(repos.map(node => node.textContent?.trim())).toEqual(['acme/api', 'acme/web']);
+  });
+
+  it('says the invite is org-only when no repositories are granted', () => {
+    invitations.preview.and.returnValue(of(preview));
+
+    create();
+
+    expect(q('invite-repos')?.textContent).toContain('Organization access only');
+  });
+
+  it('joins anyway and warns when the GitHub collaborator pass failed', () => {
+    (auth.isAuthenticated as jasmine.Spy).and.returnValue(true);
+    spyOn(auth, 'currentUser').and.returnValue(user('jo@example.com'));
+    invitations.preview.and.returnValue(of({ ...preview, repositories: ['acme/api'] }));
+    invitations.accept.and.returnValue(
+      of({
+        org_id: 'org-1',
+        org_name: 'acme',
+        role: 'REVIEWER',
+        email_mismatch: false,
+        github_error: 'acme/api: HTTP 403 Resource not accessible'
+      })
+    );
+
+    create();
+    click('invite-accept-btn');
+
+    expect(fixture.componentInstance.state()).toBe('joined');
+    expect(q('invite-joined')).not.toBeNull(); // the accept itself succeeded
+    const warning = q('invite-github-warning');
+    expect(warning).not.toBeNull();
+    expect(warning?.textContent).toContain('HTTP 403');
   });
 });

@@ -7,10 +7,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -34,6 +35,11 @@ class OrgInvitation(Base):
         email: Invitee address as typed (trimmed); compared
             case-insensitively on accept (mismatch is allowed + warned)
         role: DEVELOPER | REVIEWER (CHECK in migration 017 + model)
+        repository_ids: uuid[] of the repositories this invitation
+            grants with ``role`` (empty = org-only, the pre-existing
+            behaviour) — one role for the whole selection
+        github_error: joined summary of the best-effort GitHub
+            collaborator pass run at accept time (NULL = all good)
         token_hash: SHA-256 hex of ``secrets.token_urlsafe(32)``
         status: pending | accepted | revoked | expired
         expires_at: now() + 7 days, computed at creation
@@ -68,6 +74,19 @@ class OrgInvitation(Base):
         String(16),
         nullable=False,
         comment="Invitable role: DEVELOPER or REVIEWER (CHECK)",
+    )
+
+    repository_ids: Mapped[list[UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=False,
+        server_default="{}",
+        comment="repositories.id rows granted with `role` ([] = org-only)",
+    )
+
+    github_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Joined GitHub collaborator errors from accept (NULL = ok)",
     )
 
     token_hash: Mapped[str] = mapped_column(

@@ -277,6 +277,8 @@ async def test_preview_is_public_and_masks_email(client, istage, monkeypatch):
         "org_name": "org-a",
         "role": "DEVELOPER",
         "email_masked": "jo***@example.com",
+        # Org-only invitation (no repository_ids) → empty grant list.
+        "repositories": [],
     }
     assert _INVITEE_EMAIL not in resp.text
 
