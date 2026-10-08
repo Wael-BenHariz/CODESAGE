@@ -43,6 +43,45 @@
         </button>
       </div>
 
+      <div class="repo-picker">
+        <span class="field-label" id="invite-repos-label">Repositories (optional)</span>
+        @if (reposLoading()) {
+          <p class="state-note" data-testid="invite-repos-loading">Loading repositories…</p>
+        } @else if (reposError()) {
+          <div class="banner error" role="alert" data-testid="invite-repos-error">
+            <span>{{ reposError() }}</span>
+            <button class="btn btn-secondary" type="button" (click)="loadRepos()">Retry</button>
+          </div>
+        } @else if (repos().length === 0) {
+          <p class="state-note" data-testid="invite-repos-empty">
+            No repositories connected yet — invitations stay org-only.
+          </p>
+        } @else {
+          <ul class="repo-options" aria-labelledby="invite-repos-label" data-testid="invite-repos">
+            @for (repo of repos(); track repo.id) {
+              <li>
+                <label class="repo-option">
+                  <input
+                    type="checkbox"
+                    [ngModel]="isSelected(repo.id)"
+                    (ngModelChange)="toggleRepo(repo.id)"
+                    [attr.data-testid]="'invite-repo-' + repo.id"
+                  />
+                  <span class="repo-name">{{ repo.fullName }}</span>
+                  @if (repo.private) {
+                    <span class="repo-badge">private</span>
+                  }
+                </label>
+              </li>
+            }
+          </ul>
+          <p class="state-note" data-testid="invite-repos-count">
+            {{ repositoryIds().length }} of {{ repos().length }} selected — the role above applies
+            to all of them.
+          </p>
+        }
+      </div>
+
       @if (sentTo(); as to) {
         <div class="banner success" role="status" data-testid="invite-sent">
           Invitation created for {{ to }} — the link was emailed to them.
@@ -62,6 +101,7 @@
             <tr>
               <th scope="col">Email</th>
               <th scope="col">Role</th>
+              <th scope="col">Repositories</th>
               <th scope="col">Status</th>
               <th scope="col">Expires</th>
               <th scope="col">Invited by</th>
@@ -73,6 +113,25 @@
               <tr data-testid="invite-row">
                 <td>{{ invitation.email }}</td>
                 <td>{{ invitation.role }}</td>
+                <td class="repos-cell">
+                  @if (invitation.repositories.length === 0) {
+                    <span class="muted">Org only</span>
+                  } @else {
+                    <span data-testid="invite-repos-cell">
+                      {{ invitation.repositories.join(', ') }}
+                    </span>
+                  }
+                  @if (invitation.github_error; as ghError) {
+                    <span
+                      class="github-warning"
+                      role="status"
+                      data-testid="invite-github-warning"
+                      [attr.title]="ghError"
+                    >
+                      ⚠ GitHub collaborator not added
+                    </span>
+                  }
+                </td>
                 <td>
                   <span class="status-chip" data-testid="invite-status">
                     {{ invitation.status }}

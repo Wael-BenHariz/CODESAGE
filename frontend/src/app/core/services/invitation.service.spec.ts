@@ -35,6 +35,24 @@ describe('InvitationService — invitation routes (plan Steps 11–12)', () => {
     });
   });
 
+  it('forwards the selected repository ids (one role for the whole selection)', () => {
+    api.post.and.returnValue(of({}));
+
+    service
+      .create('org-1', {
+        email: 'a@example.com',
+        role: 'DEVELOPER',
+        repository_ids: ['repo-1', 'repo-2']
+      })
+      .subscribe();
+
+    expect(api.post).toHaveBeenCalledWith('/orgs/org-1/invitations', {
+      email: 'a@example.com',
+      role: 'DEVELOPER',
+      repository_ids: ['repo-1', 'repo-2']
+    });
+  });
+
   it('revokes via DELETE /orgs/{orgId}/invitations/{invitationId}', () => {
     api.delete.and.returnValue(of(undefined));
 

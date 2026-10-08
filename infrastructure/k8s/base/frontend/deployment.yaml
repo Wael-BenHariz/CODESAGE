@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: 127.0.0.1:5000/codesage/frontend:v0.3.2
+          image: 127.0.0.1:5000/codesage/frontend:v0.3.5-platform-admin
           imagePullPolicy: IfNotPresent   # registries.yaml mirrors 127.0.0.1:5000
           ports:
             - containerPort: 80

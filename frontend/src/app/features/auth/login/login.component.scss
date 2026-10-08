@@ -160,3 +160,21 @@
   background: var(--accent);
   flex-shrink: 0;
 }
+
+// Secondary entry point to the dedicated platform-admin sign-in (/admin).
+.admin-hint {
+  margin: var(--space-5) 0 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-3);
+
+  a {
+    color: var(--accent);
+    text-decoration: underline;
+
+    &:hover {
+      color: var(--accent-hover);
+    }
+  }
+}

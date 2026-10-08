@@ -20,7 +20,8 @@ Role lists live in `frontend/src/app/core/guards/role.guard.ts`; the guard is
 | Route                                    | Screen (component)                         | `data.roles`  | Notes                                                                    |
 | ---------------------------------------- | ------------------------------------------ | ------------- | ------------------------------------------------------------------------ |
 | `/`                                      | `landing`                                  | public        | Entry point.                                                             |
-| `/login`                                 | `auth/login`                               | public        | Keycloak authorize (PKCE, `idpHint: github`).                            |
+| `/login`                                 | `auth/login`                               | public        | Keycloak authorize (PKCE, `idpHint: github`); links to `/admin`.         |
+| `/admin`                                 | `admin/admin-login`                        | public        | Platform-admin username+password sign-in (Keycloak password grant) → `/platform`. |
 | `/github/callback`                       | `auth/github-callback`                     | **no guard**  | GitHub App post-install redirect; must render while the session restores. |
 | `/invite/accept`                         | `invitations/invite-accept`                | **no guard**  | Invitee has no session yet: public preview, explicit Accept.             |
 | `/help`                                  | `help`                                     | **no guard**  | Public explainer (redesign Step 9): `data: { shell: false }`, shared copy. |
@@ -56,6 +57,7 @@ error + retry / success** — and mutations disable their button while pending
 | --------------------- | ---------------------------------------------------------------- | ----------------------------------------------- |
 | landing               | — (public)                                                       | —                                               |
 | auth/login            | `GET /auth/keycloak/config` (bootstrap)                          | —                                               |
+| admin/admin-login     | `GET /auth/keycloak/config` + Keycloak password grant (direct `fetch`, outside the API interceptors), then `GET /auth/me` | `admin-login.component.spec` (7), `admin-login.service.spec` (11) |
 | auth/github-callback  | `GET /github/status`, `POST /github/repos/selection`             | `github-callback.component.spec`                |
 | help (public)         | — (static copy; no endpoint — never faked data)                  | `help.component.spec` (8)                       |
 | dashboard             | `GET /repositories`, `GET /reviews` (+ `status_filter=pending`)  | `dashboard.component.spec` (7)                  |
@@ -71,8 +73,9 @@ error + retry / success** — and mutations disable their button while pending
 | errors 403/404        | — (routed by interceptors/guard)                                 | `error-pages.spec`                              |
 | site header (shared)  | `GET /orgs` (switcher), `can(action)` capabilities               | `site-header.component.spec`                    |
 
-Service/mapper/guard/interceptor suites: `core/services/*.spec.ts` (12 — one
-per route-group service incl. `api.service` and `llm-settings.service`),
+Service/mapper/guard/interceptor suites: `core/services/*.spec.ts` (13 — one
+per route-group service incl. `api.service`, `admin-login.service` and
+`llm-settings.service`),
 `core/services/mappers/pull-request.mapper.spec`, `core/guards/role.guard.spec`,
 `core/interceptors/{auth,error}.interceptor.spec`,
 `core/services/auth-context.service.spec`, `environments/environment.spec`.
@@ -95,6 +98,18 @@ per route-group service incl. `api.service` and `llm-settings.service`),
   text).
 - **Nav** is cosmetic (`AuthContextService.can()`); the backend re-authorizes
   every request (org access → uniform 404 when not a member).
+- **`/admin` platform-admin sign-in** (`admin/admin-login` +
+  `core/services/admin-login.service`): username+password → Keycloak password
+  grant (ROPC) → keycloak-js re-init with the returned tokens → `GET /auth/me`.
+  Requires `directAccessGrantsEnabled: true` on the `codesage-angular` client
+  (`infrastructure/k8s/base/keycloak/keycloak-configmap.yaml`; live realm
+  updated with the same flag). The token request uses `fetch`, not
+  `HttpClient`, so the API interceptors (401 → refresh → retry → logout) never
+  see a mistyped password. Fail-closed role check with the **same
+  `deriveRole`** as `RoleGuard`; init skips the login-status iframe (no SSO
+  cookie backs a password grant — that listener would `clearToken()` on a
+  "changed" report) and force-refreshes once instead. The password never
+  touches the backend; `/platform` and its endpoints stay guarded as before.
 - **Help** (redesign): `shared/help.copy.ts` is the single source of truth for
   `/help` and every `app-help-popover` — plain-text interpolation only; the two
   severity vocabularies (review comments `error|warning|suggestion|info` vs

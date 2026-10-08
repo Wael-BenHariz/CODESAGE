@@ -109,6 +109,23 @@ export class AuthContextService {
     }
   }
 
+  /**
+   * Drop the cached org list and the stored selection — called when the
+   * signed-in account changes (`AdminLoginService.login`) so a platform
+   * admin never sees the orgs/roles of whoever was signed in before.
+   * The next `ensureOrgs()` refetches for the new account.
+   */
+  resetOrgs(): void {
+    this.orgsPromise = null;
+    this._orgs.set(null);
+    this._activeOrgId.set(null);
+    try {
+      localStorage.removeItem(ACTIVE_ORG_KEY);
+    } catch {
+      // Storage unavailable — nothing was persisted either.
+    }
+  }
+
   /** Cosmetic capability check — see the class docstring for semantics. */
   can(action: AppCapability): boolean {
     const jwt = normalizeRole(this.backendRole());

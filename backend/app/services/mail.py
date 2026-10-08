@@ -115,3 +115,15 @@ def send_invitation_email(
         get_mail_sender().send(to=to, subject=subject, body=body)
     except Exception:
         logger.exception("invitation_mail_failed to=%s org=%s", to, org_name)
+        return
+    # Success is otherwise invisible: senders are deliberately quiet and the
+    # body never reaches an app log for a real transport (only the console
+    # sender logs it). Grep target for "did the invite actually go out?" —
+    # never includes the raw token.
+    logger.info(
+        "invitation_mail_sent backend=%s to=%s org=%s role=%s",
+        settings.MAIL_BACKEND,
+        to,
+        org_name,
+        role,
+    )

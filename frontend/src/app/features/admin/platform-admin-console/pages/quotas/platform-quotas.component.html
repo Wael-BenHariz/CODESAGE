@@ -1,0 +1,208 @@
+<div class="pa-page" data-testid="pa-quotas">
+  <header class="pa-page-header">
+    <div>
+      <h1 class="pa-page-title">Quotas &amp; Utilisation</h1>
+      <p class="pa-page-subtitle">
+        Suivez la consommation de la plateforme et ajustez les quotas par organisation. —
+        démonstration statique, les quotas restent locaux.
+      </p>
+    </div>
+    <button
+      type="button"
+      class="btn btn-primary"
+      (click)="openQuotaModal()"
+      data-testid="pa-quotas-edit"
+    >
+      Modifier les quotas
+    </button>
+  </header>
+
+  <section class="pa-stat-grid" aria-label="Utilisation globale">
+    @for (total of totals; track total.id) {
+      <article class="pa-stat-card" [attr.data-testid]="'pa-usage-' + total.id">
+        <span class="pa-stat-label">{{ total.label }}</span>
+        <span class="pa-stat-value">{{ total.value }}</span>
+      </article>
+    }
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-quota-bars-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-quota-bars-title">Consommation des quotas</h2>
+      <span class="pa-panel-meta">Période en cours (démo)</span>
+    </div>
+    <div class="pa-quota-list">
+      @for (bar of quotaBars; track bar.id) {
+        <div [attr.data-testid]="'pa-quota-bar-' + bar.id">
+          <div class="pa-quota-head">
+            <span>{{ bar.label }}</span>
+            <span class="pa-quota-percent">{{ bar.percent }}%</span>
+          </div>
+          <div
+            class="pa-progress-track"
+            role="progressbar"
+            [attr.aria-label]="bar.label"
+            [attr.aria-valuenow]="bar.percent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div
+              class="pa-progress-fill"
+              [class.warning]="barTone(bar.percent) === 'warning'"
+              [class.critical]="barTone(bar.percent) === 'critical'"
+              [style.width.%]="bar.percent"
+            ></div>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-org-usage-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-org-usage-title">Utilisation par organisation</h2>
+    </div>
+    <div class="pa-table-wrap">
+      <table class="pa-table" data-testid="pa-org-usage-table">
+        <thead>
+          <tr>
+            <th scope="col">Organisation</th>
+            <th scope="col">Revues</th>
+            <th scope="col">Tokens</th>
+            <th scope="col">Stockage</th>
+            <th scope="col">Utilisation</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of orgUsage; track row.organization) {
+            <tr [attr.data-testid]="'pa-org-row-' + row.organization">
+              <td>{{ row.organization }}</td>
+              <td class="pa-mono-cell">{{ row.reviews }}</td>
+              <td class="pa-mono-cell">{{ row.tokens }}</td>
+              <td class="pa-mono-cell">{{ row.storage }}</td>
+              <td>
+                <span class="pa-quota-percent">{{ row.utilization }}%</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-org-quotas-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-org-quotas-title">Quotas par organisation</h2>
+      <span class="pa-panel-meta">Modifiable localement</span>
+    </div>
+    <div class="pa-table-wrap">
+      <table class="pa-table" data-testid="pa-org-quotas-table">
+        <thead>
+          <tr>
+            <th scope="col">Organisation</th>
+            <th scope="col">Quota de revues</th>
+            <th scope="col">Quota LLM</th>
+            <th scope="col">Quota stockage</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (quota of quotas(); track quota.organization) {
+            <tr [attr.data-testid]="'pa-quota-row-' + quota.organization">
+              <td>{{ quota.organization }}</td>
+              <td class="pa-mono-cell">{{ quota.reviewQuota }}</td>
+              <td class="pa-mono-cell">{{ quota.llmQuota }}</td>
+              <td class="pa-mono-cell">{{ quota.storageQuota }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  @if (modalOpen()) {
+    <div
+      class="pa-modal-overlay"
+      tabindex="-1"
+      (click)="onOverlayClick($event)"
+      (keyup.escape)="closeQuotaModal()"
+    >
+      <div
+        class="pa-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pa-quota-modal-title"
+        data-testid="pa-quota-modal"
+      >
+        <div class="pa-modal-header">
+          <h2 class="pa-modal-title" id="pa-quota-modal-title">Modifier les quotas</h2>
+          <button type="button" class="pa-close" aria-label="Fermer" (click)="closeQuotaModal()">
+            ×
+          </button>
+        </div>
+        <div class="pa-modal-body">
+          <div class="pa-form">
+            <label class="pa-form-row">
+              <span class="pa-field-label">Organisation</span>
+              <select
+                class="input"
+                [ngModel]="orgDraft()"
+                (ngModelChange)="setOrgDraft($event)"
+                data-testid="pa-quota-org-select"
+              >
+                @for (org of orgNames(); track org) {
+                  <option [value]="org">{{ org }}</option>
+                }
+              </select>
+            </label>
+            <label class="pa-form-row">
+              <span class="pa-field-label">Quota de revues</span>
+              <input
+                type="number"
+                min="0"
+                class="input"
+                [ngModel]="reviewQuotaDraft()"
+                (ngModelChange)="reviewQuotaDraft.set($event)"
+                data-testid="pa-quota-reviews-input"
+              />
+            </label>
+            <label class="pa-form-row">
+              <span class="pa-field-label">Quota LLM</span>
+              <input
+                type="number"
+                min="0"
+                class="input"
+                [ngModel]="llmQuotaDraft()"
+                (ngModelChange)="llmQuotaDraft.set($event)"
+                data-testid="pa-quota-llm-input"
+              />
+            </label>
+            <label class="pa-form-row">
+              <span class="pa-field-label">Quota stockage</span>
+              <input
+                type="text"
+                class="input"
+                placeholder="10 GB"
+                [ngModel]="storageQuotaDraft()"
+                (ngModelChange)="storageQuotaDraft.set($event)"
+                data-testid="pa-quota-storage-input"
+              />
+            </label>
+          </div>
+        </div>
+        <div class="pa-modal-actions">
+          <button type="button" class="btn btn-secondary" (click)="closeQuotaModal()">
+            Annuler
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="saveQuotas()"
+            data-testid="pa-quota-save"
+          >
+            Enregistrer
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

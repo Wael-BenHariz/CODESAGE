@@ -1,0 +1,81 @@
+<div class="pa-page" data-testid="pa-dashboard">
+  <header class="pa-page-header">
+    <div>
+      <h1 class="pa-page-title">Bonjour, Administrateur</h1>
+      <p class="pa-page-subtitle">Vue globale de la plateforme CODESAGE · {{ demoDate }}</p>
+    </div>
+  </header>
+
+  <section class="pa-stat-grid" aria-label="Statistiques globales">
+    @for (stat of stats; track stat.id) {
+      <article class="pa-stat-card" [attr.data-testid]="'pa-stat-' + stat.id">
+        <span class="pa-stat-label">{{ stat.label }}</span>
+        <span class="pa-stat-value">{{ stat.value }}</span>
+        <span class="pa-stat-caption">
+          <span
+            class="pa-trend"
+            [class.up]="stat.direction === 'up'"
+            [class.down]="stat.direction === 'down'"
+            >{{ stat.trend }}</span
+          >
+          <span>{{ stat.caption }}</span>
+        </span>
+      </article>
+    }
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-health-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-health-title">État du système</h2>
+      <span class="pa-panel-meta">Aperçu statique</span>
+    </div>
+    <div class="pa-health-grid">
+      @for (service of services; track service.id) {
+        <div class="pa-health-card" [attr.data-testid]="'pa-health-' + service.id">
+          <span
+            class="pa-status-dot"
+            [class.operational]="service.health === 'operational'"
+            [class.warning]="service.health === 'warning'"
+            [class.error]="service.health === 'error'"
+            aria-hidden="true"
+          ></span>
+          <span class="pa-health-name">{{ service.name }}</span>
+          <span class="pa-health-state">{{ healthLabel(service.health) }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-chart-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-chart-title">Utilisation des revues</h2>
+      <span class="pa-panel-meta">7 derniers jours (démo)</span>
+    </div>
+    <div class="pa-chart" role="img" aria-label="Utilisation des revues du lundi au dimanche">
+      @for (point of week; track point.day) {
+        <div class="pa-chart-col">
+          <span class="pa-chart-value">{{ point.value }}</span>
+          <div class="pa-chart-bar" [style.height]="barHeight(point.value)"></div>
+          <span class="pa-chart-label">{{ point.day }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-actions-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-actions-title">Actions rapides</h2>
+    </div>
+    <div class="pa-quick-actions">
+      @for (action of quickActions; track action.link) {
+        <a
+          class="btn btn-secondary"
+          [routerLink]="action.link"
+          [attr.data-testid]="'pa-quick-' + action.link.split('/').pop()"
+        >
+          {{ action.label }}
+        </a>
+      }
+    </div>
+  </section>
+</div>

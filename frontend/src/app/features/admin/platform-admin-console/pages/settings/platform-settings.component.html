@@ -1,0 +1,229 @@
+<div class="pa-page" data-testid="pa-settings">
+  <header class="pa-page-header">
+    <div>
+      <h1 class="pa-page-title">Paramètres de la plateforme</h1>
+      <p class="pa-page-subtitle">
+        Configurez les paramètres généraux, IA et de sécurité. — démonstration statique, rien n'est
+        enregistré côté serveur.
+      </p>
+    </div>
+  </header>
+
+  <section class="pa-panel" aria-labelledby="pa-general-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-general-title">Paramètres généraux</h2>
+    </div>
+    <div class="pa-form">
+      <div class="pa-form-grid">
+        <label class="pa-form-row">
+          <span class="pa-field-label">Nom de la plateforme</span>
+          <input
+            type="text"
+            class="input"
+            [ngModel]="general().platformName"
+            (ngModelChange)="setGeneral('platformName', $event)"
+            data-testid="pa-settings-platform-name"
+          />
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">URL de l'application</span>
+          <input
+            type="url"
+            class="input"
+            [ngModel]="general().appUrl"
+            (ngModelChange)="setGeneral('appUrl', $event)"
+            data-testid="pa-settings-app-url"
+          />
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">Langue par défaut</span>
+          <select
+            class="input"
+            [ngModel]="general().defaultLanguage"
+            (ngModelChange)="setGeneral('defaultLanguage', $event)"
+            data-testid="pa-settings-language"
+          >
+            @for (language of languages; track language) {
+              <option [value]="language">{{ language }}</option>
+            }
+          </select>
+        </label>
+        <div class="pa-form-row">
+          <span class="pa-field-label">Mode maintenance</span>
+          <button
+            type="button"
+            class="pa-toggle"
+            [class.on]="general().maintenanceMode"
+            role="switch"
+            [attr.aria-checked]="general().maintenanceMode"
+            (click)="toggleGeneral('maintenanceMode')"
+            data-testid="pa-settings-maintenance"
+          >
+            <span class="pa-toggle-track" aria-hidden="true">
+              <span class="pa-toggle-thumb"></span>
+            </span>
+            <span>{{ general().maintenanceMode ? 'ON' : 'OFF' }}</span>
+          </button>
+        </div>
+      </div>
+      <div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="saveGeneral()"
+          data-testid="pa-settings-save-general"
+        >
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-ai-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-ai-title">Paramètres IA</h2>
+      <span class="pa-panel-meta">Valeurs de démonstration — aucun fournisseur contacté</span>
+    </div>
+    <div class="pa-form">
+      <div class="pa-form-grid">
+        <label class="pa-form-row">
+          <span class="pa-field-label">Provider par défaut</span>
+          <select
+            class="input"
+            [ngModel]="ai().provider"
+            (ngModelChange)="setAi('provider', $event)"
+            data-testid="pa-settings-provider"
+          >
+            @for (provider of providers; track provider) {
+              <option [value]="provider">{{ provider }}</option>
+            }
+          </select>
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">Modèle par défaut</span>
+          <select
+            class="input"
+            [ngModel]="ai().model"
+            (ngModelChange)="setAi('model', $event)"
+            data-testid="pa-settings-model"
+          >
+            @for (model of models; track model) {
+              <option [value]="model">{{ model }}</option>
+            }
+          </select>
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">Nombre maximum de requêtes simultanées</span>
+          <input
+            type="number"
+            min="1"
+            class="input"
+            [ngModel]="ai().maxConcurrentRequests"
+            (ngModelChange)="setAiNumber('maxConcurrentRequests', $event)"
+            data-testid="pa-settings-concurrency"
+          />
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">Timeout des revues</span>
+          <span class="pa-input-suffix">
+            <input
+              type="number"
+              min="1"
+              class="input"
+              [ngModel]="ai().reviewTimeoutSeconds"
+              (ngModelChange)="setAiNumber('reviewTimeoutSeconds', $event)"
+              data-testid="pa-settings-timeout"
+            />
+            <span class="pa-suffix">secondes</span>
+          </span>
+        </label>
+      </div>
+      <div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="saveAi()"
+          data-testid="pa-settings-save-ai"
+        >
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-security-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-security-title">Sécurité</h2>
+    </div>
+    <div class="pa-form">
+      <div class="pa-form-grid">
+        <label class="pa-form-row">
+          <span class="pa-field-label">Durée maximale d'une session</span>
+          <span class="pa-input-suffix">
+            <input
+              type="number"
+              min="1"
+              class="input"
+              [ngModel]="security().sessionDurationMinutes"
+              (ngModelChange)="setSecurityNumber('sessionDurationMinutes', $event)"
+              data-testid="pa-settings-session"
+            />
+            <span class="pa-suffix">minutes</span>
+          </span>
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">Nombre maximum de tentatives de connexion</span>
+          <input
+            type="number"
+            min="1"
+            class="input"
+            [ngModel]="security().maxLoginAttempts"
+            (ngModelChange)="setSecurityNumber('maxLoginAttempts', $event)"
+            data-testid="pa-settings-attempts"
+          />
+        </label>
+        <label class="pa-form-row">
+          <span class="pa-field-label">Expiration des invitations</span>
+          <span class="pa-input-suffix">
+            <input
+              type="number"
+              min="1"
+              class="input"
+              [ngModel]="security().invitationExpiryDays"
+              (ngModelChange)="setSecurityNumber('invitationExpiryDays', $event)"
+              data-testid="pa-settings-invitation"
+            />
+            <span class="pa-suffix">jours</span>
+          </span>
+        </label>
+        <div class="pa-form-row">
+          <span class="pa-field-label">Authentification renforcée</span>
+          <button
+            type="button"
+            class="pa-toggle"
+            [class.on]="security().enforcedAuth"
+            role="switch"
+            [attr.aria-checked]="security().enforcedAuth"
+            (click)="toggleSecurity('enforcedAuth')"
+            data-testid="pa-settings-mfa"
+          >
+            <span class="pa-toggle-track" aria-hidden="true">
+              <span class="pa-toggle-thumb"></span>
+            </span>
+            <span>{{ security().enforcedAuth ? 'ON' : 'OFF' }}</span>
+          </button>
+        </div>
+      </div>
+      <div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="saveSecurity()"
+          data-testid="pa-settings-save-security"
+        >
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  </section>
+</div>

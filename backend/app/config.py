@@ -85,6 +85,16 @@ class Settings(BaseSettings):
     SMTP_FROM: str = "noreply@codesage.local"
     SMTP_TLS: bool = True
 
+    # Outgoing webhook fired AFTER an invitation is accepted (repo grants +
+    # membership are already committed). Empty = disabled. Failures are
+    # logged and swallowed — an external consumer being down must never
+    # affect the accept response.
+    INVITATION_WEBHOOK_URL: str = Field(
+        default="",
+        description="POST target for org_invitation.accepted events (empty = off)",
+    )
+    INVITATION_WEBHOOK_TIMEOUT_SECONDS: float = 5.0
+
     # GitHub OAuth
     GITHUB_CLIENT_ID: str = Field(..., description="GitHub OAuth App Client ID")
     GITHUB_CLIENT_SECRET: str = Field(..., description="GitHub OAuth App Client Secret")

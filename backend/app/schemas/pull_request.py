@@ -4,9 +4,9 @@ Request/Response models for pull request management.
 """
 
 from datetime import datetime
-from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PullRequestBase(BaseModel):
@@ -24,9 +24,9 @@ class PullRequestCreate(PullRequestBase):
 
     repository_id: str = Field(..., description="Repository UUID")
     github_pr_id: int = Field(..., description="GitHub pull request ID")
-    body: Optional[str] = Field(None, description="PR description body")
+    body: str | None = Field(None, description="PR description body")
     author_login: str = Field(..., description="GitHub username of PR author")
-    author_avatar_url: Optional[str] = Field(None, description="Avatar URL of PR author")
+    author_avatar_url: str | None = Field(None, description="Avatar URL of PR author")
     base_sha: str = Field(..., max_length=40, description="SHA of the base commit")
     head_sha: str = Field(..., max_length=40, description="SHA of the head commit")
     additions: int = Field(default=0, ge=0, description="Number of lines added")
@@ -37,14 +37,18 @@ class PullRequestCreate(PullRequestBase):
 class PullRequestUpdate(BaseModel):
     """Schema for updating pull request information."""
 
-    title: Optional[str] = Field(None, max_length=500, description="PR title")
-    body: Optional[str] = Field(None, description="PR description body")
-    state: Optional[str] = Field(None, description="PR state: open, closed, merged")
-    base_sha: Optional[str] = Field(None, max_length=40, description="SHA of the base commit")
-    head_sha: Optional[str] = Field(None, max_length=40, description="SHA of the head commit")
-    additions: Optional[int] = Field(None, ge=0, description="Number of lines added")
-    deletions: Optional[int] = Field(None, ge=0, description="Number of lines deleted")
-    changed_files: Optional[int] = Field(None, ge=0, description="Number of files changed")
+    title: str | None = Field(None, max_length=500, description="PR title")
+    body: str | None = Field(None, description="PR description body")
+    state: str | None = Field(None, description="PR state: open, closed, merged")
+    base_sha: str | None = Field(
+        None, max_length=40, description="SHA of the base commit"
+    )
+    head_sha: str | None = Field(
+        None, max_length=40, description="SHA of the head commit"
+    )
+    additions: int | None = Field(None, ge=0, description="Number of lines added")
+    deletions: int | None = Field(None, ge=0, description="Number of lines deleted")
+    changed_files: int | None = Field(None, ge=0, description="Number of files changed")
 
 
 class PullRequestResponse(BaseModel):
@@ -55,10 +59,10 @@ class PullRequestResponse(BaseModel):
     github_pr_id: int = Field(..., description="GitHub pull request ID")
     number: int = Field(..., description="PR number")
     title: str = Field(..., description="PR title")
-    body: Optional[str] = Field(None, description="PR description body")
+    body: str | None = Field(None, description="PR description body")
     state: str = Field(..., description="PR state")
     author_login: str = Field(..., description="GitHub username of author")
-    author_avatar_url: Optional[str] = Field(None, description="Avatar URL of author")
+    author_avatar_url: str | None = Field(None, description="Avatar URL of author")
     base_branch: str = Field(..., description="Target branch")
     head_branch: str = Field(..., description="Source branch")
     base_sha: str = Field(..., description="Base commit SHA")
@@ -70,6 +74,16 @@ class PullRequestResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
     model_config = {"from_attributes": True}
+
+    @field_validator("id", "repository_id", mode="before")
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        # SQLAlchemy UUID columns yield uuid.UUID, which Pydantic v2 refuses
+        # to coerce to str — without this, model_validate(ORM row) raises and
+        # every repository with at least one PR returns 500.
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
 
 class PullRequestListResponse(BaseModel):
@@ -86,15 +100,15 @@ class PullRequestWithReviews(PullRequestResponse):
     """Pull request with associated reviews."""
 
     reviews_count: int = Field(default=0, description="Number of reviews")
-    latest_review_id: Optional[str] = Field(None, description="Latest review UUID")
-    latest_review_status: Optional[str] = Field(None, description="Latest review status")
+    latest_review_id: str | None = Field(None, description="Latest review UUID")
+    latest_review_status: str | None = Field(None, description="Latest review status")
 
 
 class AuthorInfo(BaseModel):
     """Pull request author information."""
 
     login: str
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
 
 
 class PRFileChange(BaseModel):
@@ -105,5 +119,5 @@ class PRFileChange(BaseModel):
     additions: int
     deletions: int
     changes: int
-    patch: Optional[str] = None
+    patch: str | None = None
     contents_url: str

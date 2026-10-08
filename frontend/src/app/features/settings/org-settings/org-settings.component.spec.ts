@@ -7,6 +7,7 @@ import { OrgSettingsComponent } from './org-settings.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiError } from '../../../core/services/api.service';
 import { InvitationService } from '../../../core/services/invitation.service';
+import { RepositoryService } from '../../../core/services/repository.service';
 import {
   OrgSettings,
   OrgSettingsService,
@@ -19,6 +20,7 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
   let component: OrgSettingsComponent;
   let orgSvc: jasmine.SpyObj<OrgSettingsService>;
   let invitations: jasmine.SpyObj<InvitationService>;
+  let repositoryService: jasmine.SpyObj<RepositoryService>;
   let roleSignal: WritableSignal<{ role: string } | null>;
   /** Query params served to the component's ActivatedRoute (plan §4.4 nav). */
   let routeParams: Record<string, string>;
@@ -87,9 +89,14 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     orgSvc.savePlatformSettings.and.returnValue(of(platformSettings));
 
     // Embedded child (Step 12) — stubbed so the org settings tests never
-    // need HttpClient (it only reads InvitationService).
+    // need HttpClient (it only reads InvitationService / RepositoryService).
     invitations = jasmine.createSpyObj<InvitationService>('InvitationService', ['list']);
     invitations.list.and.returnValue(of([]));
+    // The invite form's repo picker reads the repository list.
+    repositoryService = jasmine.createSpyObj<RepositoryService>('RepositoryService', [
+      'getRepositories'
+    ]);
+    repositoryService.getRepositories.and.returnValue(of([]));
     routeParams = {};
 
     TestBed.configureTestingModule({
@@ -108,6 +115,7 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
         },
         { provide: OrgSettingsService, useValue: orgSvc },
         { provide: InvitationService, useValue: invitations },
+        { provide: RepositoryService, useValue: repositoryService },
         // The component only reads currentUser()?.role.
         { provide: AuthService, useValue: { currentUser: roleSignal } }
       ]
