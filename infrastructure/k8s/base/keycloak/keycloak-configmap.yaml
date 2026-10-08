@@ -586,7 +586,7 @@ data:
           "publicClient": true,
           "standardFlowEnabled": true,
           "implicitFlowEnabled": false,
-          "directAccessGrantsEnabled": false,
+          "directAccessGrantsEnabled": true,
           "protocol": "openid-connect",
           "defaultClientScopes": [
             "profile",

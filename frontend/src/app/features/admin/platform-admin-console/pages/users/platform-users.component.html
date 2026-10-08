@@ -1,0 +1,484 @@
+<div class="pa-page" data-testid="pa-users">
+  <header class="pa-page-header">
+    <div>
+      <h1 class="pa-page-title">Gestion des utilisateurs</h1>
+      <p class="pa-page-subtitle">
+        Gérez les utilisateurs, leurs rôles et leurs organisations. — démonstration statique, les
+        données restent locales.
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openAdd()" data-testid="pa-users-add">
+      + Ajouter un utilisateur
+    </button>
+  </header>
+
+  <section class="pa-panel" aria-label="Liste des utilisateurs">
+    <div class="pa-toolbar">
+      <label class="pa-search">
+        <span class="pa-search-icon" aria-hidden="true">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          >
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5 14 14" />
+          </svg>
+        </span>
+        <span class="pa-sr">Rechercher un utilisateur</span>
+        <input
+          type="search"
+          class="input"
+          placeholder="Rechercher un utilisateur..."
+          [ngModel]="search()"
+          (ngModelChange)="setSearch($event)"
+          data-testid="pa-users-search"
+        />
+      </label>
+
+      <label class="pa-field">
+        <span class="pa-field-label">Rôle</span>
+        <select
+          class="input"
+          [ngModel]="roleFilter()"
+          (ngModelChange)="setRoleFilter($event)"
+          data-testid="pa-users-role-filter"
+        >
+          <option value="">Tous</option>
+          @for (role of roles; track role) {
+            <option [value]="role">{{ role }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="pa-field">
+        <span class="pa-field-label">Organisation</span>
+        <select
+          class="input"
+          [ngModel]="orgFilter()"
+          (ngModelChange)="setOrgFilter($event)"
+          data-testid="pa-users-org-filter"
+        >
+          <option value="">Toutes</option>
+          @for (org of organizations; track org) {
+            <option [value]="org">{{ org }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="pa-field">
+        <span class="pa-field-label">Statut</span>
+        <select
+          class="input"
+          [ngModel]="statusFilter()"
+          (ngModelChange)="setStatusFilter($event)"
+          data-testid="pa-users-status-filter"
+        >
+          <option value="">Tous</option>
+          <option value="active">Actif</option>
+          <option value="inactive">Inactif</option>
+        </select>
+      </label>
+    </div>
+
+    @if (filtered().length === 0) {
+      <app-empty-state
+        title="Aucun utilisateur trouvé"
+        message="Aucun résultat pour la recherche et les filtres sélectionnés."
+        testid="pa-users-empty"
+      />
+    } @else {
+      <div class="pa-table-wrap">
+        <table class="pa-table" data-testid="pa-users-table">
+          <thead>
+            <tr>
+              <th scope="col">Utilisateur</th>
+              <th scope="col">Email</th>
+              <th scope="col">Organisation</th>
+              <th scope="col">Rôle</th>
+              <th scope="col">Statut</th>
+              <th scope="col">Dernière activité</th>
+              <th scope="col"><span class="pa-sr">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (user of visibleUsers(); track user.id) {
+              <tr [attr.data-testid]="'pa-user-row-' + user.id">
+                <td>
+                  <span class="pa-cell-user">
+                    <span class="pa-cell-avatar" aria-hidden="true">{{ initials(user.name) }}</span>
+                    {{ user.name }}
+                  </span>
+                </td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.organization }}</td>
+                <td>
+                  <span class="pa-role-badge">{{ user.role }}</span>
+                </td>
+                <td>
+                  <span
+                    class="pa-status-badge"
+                    [class.active]="user.status === 'active'"
+                    [class.inactive]="user.status === 'inactive'"
+                  >
+                    {{ statusLabel(user.status) }}
+                  </span>
+                </td>
+                <td class="pa-mono-cell">{{ user.lastActivity }}</td>
+                <td>
+                  <div class="pa-row-actions">
+                    <button
+                      type="button"
+                      class="pa-menu-btn"
+                      aria-haspopup="true"
+                      [attr.aria-expanded]="openMenuId() === user.id"
+                      [attr.aria-label]="'Actions pour ' + user.name"
+                      [attr.data-testid]="'pa-user-menu-' + user.id"
+                      (click)="toggleMenu(user.id)"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <circle cx="8" cy="3.5" r="1.4" />
+                        <circle cx="8" cy="8" r="1.4" />
+                        <circle cx="8" cy="12.5" r="1.4" />
+                      </svg>
+                    </button>
+                    @if (openMenuId() === user.id) {
+                      <div class="pa-menu" [attr.data-testid]="'pa-user-menu-list-' + user.id">
+                        <button
+                          type="button"
+                          class="pa-menu-item"
+                          (click)="openProfile(user)"
+                          data-testid="pa-user-action-profile"
+                        >
+                          Voir le profil
+                        </button>
+                        <button
+                          type="button"
+                          class="pa-menu-item"
+                          (click)="openRoleEdit(user)"
+                          data-testid="pa-user-action-role"
+                        >
+                          Modifier le rôle
+                        </button>
+                        <button
+                          type="button"
+                          class="pa-menu-item"
+                          (click)="openOrgEdit(user)"
+                          data-testid="pa-user-action-org"
+                        >
+                          Changer l'organisation
+                        </button>
+                        <button
+                          type="button"
+                          class="pa-menu-item"
+                          [class.danger]="user.status === 'active'"
+                          (click)="toggleStatus(user)"
+                          data-testid="pa-user-action-status"
+                        >
+                          {{ user.status === 'active' ? 'Désactiver' : 'Activer' }}
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pa-pagination" data-testid="pa-users-pagination">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          [disabled]="currentPage() <= 1"
+          (click)="prevPage()"
+          data-testid="pa-users-prev"
+        >
+          Précédent
+        </button>
+        <span class="pa-pagination-status">
+          Page {{ currentPage() }} sur {{ pageCount() }} · {{ filtered().length }} utilisateurs
+        </span>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          [disabled]="currentPage() >= pageCount()"
+          (click)="nextPage()"
+          data-testid="pa-users-next"
+        >
+          Suivant
+        </button>
+      </div>
+    }
+  </section>
+
+  @if (modal(); as state) {
+    <div
+      class="pa-modal-overlay"
+      tabindex="-1"
+      (click)="onOverlayClick($event)"
+      (keyup.escape)="closeModal()"
+    >
+      @switch (state.kind) {
+        @case ('profile') {
+          @if (selectedUser(); as user) {
+            <div
+              class="pa-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pa-modal-title"
+              data-testid="pa-user-profile-modal"
+            >
+              <div class="pa-modal-header">
+                <h2 class="pa-modal-title" id="pa-modal-title">Utilisateur</h2>
+                <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                  ×
+                </button>
+              </div>
+              <div class="pa-modal-body">
+                <dl class="pa-deflist">
+                  <div class="pa-def-row">
+                    <dt>Nom</dt>
+                    <dd>{{ user.name }}</dd>
+                  </div>
+                  <div class="pa-def-row">
+                    <dt>Email</dt>
+                    <dd>{{ user.email }}</dd>
+                  </div>
+                  <div class="pa-def-row">
+                    <dt>Organisation</dt>
+                    <dd>{{ user.organization }}</dd>
+                  </div>
+                  <div class="pa-def-row">
+                    <dt>Rôle</dt>
+                    <dd>{{ user.role }}</dd>
+                  </div>
+                  <div class="pa-def-row">
+                    <dt>Statut</dt>
+                    <dd>{{ statusLabel(user.status) }}</dd>
+                  </div>
+                  <div class="pa-def-row">
+                    <dt>Dernière activité</dt>
+                    <dd>{{ user.lastActivity }}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div class="pa-modal-actions">
+                <button type="button" class="btn btn-secondary" (click)="closeModal()">
+                  Fermer
+                </button>
+              </div>
+            </div>
+          }
+        }
+        @case ('role') {
+          @if (selectedUser(); as user) {
+            <div
+              class="pa-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pa-modal-title"
+              data-testid="pa-user-role-modal"
+            >
+              <div class="pa-modal-header">
+                <h2 class="pa-modal-title" id="pa-modal-title">Modifier le rôle</h2>
+                <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                  ×
+                </button>
+              </div>
+              <div class="pa-modal-body">
+                <div class="pa-form">
+                  <div class="pa-form-row">
+                    <span class="pa-field-label">Utilisateur</span>
+                    <span>{{ user.name }}</span>
+                  </div>
+                  <div class="pa-form-row">
+                    <span class="pa-field-label">Rôle actuel</span>
+                    <span>{{ user.role }}</span>
+                  </div>
+                  <label class="pa-form-row">
+                    <span class="pa-field-label">Nouveau rôle</span>
+                    <select
+                      class="input"
+                      [ngModel]="roleDraft()"
+                      (ngModelChange)="roleDraft.set($event)"
+                      data-testid="pa-user-role-select"
+                    >
+                      @for (role of roles; track role) {
+                        <option [value]="role">{{ role }}</option>
+                      }
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="pa-modal-actions">
+                <button type="button" class="btn btn-secondary" (click)="closeModal()">
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="roleDraft() === user.role"
+                  (click)="saveRole()"
+                  data-testid="pa-user-role-save"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          }
+        }
+        @case ('org') {
+          @if (selectedUser(); as user) {
+            <div
+              class="pa-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pa-modal-title"
+              data-testid="pa-user-org-modal"
+            >
+              <div class="pa-modal-header">
+                <h2 class="pa-modal-title" id="pa-modal-title">Changer l'organisation</h2>
+                <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                  ×
+                </button>
+              </div>
+              <div class="pa-modal-body">
+                <div class="pa-form">
+                  <div class="pa-form-row">
+                    <span class="pa-field-label">Utilisateur</span>
+                    <span>{{ user.name }}</span>
+                  </div>
+                  <div class="pa-form-row">
+                    <span class="pa-field-label">Organisation actuelle</span>
+                    <span>{{ user.organization }}</span>
+                  </div>
+                  <label class="pa-form-row">
+                    <span class="pa-field-label">Nouvelle organisation</span>
+                    <select
+                      class="input"
+                      [ngModel]="orgDraft()"
+                      (ngModelChange)="orgDraft.set($event)"
+                      data-testid="pa-user-org-select"
+                    >
+                      @for (org of organizations; track org) {
+                        <option [value]="org">{{ org }}</option>
+                      }
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="pa-modal-actions">
+                <button type="button" class="btn btn-secondary" (click)="closeModal()">
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="orgDraft() === user.organization"
+                  (click)="saveOrg()"
+                  data-testid="pa-user-org-save"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          }
+        }
+        @case ('add') {
+          <div
+            class="pa-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pa-modal-title"
+            data-testid="pa-user-add-modal"
+          >
+            <div class="pa-modal-header">
+              <h2 class="pa-modal-title" id="pa-modal-title">Ajouter un utilisateur</h2>
+              <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                ×
+              </button>
+            </div>
+            <div class="pa-modal-body">
+              <div class="pa-form">
+                <label class="pa-form-row">
+                  <span class="pa-field-label">Nom</span>
+                  <input
+                    type="text"
+                    class="input"
+                    placeholder="Nom complet"
+                    [ngModel]="addDraft().name"
+                    (ngModelChange)="setAddField('name', $event)"
+                    data-testid="pa-user-add-name"
+                  />
+                </label>
+                <label class="pa-form-row">
+                  <span class="pa-field-label">Email</span>
+                  <input
+                    type="email"
+                    class="input"
+                    placeholder="nom@example.com"
+                    [ngModel]="addDraft().email"
+                    (ngModelChange)="setAddField('email', $event)"
+                    data-testid="pa-user-add-email"
+                  />
+                </label>
+                <label class="pa-form-row">
+                  <span class="pa-field-label">Organisation</span>
+                  <select
+                    class="input"
+                    [ngModel]="addDraft().organization"
+                    (ngModelChange)="setAddField('organization', $event)"
+                    data-testid="pa-user-add-org"
+                  >
+                    @for (org of organizations; track org) {
+                      <option [value]="org">{{ org }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="pa-form-row">
+                  <span class="pa-field-label">Rôle</span>
+                  <select
+                    class="input"
+                    [ngModel]="addDraft().role"
+                    (ngModelChange)="setAddField('role', $event)"
+                    data-testid="pa-user-add-role"
+                  >
+                    @for (role of roles; track role) {
+                      <option [value]="role">{{ role }}</option>
+                    }
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="pa-modal-actions">
+              <button type="button" class="btn btn-secondary" (click)="closeModal()">
+                Annuler
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="!addValid()"
+                (click)="addUser()"
+                data-testid="pa-user-add-submit"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+</div>

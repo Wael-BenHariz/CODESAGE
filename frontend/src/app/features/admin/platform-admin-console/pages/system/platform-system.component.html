@@ -1,0 +1,95 @@
+<div class="pa-page" data-testid="pa-system">
+  <header class="pa-page-header">
+    <div>
+      <h1 class="pa-page-title">État du système</h1>
+      <p class="pa-page-subtitle">
+        Vue statique des services, ressources et de la disponibilité de CODESAGE.
+      </p>
+    </div>
+  </header>
+
+  <section class="pa-panel" aria-labelledby="pa-services-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-services-title">Services</h2>
+      <span class="pa-panel-meta">Aperçu statique</span>
+    </div>
+    <div class="pa-health-grid">
+      @for (service of services; track service.id) {
+        <div class="pa-health-card" [attr.data-testid]="'pa-service-' + service.id">
+          <span
+            class="pa-status-dot"
+            [class.operational]="service.health === 'operational'"
+            [class.warning]="service.health === 'warning'"
+            [class.error]="service.health === 'error'"
+            aria-hidden="true"
+          ></span>
+          <span class="pa-health-name">{{ service.name }}</span>
+          <span class="pa-health-state">{{ healthLabel(service.health) }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-resources-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-resources-title">Ressources</h2>
+      <span class="pa-panel-meta">Valeurs de démonstration</span>
+    </div>
+    <div class="pa-quota-list">
+      @for (resource of resources; track resource.id) {
+        <div [attr.data-testid]="'pa-resource-' + resource.id">
+          <div class="pa-quota-head">
+            <span>{{ resource.label }}</span>
+            <span class="pa-quota-percent">{{ resource.percent }}%</span>
+          </div>
+          <div
+            class="pa-progress-track"
+            role="progressbar"
+            [attr.aria-label]="resource.label"
+            [attr.aria-valuenow]="resource.percent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div
+              class="pa-progress-fill"
+              [class.warning]="resource.percent >= 70 && resource.percent < 90"
+              [class.critical]="resource.percent >= 90"
+              [style.width.%]="resource.percent"
+            ></div>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-uptime-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-uptime-title">Disponibilité</h2>
+    </div>
+    <div class="pa-info-grid">
+      <div class="pa-info-box">
+        <span class="pa-info-label">Uptime</span>
+        <span class="pa-info-value" data-testid="pa-uptime">{{ uptime.uptime }}</span>
+      </div>
+      <div class="pa-info-box">
+        <span class="pa-info-label">Dernier redémarrage</span>
+        <span class="pa-info-value" data-testid="pa-last-restart">{{ uptime.lastRestart }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="pa-panel" aria-labelledby="pa-checks-title">
+    <div class="pa-panel-head">
+      <h2 class="pa-panel-title" id="pa-checks-title">Dernières vérifications</h2>
+      <span class="pa-panel-meta">Aperçu statique</span>
+    </div>
+    <div class="pa-check-list">
+      @for (service of services; track service.id) {
+        <div class="pa-check-row">
+          <span class="pa-check-name">{{ service.name }}</span>
+          <span class="pa-check-time">{{ service.lastCheck }}</span>
+        </div>
+      }
+    </div>
+  </section>
+</div>

@@ -23,6 +23,16 @@ export const routes: Routes = [
     data: { shell: false }
   },
   {
+    // Dedicated platform-admin credential sign-in (username + password form,
+    // no GitHub broker and no Keycloak-hosted page). Public like /login —
+    // it IS a login screen — and it only ever lands on `/platform`, which
+    // stays guarded by PLATFORM_ROLES and re-authorized by the backend.
+    path: 'admin',
+    loadComponent: () =>
+      import('./features/admin/admin-login/admin-login.component').then(m => m.AdminLoginComponent),
+    data: { shell: false }
+  },
+  {
     // No guard here: this route is GitHub's post-install redirect target and
     // must render even when the session is still being restored (check-sso).
     path: 'github/callback',
@@ -124,6 +134,64 @@ export const routes: Routes = [
       ),
     canActivate: [RoleGuard],
     data: { roles: PLATFORM_ROLES }
+  },
+  {
+    // Static Platform Administration console (PFE prototype) — its own
+    // sidebar/topbar layout instead of the app shell (shell: false), so
+    // PLATFORM_ADMIN-only navigation stays self-contained. Guarded by
+    // PLATFORM_ROLES like /platform (no org-membership elevation); every
+    // page renders from local mock data — no API calls anywhere inside.
+    path: 'platform-admin',
+    loadComponent: () =>
+      import('./features/admin/platform-admin-console/platform-admin-console.component').then(
+        m => m.PlatformAdminConsoleComponent
+      ),
+    canActivate: [RoleGuard],
+    data: { roles: PLATFORM_ROLES, shell: false },
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import(
+            './features/admin/platform-admin-console/pages/dashboard/platform-dashboard.component'
+          ).then(m => m.PlatformDashboardComponent)
+      },
+      {
+        path: 'users',
+        loadComponent: () =>
+          import(
+            './features/admin/platform-admin-console/pages/users/platform-users.component'
+          ).then(m => m.PlatformUsersComponent)
+      },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import(
+            './features/admin/platform-admin-console/pages/settings/platform-settings.component'
+          ).then(m => m.PlatformSettingsComponent)
+      },
+      {
+        path: 'system',
+        loadComponent: () =>
+          import(
+            './features/admin/platform-admin-console/pages/system/platform-system.component'
+          ).then(m => m.PlatformSystemComponent)
+      },
+      {
+        path: 'logs',
+        loadComponent: () =>
+          import('./features/admin/platform-admin-console/pages/logs/platform-logs.component').then(
+            m => m.PlatformLogsComponent
+          )
+      },
+      {
+        path: 'quotas',
+        loadComponent: () =>
+          import(
+            './features/admin/platform-admin-console/pages/quotas/platform-quotas.component'
+          ).then(m => m.PlatformQuotasComponent)
+      }
+    ]
   },
   {
     // Generic 404 (rule 5) — also the wildcard target below, so an unknown

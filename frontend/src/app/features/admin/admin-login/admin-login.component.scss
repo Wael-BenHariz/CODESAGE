@@ -1,7 +1,7 @@
-// Login screen (Step 4) — tokens only, frozen palette.
-// AA fix carried over: `.login-subtitle` was #666666 on #111111 (2.7:1)
-// → --text-3 (#929292, 4.9:1).
-.login {
+// Platform-admin sign-in (`/admin`) — same visual language as `/login`
+// (login.component.scss): tokens only, frozen palette.
+// AA: error copy uses --danger on --surface-1, labels --text-3 (both ≥4.5:1).
+.admin-login {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -44,20 +44,7 @@
 
 .login-header {
   text-align: center;
-  margin-bottom: 32px;
-}
-
-.install-banner {
-  margin-bottom: 20px;
-  padding: 12px 16px;
-  background: rgba(0, 232, 123, 0.08);
-  border: 1px solid rgba(0, 232, 123, 0.3);
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.5;
-  text-align: center;
+  margin-bottom: var(--space-6);
 }
 
 .logo-mark {
@@ -70,15 +57,7 @@
   border: 1px solid rgba(0, 232, 123, 0.2);
   border-radius: var(--radius-lg);
   color: var(--accent);
-  margin-bottom: 20px;
-
-  .glyph {
-    stroke: var(--text-inverse);
-    stroke-width: 2;
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+  margin-bottom: var(--space-5);
 }
 
 .login-title {
@@ -97,73 +76,99 @@
   margin: 0;
 }
 
-// ─── GitHub button ───
+// ─── Form ───
 
-.github-btn {
-  width: 100%;
+.admin-form {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: 14px 24px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  background: var(--danger-dim);
   border-radius: var(--radius-sm);
-  color: var(--text-1);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  input {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xs);
+    color: var(--text-1);
+
+    &:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    &[aria-invalid='true'] {
+      border-color: var(--danger);
+    }
+  }
+}
+
+.field-error {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 14px 24px;
+  margin-top: var(--space-2);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-inverse);
   font-family: var(--font-mono);
   font-size: var(--font-size-md);
   font-weight: 600;
   cursor: pointer;
   transition: all var(--motion-fast) var(--motion-ease);
 
-  &:hover {
-    background: var(--surface-3);
-    border-color: var(--border-control);
+  &:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
     transform: translateY(-1px);
   }
 
-  &:active {
+  &:active:not(:disabled) {
     transform: translateY(0);
   }
 
-  .github-icon {
-    width: 20px;
-    height: 20px;
-    fill: var(--text-1);
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 
-// ─── Feature list ───
-
-.login-features {
-  margin-top: var(--space-6);
+.alt-link {
+  margin: var(--space-6) 0 0;
   padding-top: var(--space-5);
   border-top: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.feature {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-.feature-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  flex-shrink: 0;
-}
-
-// Secondary entry point to the dedicated platform-admin sign-in (/admin).
-.admin-hint {
-  margin: var(--space-5) 0 0;
   text-align: center;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -176,5 +181,11 @@
     &:hover {
       color: var(--accent-hover);
     }
+  }
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: var(--space-6);
   }
 }
