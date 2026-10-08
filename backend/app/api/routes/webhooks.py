@@ -259,8 +259,17 @@ async def _handle_pull_request_event(
         # same pull_request id + head sha + action was processed AND a
         # review already exists for this PR (ignored events never queued
         # anything and must not block later accepted deliveries).
+        #
+        # FIX: Also compare the existing review's posting_mode with the
+        # org's current effective posting_mode. If they differ (e.g. org
+        # settings changed from auto to staged), allow a new review so
+        # the user can see the staged workflow in action.
         head_sha = pr_data.get("head", {}).get("sha", "")
         pr_gh_id = pr_data.get("id")
+        # Locals captured before any possible rollback below (a rollback
+        # expires the session's instances; plain attribute reads on an
+        # expired instance would then raise MissingGreenlet in asyncio).
+        full_name = repo.full_name
         duplicate = False
         if head_sha and pr_gh_id:
             prior_event = await db.scalar(
@@ -277,16 +286,67 @@ async def _handle_pull_request_event(
                 .limit(1)
             )
             if prior_event:
+                # Get the most recent review for this PR
                 existing_review = await db.scalar(
-                    select(Review.id).where(Review.pull_request_id == pr_record.id).limit(1)
+                    select(Review)
+                    .where(Review.pull_request_id == pr_record.id)
+                    .order_by(Review.created_at.desc())
+                    .limit(1)
                 )
-                duplicate = existing_review is not None
+                if existing_review:
+                    # Check if org posting_mode has changed since this review.
+                    # Fail-safe: any resolution error keeps the original
+                    # duplicate behavior (a webhook must never 500 here).
+                    from app.db.models import Org
+                    from app.services.org_settings import resolve_org_settings
+
+                    try:
+                        org_id = await db.scalar(
+                            select(Org.id).where(Org.installation_id == installation_id)
+                        )
+                        current_settings = await resolve_org_settings(db, org_id)
+
+                        # Allow new review if posting_mode changed (auto → staged)
+                        if (
+                            existing_review.posting_mode
+                            == current_settings.posting_mode
+                        ):
+                            duplicate = True  # Same settings → true duplicate, skip
+                        else:
+                            logger.info(
+                                "Allowing new review for %s@%s: posting_mode "
+                                "changed %s → %s",
+                                full_name,
+                                head_sha[:7],
+                                existing_review.posting_mode,
+                                current_settings.posting_mode,
+                            )
+                    except Exception:
+                        logger.warning(
+                            "posting_mode comparison failed for %s@%s; "
+                            "keeping duplicate skip",
+                            full_name,
+                            head_sha[:7],
+                            exc_info=True,
+                        )
+                        # The committed event row survives the rollback, but
+                        # the rollback expired the session's instances —
+                        # re-select the event so its processed flag still
+                        # writes cleanly below.
+                        event_id = webhook_event.id
+                        await db.rollback()
+                        webhook_event = (
+                            await db.execute(
+                                select(WebhookEvent).where(WebhookEvent.id == event_id)
+                            )
+                        ).scalar_one()
+                        duplicate = True
             if duplicate:
                 webhook_event.processed = True
                 await db.commit()
                 logger.info(
                     "Skipping duplicate review for %s@%s (action=%s)",
-                    repo.full_name,
+                    full_name,
                     head_sha[:7],
                     action,
                 )
