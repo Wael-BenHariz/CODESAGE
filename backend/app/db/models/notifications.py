@@ -5,12 +5,11 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-
 
 if TYPE_CHECKING:
     from app.db.models.users import User

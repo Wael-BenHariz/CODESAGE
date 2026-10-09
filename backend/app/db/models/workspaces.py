@@ -5,15 +5,23 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, ForeignKey, String, Text, func, CheckConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 if TYPE_CHECKING:
+    from app.db.models.dismissal_requests import DismissalRequest
+    from app.db.models.github_installations import GitHubInstallation
+    from app.db.models.install_requests import InstallRequest
+    from app.db.models.notifications import Notification
+    from app.db.models.orgs import Org
+    from app.db.models.pull_requests import PullRequest
+    from app.db.models.repositories import Repository
+    from app.db.models.reviews import Review
     from app.db.models.users import User
+    from app.db.models.watched_repos import WatchedRepo
 
 
 class Workspace(Base):
@@ -142,9 +150,12 @@ class Workspace(Base):
         lazy="select",
     )
     
-    # Constraints
+    # Constraints (parity with migration 020)
     __table_args__ = (
         CheckConstraint("type IN ('PERSONAL', 'ORG')", name='ck_workspaces_type'),
+        sa.UniqueConstraint(
+            'type', 'owner_user_id', name='uq_workspaces_type_owner_user_id'
+        ),
     )
     
     def __repr__(self) -> str:
@@ -214,9 +225,16 @@ class WorkspaceMember(Base):
         back_populates="workspace_memberships",
     )
     
-    # Constraints
+    # Constraints (parity with migration 020)
     __table_args__ = (
-        CheckConstraint("role IN ('ORG_ADMIN', 'REVIEWER', 'DEVELOPER', 'NONE')", name='ck_workspace_members_role'),
+        CheckConstraint(
+            "role IN ('ORG_ADMIN', 'REVIEWER', 'DEVELOPER', 'NONE')",
+            name='ck_workspace_members_role',
+        ),
+        sa.UniqueConstraint(
+            'workspace_id', 'user_id',
+            name='uq_workspace_members_workspace_id_user_id',
+        ),
     )
     
     def __repr__(self) -> str:

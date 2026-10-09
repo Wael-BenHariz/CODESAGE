@@ -5,6 +5,7 @@ Repository management and configuration endpoints.
 
 import logging
 import secrets
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -30,7 +31,11 @@ from app.schemas.repository import (
     RepositoryUpdate,
 )
 from app.security.dependencies import get_current_user
-from app.security.roles import ROLE_PLATFORM_ADMIN, require_developer
+from app.security.roles import ROLE_PLATFORM_ADMIN
+from app.security.workspace_access import (
+    WorkspaceContext,
+    require_workspace_permission,
+)
 from app.services import repo_tenant
 from app.services.github import github_service
 from app.services.org_provisioning import provision_installation_org
@@ -75,7 +80,7 @@ class GitHubInstallationSyncResponse(BaseModel):
 
 @router.get("/install-url", response_model=GitHubAppInstallUrl)
 async def get_github_app_install_url(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """Return the GitHub App installation URL for repository access."""
 
@@ -93,8 +98,11 @@ async def sync_github_app_installation(
     state: str | None = Query(
         None, description="Optional installation state returned by GitHub"
     ),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("repo_admin")  # noqa: B008
+    ),
 ):
     """Sync a real GitHub App installation and its accessible repositories."""
 
@@ -107,9 +115,11 @@ async def sync_github_app_installation(
             )
 
     installation_data = await github_service.get_app_installation(installation_id)
-    installation = await _upsert_installation(db, installation_data)
+    installation = await _upsert_installation(db, installation_data, ctx.workspace_id)
     await _ensure_installation_accessible_to_user(db, installation, current_user)
-    repos = await _sync_installation_repositories(db, installation, installation_id)
+    repos = await _sync_installation_repositories(
+        db, installation, installation_id, ctx.workspace_id
+    )
     # Org provisioning (Step 3): sync is the manual counterpart of the
     # installation webhook — keep orgs/members fresh here too (the user
     # link itself is written by the callback/webhook/adoption paths).
@@ -124,8 +134,8 @@ async def sync_github_app_installation(
 
 @router.get("/github", response_model=list[GitHubRepoInfo])
 async def list_github_repos(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """
     List repositories accessible through the user's GitHub App installation.
@@ -234,6 +244,7 @@ async def _get_current_oauth_token(
 async def _upsert_installation(
     db: AsyncSession,
     installation_data: dict,
+    workspace_id: UUID | None = None,
 ) -> GitHubInstallation:
     installation_id = installation_data.get("id")
     account = installation_data.get("account", {})
@@ -259,6 +270,7 @@ async def _upsert_installation(
         account_login=account.get("login", ""),
         account_type=account.get("type", "User"),
         permissions=installation_data.get("permissions", {}),
+        workspace_id=workspace_id,
     )
     db.add(record)
     await db.flush()
@@ -269,11 +281,12 @@ async def _sync_installation_repositories(
     db: AsyncSession,
     installation: GitHubInstallation,
     github_installation_id: int,
+    workspace_id: UUID | None = None,
 ) -> list[Repository]:
     repos_data = await github_service.get_installed_repos(github_installation_id)
     synced: list[Repository] = []
     for repo_data in repos_data:
-        repo = await _upsert_repository(db, installation, repo_data)
+        repo = await _upsert_repository(db, installation, repo_data, workspace_id)
         synced.append(repo)
     return synced
 
@@ -282,7 +295,15 @@ async def _upsert_repository(
     db: AsyncSession,
     installation: GitHubInstallation,
     repo_data: dict,
+    workspace_id: UUID | None = None,
 ) -> Repository:
+    """Insert-or-update a repository row, binding it to exactly one workspace.
+
+    Workspace binding precedence: the repository's existing binding (never
+    moved), then the installation's bound workspace (set by the GitHub App
+    install callback), then the caller's active workspace.
+    """
+    bound_workspace = installation.workspace_id or workspace_id
     result = await db.execute(
         select(Repository).where(Repository.github_repo_id == repo_data.get("id"))
     )
@@ -293,6 +314,8 @@ async def _upsert_repository(
         repo.full_name = repo_data.get("full_name", repo.full_name)
         repo.private = repo_data.get("private", repo.private)
         repo.default_branch = repo_data.get("default_branch", repo.default_branch)
+        if repo.workspace_id is None and bound_workspace is not None:
+            repo.workspace_id = bound_workspace
         return repo
 
     repo = Repository(
@@ -303,6 +326,7 @@ async def _upsert_repository(
         private=repo_data.get("private", False),
         default_branch=repo_data.get("default_branch", "main"),
         enabled=True,
+        workspace_id=bound_workspace,
     )
     db.add(repo)
     await db.flush()
@@ -417,8 +441,11 @@ async def _set_repository_enabled(
 )
 async def connect_repository(
     github_repo_id: int = Query(..., description="GitHub repository ID"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("repo_config")  # noqa: B008
+    ),
 ):
     """
     Connect a GitHub repository to CodeSage.
@@ -457,7 +484,9 @@ async def connect_repository(
             detail="Repository is not available through the installed GitHub App.",
         )
 
-    repo = await _upsert_repository(db, selected_installation, selected_repo)
+    repo = await _upsert_repository(
+        db, selected_installation, selected_repo, ctx.workspace_id
+    )
     # Connecting implies intent to review: create the watched (review) row too.
     transition = await _set_watched_state(db, current_user.id, repo, True)
     await db.commit()
@@ -474,8 +503,8 @@ async def connect_repository(
 
 @router.get("", response_model=RepositoryListResponse)
 async def list_repositories(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     enabled: bool | None = Query(None, description="Filter by enabled status"),
@@ -558,8 +587,8 @@ async def list_repositories(
 @router.get("/{repository_id}", response_model=RepositoryResponse)
 async def get_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """
     Get repository by ID.
@@ -586,8 +615,8 @@ async def get_repository(
 @router.get("/{repository_id}/detail", response_model=RepositoryDetail)
 async def get_repository_detail(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """
     Get detailed repository information with stats.
@@ -641,8 +670,11 @@ async def get_repository_detail(
 async def update_repository(
     repository_id: str,
     update_data: RepositoryUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("repo_config")  # noqa: B008
+    ),
 ):
     """
     Update repository configuration.
@@ -681,8 +713,11 @@ async def update_repository(
 @router.post("/{repository_id}/enable", response_model=RepositoryResponse)
 async def enable_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("repo_config")  # noqa: B008
+    ),
 ):
     """Grid toggle: enable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, True, db, current_user)
@@ -691,8 +726,11 @@ async def enable_repository(
 @router.post("/{repository_id}/disable", response_model=RepositoryResponse)
 async def disable_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("repo_config")  # noqa: B008
+    ),
 ):
     """Grid toggle: disable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, False, db, current_user)
@@ -701,8 +739,11 @@ async def disable_repository(
 @router.delete("/{repository_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("repo_admin")  # noqa: B008
+    ),
 ):
     """
     Delete a repository from CodeSage.

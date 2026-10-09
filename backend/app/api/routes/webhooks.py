@@ -16,7 +16,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import GitHubInstallation, PullRequest, Repository, Review, User, WatchedRepo, WebhookEvent
+from app.db.models import (
+    GitHubInstallation,
+    PullRequest,
+    Repository,
+    Review,
+    User,
+    WatchedRepo,
+    WebhookEvent,
+)
 from app.schemas.webhook import WebhookProcessResult
 from app.services import repo_tenant
 from app.services.github import github_service
@@ -30,7 +38,7 @@ router = APIRouter()
 @router.post("/github")
 async def handle_github_webhook(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
     """
     Handle incoming GitHub webhook events.
@@ -136,6 +144,8 @@ async def _handle_pull_request_event(
             full_name=repo_data.get("full_name", ""),
             private=repo_data.get("private", False),
             default_branch=repo_data.get("default_branch", "main"),
+            # §2.1: the repo belongs to the installation's workspace.
+            workspace_id=install_record.workspace_id,
         )
         db.add(repo)
         await db.commit()
@@ -146,6 +156,8 @@ async def _handle_pull_request_event(
         repo.full_name = repo_data.get("full_name", repo.full_name)
         repo.private = repo_data.get("private", repo.private)
         repo.default_branch = repo_data.get("default_branch", repo.default_branch)
+        if repo.workspace_id is None:
+            repo.workspace_id = install_record.workspace_id
         await db.commit()
     
     # Create webhook event record
@@ -210,6 +222,7 @@ async def _handle_pull_request_event(
                 additions=pr_data.get("additions", 0),
                 deletions=pr_data.get("deletions", 0),
                 changed_files=pr_data.get("changed_files", 0),
+                workspace_id=repo.workspace_id,
             )
             db.add(new_pr)
             pr_record = new_pr
@@ -369,6 +382,8 @@ async def _handle_pull_request_event(
                 pull_request_id=pr_record.id,
                 status="pending",
                 started_at=datetime.now(timezone.utc),
+                # Every review belongs to exactly one workspace (§2.1).
+                workspace_id=pr_record.workspace_id or repo.workspace_id,
             )
             db.add(review)
             await db.commit()
@@ -437,9 +452,6 @@ async def _handle_installation_event(
         # Create or update installation record
         record = await _upsert_installation_record(db, installation)
 
-        for repo_data in payload.get("repositories", []):
-            await _upsert_repository_record(db, record, repo_data)
-
         # Link the installing account's owner immediately: the browser-side
         # install callback may never arrive (GitHub App Setup URL unset or
         # the redirect aborted), and without this link /github/status says
@@ -454,10 +466,15 @@ async def _handle_installation_event(
 
         # Org provisioning (Step 3): one org per installation +
         # least-privilege members — runs AFTER the link update above so
-        # the member count sees it. Flushes only; the commit below
-        # persists both. A failure here raises → 500 → GitHub redelivers
-        # the event and the upserts above are idempotent.
+        # the member count sees it, and BEFORE the repository loop so the
+        # installation's workspace (§2.1) exists when the repos inherit it.
+        # Flushes only; the commit below persists everything. A failure
+        # here raises → 500 → GitHub redelivers the event and every upsert
+        # above is idempotent.
         await provision_installation_org(db, record)
+
+        for repo_data in payload.get("repositories", []):
+            await _upsert_repository_record(db, record, repo_data)
 
         await db.commit()
         
@@ -508,7 +525,6 @@ async def _handle_installation_repos_event(
     
     Updates repository access for an installation.
     """
-    action = payload.get("action")  # added, removed
     installation = payload.get("installation", {})
     repos_added = payload.get("repositories_added", [])
     repos_removed = payload.get("repositories_removed", [])
@@ -619,6 +635,10 @@ async def _upsert_repository_record(
         record.full_name = repo_data.get("full_name", record.full_name)
         record.private = repo_data.get("private", record.private)
         record.default_branch = repo_data.get("default_branch", record.default_branch)
+        # First binding wins: only fill an unbound repo (§2.1 — repos live
+        # in exactly one workspace; an explicit choice is never overridden).
+        if record.workspace_id is None:
+            record.workspace_id = installation.workspace_id
         return record
 
     record = Repository(
@@ -629,6 +649,9 @@ async def _upsert_repository_record(
         private=repo_data.get("private", False),
         default_branch=repo_data.get("default_branch", "main"),
         enabled=True,
+        # New repos inherit the installation's workspace — provisioning
+        # runs before this loop so it is already bound for fresh installs.
+        workspace_id=installation.workspace_id,
     )
     db.add(record)
     await db.flush()

@@ -32,11 +32,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_db
-from app.db.models import OAuthToken, User
+from app.db.models import GitHubInstallation, OAuthToken, User
 from app.redis import REVOKED_AT_KEY, get_redis
-from app.schemas.user import UserResponse
+from app.schemas.user import MeResponse, UserResponse, WorkspaceSummary
 from app.security.dependencies import bearer_scheme, get_current_user
 from app.security.keycloak import KeycloakTokenError, decode_keycloak_token
+from app.security.workspace_access import (
+    capability_flags,
+    check_permission_in_workspace,
+    list_user_workspaces,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,20 +57,27 @@ def _not_authorized() -> HTTPException:
     )
 
 
-def _create_installation_state_token(user_id: str) -> str:
+def _create_installation_state_token(
+    user_id: str, workspace_id: str | None = None
+) -> str:
     now = datetime.now(timezone.utc)
-    payload = {
+    payload: dict = {
         "sub": str(user_id),
         "iat": now - timedelta(seconds=60),
         "exp": now + timedelta(minutes=10),
         "type": "github_app_installation_state",
     }
+    if workspace_id:
+        # Workspace the admin chose to install into — the callback binds the
+        # github_installations row to it (§2.1: installations live in a
+        # workspace). Omitted for the legacy no-workspace flow.
+        payload["wid"] = workspace_id
     return jwt.encode(
         payload, settings.STATE_TOKEN_SECRET, algorithm=settings.ALGORITHM
     )
 
 
-def _verify_installation_state_token(state_token: str) -> str:
+def _verify_installation_state_token(state_token: str) -> tuple[str, UUID | None]:
     payload = jwt.decode(
         state_token, settings.STATE_TOKEN_SECRET, algorithms=[settings.ALGORITHM]
     )
@@ -74,7 +86,12 @@ def _verify_installation_state_token(state_token: str) -> str:
     user_id = payload.get("sub")
     if not user_id:
         raise JWTError("Missing user identifier in installation state token")
-    return str(user_id)
+    wid = payload.get("wid")
+    try:
+        workspace_id = UUID(str(wid)) if wid else None
+    except (TypeError, ValueError):
+        raise JWTError("Malformed workspace id in installation state token") from None
+    return str(user_id), workspace_id
 
 
 def _keycloak_browser_url() -> str:
@@ -101,9 +118,33 @@ async def keycloak_config() -> dict[str, str]:
 @router.get("/me")
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
-    """Get current authenticated user's information (role synced from JWT)."""
-    return UserResponse.model_validate(current_user)
+    """Get current authenticated user's information (role synced from JWT).
+
+    Enriched for RBAC (target design §2.3/§2.4): ``workspaces`` lists every
+    workspace the user belongs to with the *effective* role (ladder max of
+    realm role and membership) and its capability flags, and
+    ``capabilities`` mirrors the flags of the global realm role. The
+    frontend renders from these flags — it never re-derives role lists.
+    """
+    memberships = await list_user_workspaces(db, current_user)
+    payload = UserResponse.model_validate(current_user).model_dump()
+    return MeResponse(
+        **payload,
+        workspaces=[
+            WorkspaceSummary(
+                id=str(workspace.id),
+                name=workspace.name,
+                type=workspace.type,
+                role=role,
+                capabilities=capability_flags(role),
+                is_personal=workspace.type == "PERSONAL",
+            )
+            for workspace, role in memberships
+        ],
+        capabilities=capability_flags(current_user.role),
+    )
 
 
 @router.post("/logout")
@@ -155,9 +196,21 @@ async def logout(
 
 @router.get("/github/app/install-url")
 async def get_github_app_install_url(
+    workspace_id: UUID | None = Query(  # noqa: B008
+        None, description="Workspace to install the GitHub App into"
+    ),
     current_user: User = Depends(get_current_user),  # noqa: B008
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
-    """Generate the GitHub App installation URL with a signed state token."""
+    """Generate the GitHub App installation URL with a signed state token.
+
+    Installing the App is ``repo_admin`` in the target workspace (ORG_ADMIN+,
+    §2.3): pass ``workspace_id`` and the caller is checked there — unknown
+    workspace / non-member → 404, under-role → 403. The chosen workspace is
+    signed into the state (``wid``) and written back on the callback.
+    Omitting ``workspace_id`` keeps the legacy unbound flow (the webhook +
+    org provisioning binds the installation afterwards).
+    """
 
     if not settings.GITHUB_APP_SLUG:
         raise HTTPException(
@@ -165,7 +218,15 @@ async def get_github_app_install_url(
             detail="GitHub App slug is not configured",
         )
 
-    state_token = _create_installation_state_token(str(current_user.id))
+    if workspace_id is not None:
+        await check_permission_in_workspace(
+            db, current_user, workspace_id, "repo_admin"
+        )
+
+    state_token = _create_installation_state_token(
+        str(current_user.id),
+        str(workspace_id) if workspace_id else None,
+    )
     url = f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?{urlencode({'state': state_token})}"
     return {"url": url}
 
@@ -186,7 +247,7 @@ async def github_app_callback(
         return RedirectResponse(url=f"{frontend_url}/github/callback?success=false")
 
     try:
-        user_id = _verify_installation_state_token(state)
+        user_id, workspace_id = _verify_installation_state_token(state)
         user_uuid = UUID(user_id)
     except (JWTError, ValueError):
         return RedirectResponse(url=f"{frontend_url}/github/callback?success=false")
@@ -197,6 +258,22 @@ async def github_app_callback(
         return RedirectResponse(url=f"{frontend_url}/github/callback?success=false")
 
     user.github_installation_id = installation_id
+
+    # Bind the installation to the workspace the admin picked in the signed
+    # state (§2.1 — installations live in exactly one workspace). Existing
+    # bindings are never overwritten (precedence: first binding wins); when
+    # the webhook has not created the row yet, org provisioning binds it on
+    # delivery instead (state `wid` was consumed here, the row was not there
+    # to write to — the auto-created ORG workspace is the heal path).
+    if workspace_id is not None:
+        install_result = await db.execute(
+            select(GitHubInstallation).where(
+                GitHubInstallation.installation_id == installation_id
+            )
+        )
+        installation_row = install_result.scalar_one_or_none()
+        if installation_row is not None and installation_row.workspace_id is None:
+            installation_row.workspace_id = workspace_id
     await db.commit()
 
     # Org provisioning (Step 3): seed the org + the linker's membership

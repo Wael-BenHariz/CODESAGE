@@ -89,6 +89,7 @@ from app.services.github_collaborator import (
     ROLE_TO_GITHUB_PERMISSION,
     ensure_collaborator,
 )
+from app.services.org_provisioning import mirror_org_members
 
 logger = logging.getLogger(__name__)
 
@@ -614,6 +615,11 @@ async def accept_invitation(
         await db.execute(select(Org).where(Org.id == invitation.org_id))
     ).scalar_one()
 
+    # Workspace mirror (§2.1): same transaction, insert-only — dual-read
+    # takes the ladder max of both tables, so this only fills rows that
+    # are missing and never overwrites a workspace-side role edit.
+    await mirror_org_members(db, org_row)
+
     # Repo-scoped grants — SAME transaction as the membership: the
     # invitation's one role on each selected repository plus the
     # watched_repos row that turns reviews on for it. Ids are re-resolved
@@ -656,6 +662,7 @@ async def accept_invitation(
                 repo_id=repo.github_repo_id,
                 repo_name=repo.full_name,
                 enabled=True,
+                workspace_id=repo.workspace_id,
             )
             .on_conflict_do_nothing(index_elements=["user_id", "repo_id"])
         )

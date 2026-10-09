@@ -199,6 +199,22 @@ async def _find_or_create_user(db: AsyncSession, payload: dict) -> User | None:
     else:
         await db.refresh(user)
         logger.info("Provisioned user %s (login=%s)", user.id, user.login)
+
+    # Target design §2.1: every user owns exactly one PERSONAL workspace,
+    # created on first login. Best-effort — a failure must never block
+    # authentication (the /me path retries and the resolver treats the owner
+    # as ORG_ADMIN even without a membership row).
+    try:
+        from app.security.workspace_access import ensure_personal_workspace
+
+        await ensure_personal_workspace(db, user)
+        await db.commit()
+        await db.refresh(user)
+    except Exception:
+        logger.exception("Personal workspace provisioning failed for user %s", user.id)
+        await db.rollback()
+        await db.refresh(user)
+
     return user
 
 

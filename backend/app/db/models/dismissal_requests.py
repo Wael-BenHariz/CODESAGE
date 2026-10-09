@@ -5,17 +5,16 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 if TYPE_CHECKING:
+    from app.db.models.review_comments import ReviewComment
     from app.db.models.users import User
     from app.db.models.workspaces import Workspace
-    from app.db.models.review_comments import ReviewComment
 
 
 class DismissalRequest(Base):
@@ -107,9 +106,11 @@ class DismissalRequest(Base):
         back_populates="dismissal_requests",
     )
     
+    # One-way on purpose: ReviewComment has no reverse collection — every
+    # query goes through DismissalRequest.review_comment_id, so a second
+    # relationship on review_comments.py would be dead weight.
     review_comment: Mapped["ReviewComment"] = relationship(
         "ReviewComment",
-        back_populates="dismissal_requests",
     )
     
     requested_by_user: Mapped["User"] = relationship(

@@ -18,7 +18,11 @@ from app.schemas.pull_request import (
 from app.schemas.review import ReviewResponse
 from app.security.dependencies import get_current_user
 from app.security.org_access import OrgAccess, require_pull_request_access
-from app.security.roles import ROLE_DEVELOPER, require_developer
+from app.security.roles import ROLE_DEVELOPER
+from app.security.workspace_access import (
+    WorkspaceContext,
+    require_workspace_permission,
+)
 
 router = APIRouter()
 
@@ -150,7 +154,10 @@ async def get_pull_request(
 async def trigger_review(
     pull_request_id: str,
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    current_user: User = Depends(require_developer),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    ctx: WorkspaceContext = Depends(  # noqa: B008
+        require_workspace_permission("trigger")  # noqa: B008
+    ),
     access: OrgAccess = Depends(_pr_member_write),  # noqa: B008
 ):
     """
@@ -200,6 +207,8 @@ async def trigger_review(
         user_id=current_user.id,
         status="pending",
         started_at=datetime.now(timezone.utc),
+        # Every review belongs to exactly one workspace (§2.1).
+        workspace_id=pr.workspace_id or pr.repository.workspace_id,
     )
     db.add(review)
     await db.commit()

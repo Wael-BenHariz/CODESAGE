@@ -516,7 +516,7 @@ async def test_malformed_ids_are_404_not_500(client, stage):
 
 
 async def test_summary_happy_path_round_trips(client, stage):
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     resp = await client.patch(
         f"{_REVIEWS}/{stage.a.review.id}/summary",
         json={"summary": "Edited **summary** for the panel."},
@@ -540,7 +540,7 @@ async def test_summary_over_cap_is_422(client, stage):
     resp = await client.patch(
         f"{_REVIEWS}/{stage.a.review.id}/summary",
         json={"summary": "x" * (EDITED_SUMMARY_MAX_CHARS + 1)},
-        headers=_auth("kc-dev-a"),
+        headers=_auth("kc-dev-a", ("REVIEWER",)),
     )
     assert resp.status_code == 422
 
@@ -554,7 +554,7 @@ async def test_summary_requires_auth(client, stage):
 
 async def test_summary_after_post_is_409(client, stage, monkeypatch):
     _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     resp = await client.post(f"{_REVIEWS}/{stage.a.review.id}/post", headers=headers)
     assert resp.status_code == 200
 
@@ -573,7 +573,7 @@ async def test_summary_after_post_is_409(client, stage, monkeypatch):
 
 
 async def test_dismiss_and_restore_round_trip(client, stage):
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     comment = _comment_of(stage.a.review, severity="error")
 
     resp = await client.patch(
@@ -634,7 +634,7 @@ async def test_dismiss_comment_not_in_review_is_404(client, stage):
     foreign = _comment_of(stage.b.review, severity="error")
     resp = await client.patch(
         f"{_REVIEWS}/{stage.a.review.id}/comments/{foreign.id}/dismiss",
-        headers=_auth("kc-dev-a"),
+        headers=_auth("kc-dev-a", ("REVIEWER",)),
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Comment not found"
@@ -659,7 +659,7 @@ async def test_post_success_marks_review_and_builds_staged_body(
 ):
     """Happy path: posted_at + github_review_id set, body = base + findings."""
     stub = _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     info = _comment_of(stage.a.review, severity="info")
 
     # The panel flow: edit summary, dismiss the noise, post.
@@ -709,7 +709,7 @@ async def test_post_success_marks_review_and_builds_staged_body(
 
 async def test_post_twice_sequential_is_409(client, stage, monkeypatch):
     _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
 
     resp = await client.post(f"{_REVIEWS}/{stage.a.review.id}/post", headers=headers)
     assert resp.status_code == 200
@@ -722,7 +722,7 @@ async def test_post_twice_sequential_is_409(client, stage, monkeypatch):
 async def test_post_concurrent_has_exactly_one_winner(client, stage, monkeypatch):
     """Two simultaneous posts: the FOR UPDATE lock serializes them (409)."""
     stub = _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     url = f"{_REVIEWS}/{stage.a.review.id}/post"
 
     first, second = await asyncio.gather(
@@ -735,7 +735,7 @@ async def test_post_concurrent_has_exactly_one_winner(client, stage, monkeypatch
 
 async def test_post_github_failure_is_retryable_502(client, stage, monkeypatch):
     stub = _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     stub.error = ReviewPostError(422, "Validation Failed: bad sha")
 
     resp = await client.post(f"{_REVIEWS}/{stage.a.review.id}/post", headers=headers)
@@ -769,7 +769,7 @@ async def test_post_github_network_error_is_502(client, stage, monkeypatch):
     stub.error = httpx.ConnectError("connection refused")
 
     resp = await client.post(
-        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a")
+        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a", ("REVIEWER",))
     )
     assert resp.status_code == 502
     assert "nothing was posted" in resp.json()["detail"]
@@ -783,7 +783,7 @@ async def test_post_auto_mode_is_409(client, stage, db, monkeypatch):
     await db.commit()
 
     resp = await client.post(
-        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a")
+        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a", ("REVIEWER",))
     )
     assert resp.status_code == 409
     assert "not staged" in resp.json()["detail"]
@@ -796,7 +796,7 @@ async def test_post_not_ready_is_409(client, stage, db, monkeypatch):
     await db.commit()
 
     resp = await client.post(
-        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a")
+        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a", ("REVIEWER",))
     )
     assert resp.status_code == 409
     assert "not ready to post" in resp.json()["detail"]

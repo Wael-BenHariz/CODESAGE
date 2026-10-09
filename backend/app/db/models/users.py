@@ -9,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.db.models.dismissal_requests import DismissalRequest
+    from app.db.models.install_requests import InstallRequest
+    from app.db.models.notifications import Notification
     from app.db.models.oauth_tokens import OAuthToken
     from app.db.models.orgs import OrgMember
     from app.db.models.reviews import Review
