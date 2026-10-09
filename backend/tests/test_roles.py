@@ -92,43 +92,52 @@ def test_claim_matching_is_case_insensitive():
 # --- derive_role: broker fallback (flag F1 — REMOVED) ------------------------
 
 
-def test_broker_fallback_removed_derives_none(caplog):
-    """F1 removed (target design): a GitHub-brokered session with NO
-    recognized or legacy claim derives NONE — roles come from workspace
-    membership only (personal workspace ORG_ADMIN, invited-org DEVELOPER).
-    No fallback warning is logged because there is no fallback anymore."""
+def test_broker_signup_default_is_org_admin(caplog):
+    """GitHub-brokered session with NO recognized or legacy claim derives
+    ORG_ADMIN — the account-creation default (first login creates the
+    personal workspace where that user holds ORG_ADMIN membership, and the
+    global floor keeps nav/trigger rights working there). Any explicit
+    claim still outranks it (next test); no fallback warning is logged —
+    this is a default, not the removed F1 DEVELOPER fallback."""
     with caplog.at_level(logging.WARNING, logger="app.security.roles"):
-        assert derive_role([], via_github=True, subject="user-42") == ROLE_NONE
+        assert derive_role([], via_github=True, subject="user-42") == ROLE_ORG_ADMIN
         assert (
             derive_role(
                 ["default-roles-codesage-realm"],
                 via_github=True,
                 subject="user-42",
             )
-            == ROLE_NONE
+            == ROLE_ORG_ADMIN
         )
 
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert warnings == [], "the F1 broker fallback must stay removed"
 
 
-def test_broker_fallback_never_overrides_any_claim(caplog):
-    """F1 constraint: any recognized/legacy claim stops the fallback —
-    a brokered GUEST stays NONE; claims always outrank the fallback."""
+def test_broker_default_never_overrides_any_claim(caplog):
+    """Claims outrank the brokered default: an explicit GUEST downgrade
+    stays NONE (admins keep the read-only lever); explicit DEVELOPER /
+    REVIEWER / SUPER_ADMIN derive their own value — the ORG_ADMIN signup
+    default only fires when NOTHING is claimed."""
     with caplog.at_level(logging.WARNING, logger="app.security.roles"):
         assert derive_role(["GUEST"], via_github=True) == ROLE_NONE
         assert derive_role(["DEVELOPER"], via_github=True) == ROLE_DEVELOPER
         assert derive_role(["REVIEWER"], via_github=True) == ROLE_REVIEWER
         assert derive_role(["SUPER_ADMIN"], via_github=True) == ROLE_PLATFORM_ADMIN
+        # An explicit ORG_ADMIN claim derives the same value as the default.
+        assert derive_role(["ORG_ADMIN"], via_github=True) == ROLE_ORG_ADMIN
 
     fallback_warnings = [r for r in caplog.records if "role_fallback" in r.getMessage()]
     assert fallback_warnings == [], "no fallback while any claim is present"
 
 
 def test_non_brokered_session_never_falls_back(caplog):
-    """Non-GitHub token with no role claim → NONE, and no fallback warning."""
+    """Non-GitHub token with no role claim → NONE (fail-closed): the
+    ORG_ADMIN signup default must not leak onto non-brokered sessions,
+    and no fallback warning is logged."""
     with caplog.at_level(logging.WARNING, logger="app.security.roles"):
         assert derive_role(["default-roles-codesage-realm"]) == ROLE_NONE
+        assert derive_role([]) == ROLE_NONE
     assert [r for r in caplog.records if "role_fallback" in r.getMessage()] == []
 
 

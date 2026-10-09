@@ -5,13 +5,13 @@
    audience and expiry are all valid.
 2. Role-claim rejection: a token with NEITHER ``realm_access`` NOR a flat
    ``roles`` claim is a 401, never the fallback role.
-3. Fallback role: ``realm_access`` present but no recognized role name
+3. Role default: ``realm_access`` present but no recognized role name
    (e.g. only ``default-roles-*``) → ``NONE`` for non-GitHub tokens
-   (fail-closed), but DEVELOPER when the token carries the GitHub identity
-   claims (``githubId``/``githubLogin`` — a GitHub-brokered session; the
-   temporary F1 fallback, kept with constraints — any recognized or legacy
-   claim, incl. ``GUEST``, stops it), with explicit ``GUEST``/``SUPER_ADMIN``
-   claims still outranking that fallback — identically in
+   (fail-closed), but ``ORG_ADMIN`` when the token carries the GitHub
+   identity claims (``githubId``/``githubLogin`` — a GitHub-brokered
+   signup default; any recognized or legacy claim, incl. ``GUEST``,
+   stops it), with explicit ``GUEST``/``SUPER_ADMIN`` claims still
+   outranking that default — identically in
    ``app.security.roles.derive_role`` and the frontend ``deriveRole``.
 4. The generic 401 body never leaks which check failed.
 """
@@ -113,7 +113,7 @@ async def test_access_token_with_flat_roles_claim_accepted(client):
     assert resp.json()["role"] == "DEVELOPER"
 
 
-# --- 3. fallback role (NONE fail-closed; DEVELOPER via GitHub claims — F1) ----
+# --- 3. role default (NONE fail-closed; ORG_ADMIN via GitHub claims) ---------
 
 
 async def test_default_roles_only_falls_back_to_none(client):
@@ -135,10 +135,11 @@ async def test_unrecognized_role_names_fall_back_to_none(client):
     assert resp.json()["role"] == "NONE"
 
 
-async def test_github_session_default_roles_derives_none(client):
+async def test_github_session_default_roles_derives_org_admin(client):
     """GitHub-brokered token (githubId claim) with only default realm roles
-    → NONE: the F1 broker fallback was removed (target design) — roles come
-    from workspace membership only (personal workspace = ORG_ADMIN)."""
+    → ORG_ADMIN: the account-creation default for GitHub signups (first
+    login creates their personal workspace, where they hold ORG_ADMIN
+    membership). An explicit claim still outranks it (next tests)."""
     token = make_keycloak_token(
         sub="kc-sub-github-defaults",
         roles=("default-roles-codesage-realm", "offline_access", "uma_authorization"),
@@ -147,12 +148,12 @@ async def test_github_session_default_roles_derives_none(client):
     )
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "NONE"
+    assert resp.json()["role"] == "ORG_ADMIN"
 
 
 async def test_github_login_claim_alone_still_authenticates(client):
     """githubLogin without githubId still authenticates (JIT provisioning);
-    with F1 removed the derived role is NONE either way."""
+    either claim spelling triggers the ORG_ADMIN signup default."""
     token = make_keycloak_token(
         sub="kc-sub-github-login-only",
         roles=("default-roles-codesage-realm",),
@@ -160,13 +161,13 @@ async def test_github_login_claim_alone_still_authenticates(client):
     )
     resp = await _me(client, token)
     assert resp.status_code == 200
-    assert resp.json()["role"] == "NONE"
+    assert resp.json()["role"] == "ORG_ADMIN"
 
 
-async def test_explicit_guest_downgrade_still_beats_github_fallback(client):
-    """An explicit GUEST assignment outranks the GitHub-developer fallback —
+async def test_explicit_guest_downgrade_still_beats_github_default(client):
+    """An explicit GUEST assignment outranks the ORG_ADMIN signup default —
     admins keep their read-only downgrade lever (GUEST → NONE via the compat
-    map; the fallback never fires when a legacy claim is present)."""
+    map; the default only fires when nothing is claimed)."""
     token = make_keycloak_token(
         sub="kc-sub-github-guest",
         roles=("default-roles-codesage-realm", "GUEST"),
@@ -178,18 +179,19 @@ async def test_explicit_guest_downgrade_still_beats_github_fallback(client):
 
 
 async def test_fallback_role_matches_backend_contract():
-    """derive_role's contract (F1 removed): NONE by default for every
-    session without a recognized claim — brokered or not; the frontend's
-    capability flags (not a role guess) gate the UI."""
+    """derive_role's contract: ORG_ADMIN for a GitHub-brokered session with
+    no recognized claim (account-creation default), fail-closed NONE for
+    every other session without one — the frontend's capability flags
+    (not a role guess) gate the UI."""
     from app.security.roles import derive_role
 
-    # Fail-closed NONE for unrecognized/missing claims.
+    # Fail-closed NONE for unrecognized/missing claims (non-brokered).
     assert derive_role([]) == "NONE"
     assert derive_role(["default-roles-codesage-realm"]) == "NONE"
-    # GitHub-brokered sessions are NOT special anymore (F1 removed).
-    assert derive_role([], via_github=True) == "NONE"
-    assert derive_role(["default-roles-codesage-realm"], via_github=True) == "NONE"
-    # Explicit roles always derive their own value.
+    # GitHub-brokered signup default → ORG_ADMIN.
+    assert derive_role([], via_github=True) == "ORG_ADMIN"
+    assert derive_role(["default-roles-codesage-realm"], via_github=True) == "ORG_ADMIN"
+    # Explicit roles always derive their own value (claims outrank default).
     assert derive_role(["GUEST"], via_github=True) == "NONE"
     assert derive_role(["SUPER_ADMIN"], via_github=True) == "PLATFORM_ADMIN"
 

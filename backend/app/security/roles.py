@@ -17,9 +17,13 @@ Layout (v0.4.0):
   - legacy claims (``SUPER_ADMIN``, ``GUEST``) are mapped through
     ``_COMPAT_MAP`` — **removed in v0.4.0** together with the old realm
     roles/groups;
-  - the GitHub-broker ``DEVELOPER`` fallback (F1) is **removed** —
-    GitHub-brokered logins now receive ``NONE`` role and gain roles
-    through workspace membership only.
+  - the GitHub-broker ``DEVELOPER`` fallback (F1) is **removed** — a
+    GitHub-brokered session with no recognized claim derives
+    ``ORG_ADMIN`` (the account-creation default: first login also
+    creates their personal workspace, where they hold ORG_ADMIN
+    membership). Any explicit claim still outranks the default, and
+    non-brokered tokens without a recognized claim stay fail-closed
+    ``NONE``.
 """
 
 import logging
@@ -82,9 +86,11 @@ def derive_role(
        is honored but still below DEVELOPER).
     3. **No recognized or legacy claim at all** (e.g. only ``default-roles-*``
        or an unknown name):
-       - ``via_github`` (GitHub-brokered session) → ``NONE``
-         (no automatic DEVELOPER role; roles come from workspace membership
-         only);
+       - ``via_github`` (GitHub-brokered session) → ``ORG_ADMIN``
+         (the account-creation default — a GitHub signup starts as
+         admin of the personal workspace first login creates; an
+         explicit claim above still outranks it, and inside any other
+         org the membership row decides);
        - otherwise → ``NONE`` (fail-closed).
 
     A token with *no* role claim at all never reaches this function —
@@ -100,7 +106,10 @@ def derive_role(
             return role
     if ROLE_NONE in mapped:  # explicit legacy read-only downgrade
         return ROLE_NONE
-    # No recognized or legacy claim at all
+    # No recognized or legacy claim at all:
+    # GitHub-brokered signup default → ORG_ADMIN, otherwise fail closed.
+    if via_github:
+        return ROLE_ORG_ADMIN
     return ROLE_NONE
 
 

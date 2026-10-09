@@ -39,10 +39,13 @@ never disagree):
 
 Consequences worth stating out loud:
 
-* a GitHub-broker user (global ``NONE``) is ``ORG_ADMIN`` of their own
-  personal workspace, so they can connect repos there — membership rescues
-  the realm role (this is why ``NONE`` is ranked *lowest*, not above
-  ``ORG_ADMIN``);
+* a GitHub-broker user with no recognized claim derives global
+  ``ORG_ADMIN`` (the account-creation default) *and* holds ``ORG_ADMIN``
+  membership in their own personal workspace, so they can connect repos
+  there from the very first login — and because effective =
+  ``max(JWT, membership)``, that default is an ORG_ADMIN floor in every
+  org they belong to (decisions log §11); the ``NONE`` sentinel keeps its
+  *lowest* rank so an explicit downgrade never sits above ``ORG_ADMIN``;
 * an explicit read-only downgrade cannot be silently undone by a platform
   admin bypass on workspace endpoints — the ladder check still applies to the
   effective role, and ``NONE`` never reaches a write permission.

@@ -88,3 +88,20 @@ documented in `docs/rbac-endpoints.md`; the enforced matrix in
     un-migrated rows behave identically for old clients. The old frontend
     `deriveRole` is retained purely as the JWT fallback for tokens issued before
     `/auth/me` carried capabilities.
+
+11. **Brokered Signup Default** (2026-10-09, owner decision — supersedes the
+    "broker logins get global `NONE`" wording above/below) → a GitHub-brokered
+    token with **no recognized role claim** derives global **`ORG_ADMIN`**
+    (`derive_role(via_github=True)`; mirrored by the frontend `deriveRole`).
+    Rationale: a GitHub signup should land as an org-admin from day one —
+    first login already creates their personal workspace with an ORG_ADMIN
+    membership row, and the global default makes `users.role`, `/auth/me` and
+    cold-start route gating agree with that from the first request.
+    Constraints kept: any explicit claim still outranks the default (a
+    `GUEST` downgrade stays `NONE`, `PLATFORM_ADMIN` still wins), non-brokered
+    tokens without a recognized claim stay fail-closed `NONE`, and platform
+    routes remain `platform: false` (PLATFORM_ADMIN only). Known trade-off:
+    effective role = `max(JWT, membership)`, so a brokered user holds an
+    ORG_ADMIN floor inside **every** org they are a member of — inviting one
+    as `DEVELOPER` does not lower them while their token carries no explicit
+    role.

@@ -25,9 +25,10 @@ const COMPAT_MAP: Record<string, string> = {
  *    an explicit legacy read-only claim (GUEST -> NONE) is treated as the
  *    lowest rank (fail-closed: an explicit downgrade is honored but still
  *    below DEVELOPER);
- * 3. no recognized or legacy claim at all -> NONE (fail-closed) — a
- *    GitHub-brokered session gets NONE too (no automatic DEVELOPER role;
- *    roles come from workspace membership only).
+ * 3. no recognized or legacy claim at all -> the GitHub-brokered signup
+ *    default ORG_ADMIN (a GitHub session starts as admin of the personal
+ *    workspace first login creates), otherwise NONE (fail-closed) — an
+ *    explicit claim always outranks the default.
  *
  * A token with no role claim at all never gets this far — the backend
  * rejects it with a 401 before any role list is consulted. Keeping both
@@ -35,7 +36,8 @@ const COMPAT_MAP: Record<string, string> = {
  * user the backend 403s, or vice versa.
  *
  * `viaGitHub` / `subject` are kept for call-site parity with the backend
- * signature (both outcomes are NONE since the F1 fallback was removed).
+ * signature (the brokered default exists on both sides; the F1 DEVELOPER
+ * fallback stays removed).
  */
 export function deriveRole(
   tokenRoles: readonly string[],
@@ -57,10 +59,15 @@ export function deriveRole(
     return 'NONE';
   }
 
-  // No recognized or legacy claim at all — fail closed to NONE.
-  // (Historically a GitHub-brokered session derived DEVELOPER here (F1);
-  // that temporary role was removed: brokered logins start at NONE and
-  // gain roles through workspace membership only.)
+  // No recognized or legacy claim at all: the GitHub-brokered signup
+  // default is ORG_ADMIN (mirrors the backend); every other session
+  // fails closed to NONE. An explicit claim above outranks the default
+  // — the GUEST/NONE branch already returned. (The historical F1
+  // DEVELOPER broker fallback stays removed.)
+  if (viaGitHub) {
+    void subject;
+    return 'ORG_ADMIN';
+  }
   void viaGitHub;
   void subject;
   return 'NONE';

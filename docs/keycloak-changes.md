@@ -108,15 +108,16 @@ After applying these changes, verify the following:
    - The user should be assigned as ORG_ADMIN in their personal workspace
 
 3. **Role Resolution**:
-   - Users with no realm roles or workspace membership should have effective role NONE
-   - Users with workspace membership should have effective role based on their highest workspace role
-   - Users with realm roles (except DEVELOPER fallback) should have effective role based on realm role
+   - Users with no realm roles, no GitHub identity and no workspace membership should have effective role NONE
+   - A GitHub-brokered session with no realm roles derives the ORG_ADMIN signup default (global floor; membership still governs per-workspace access)
+   - Users with workspace membership should have effective role based on their highest workspace role (never below the JWT floor)
+   - Users with recognized realm roles derive their effective role from the realm role
    - PLATFORM_ADMIN realm role should always grant highest effective role
 
 ### Transition Notes
 
 During the transition period:
 - Existing users with ORG_ADMIN, REVIEWER, or DEVELOPER realm roles will continue to have those roles effective
-- New users logging in via GitHub broker will start with NONE realm role and gain roles only through workspace membership
+- New users logging in via GitHub broker will start with no realm role but derive the global ORG_ADMIN signup default; workspace membership still decides per-workspace access, and any explicit realm role outranks the default
 - Administrators should gradually migrate users from relying on realm roles to workspace membership
 - After the transition period (future release), the deprecated realm roles can be removed entirely

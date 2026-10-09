@@ -77,17 +77,26 @@ describe('deriveRole', () => {
     expect(deriveRole(['GUEST'], true)).toBe('NONE');
   });
 
-  it('falls back to NONE for anything unrecognized', () => {
-    // Fail-closed: unknown role names, default realm roles, an empty list and
-    // a GitHub-brokered session all land on the read-only sentinel (the F1
-    // temporary DEVELOPER fallback was removed — roles come from workspace
-    // membership only).
+  it('falls back to NONE for anything unrecognized (non-brokered)', () => {
+    // Fail-closed: unknown role names, default realm roles and an empty list
+    // all land on the read-only sentinel for a session WITHOUT GitHub
+    // identity claims (the F1 temporary DEVELOPER fallback was removed —
+    // roles come from workspace membership only).
     expect(deriveRole(['some-other-realm-role'])).toBe('NONE');
     expect(deriveRole(['default-roles-codesage-realm'])).toBe('NONE');
     expect(deriveRole([])).toBe('NONE');
-    expect(deriveRole(['default-roles-codesage-realm'], true)).toBe('NONE');
-    expect(deriveRole([], true)).toBe('NONE');
-    expect(deriveRole(['some-other-realm-role'], true)).toBe('NONE');
+  });
+
+  it('gives a GitHub-brokered session with no recognized claim ORG_ADMIN (signup default)', () => {
+    // Mirrors the backend: viaGitHub + nothing recognized/legacy claimed
+    // → ORG_ADMIN (the account-creation default — first login creates the
+    // personal workspace where that user holds ORG_ADMIN membership).
+    // Any explicit claim outranks the default (GUEST stays NONE).
+    expect(deriveRole([], true)).toBe('ORG_ADMIN');
+    expect(deriveRole(['default-roles-codesage-realm'], true)).toBe('ORG_ADMIN');
+    expect(deriveRole(['some-other-realm-role'], true)).toBe('ORG_ADMIN');
+    expect(deriveRole(['GUEST'], true)).toBe('NONE');
+    expect(deriveRole(['DEVELOPER'], true)).toBe('DEVELOPER');
   });
 
   it('never warns — derivation is pure (the backend logs its own fallback)', () => {
@@ -284,21 +293,22 @@ describe('RoleGuard', () => {
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
-  it('gives a GitHub-brokered default-roles session NONE, not DEVELOPER (F1 removed)', async () => {
+  it('gives a GitHub-brokered default-roles session ORG_ADMIN (signup default)', async () => {
     // The same roleless session as above, but the token carries the GitHub
-    // identity claims: backend derive_role returns NONE since the temporary
-    // F1 DEVELOPER fallback was dropped — roles come from workspace
-    // membership only, so the write route must stay closed.
+    // identity claims: backend derive_role returns ORG_ADMIN (the
+    // account-creation default for GitHub signups) — so the write route
+    // must open, both sides identical.
     configure([], { githubId: 75458407, githubLogin: 'Wael-BenHariz' });
     keycloak.isLoggedIn.and.returnValue(true);
 
-    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
-
-    expect(result).toEqual(router.parseUrl('/forbidden'));
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'))
+    ).toBeTrue();
   });
 
   it('still bounces a GitHub session explicitly downgraded to GUEST', async () => {
-    // Explicit GUEST role in the token maps to NONE — no broker fallback.
+    // Explicit GUEST role in the token maps to NONE — claims outrank the
+    // brokered signup default.
     configure(['GUEST'], { githubId: 75458407 });
     const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
 

@@ -184,7 +184,7 @@ changes the membership is mirrored into `workspace_members` (020 backfill +
 | Pending dismissal requests block posting | `reviews.post_review_now` | Any `DismissalRequest.status == 'PENDING'` on the review → 409 (checked under `FOR UPDATE`) |
 | Self-review rule | `workspace_access.self_review_blocked` → `reviews` (dismiss, validate), `dismissal_requests.approve` | Active only in an ORG workspace with >1 member; case-insensitive PR-author login compare; disabled for PERSONAL/single-member workspaces |
 | Last-ORG_ADMIN guard | `workspaces.py` | Cannot demote/remove the final ORG_ADMIN of an ORG workspace |
-| F1 removed | `roles.py` | GitHub-broker logins get global `NONE`; roles come only from workspace membership (personal workspace owner is ORG_ADMIN by construction) |
+| F1 removed | `roles.py` | GitHub-broker logins with no recognized claim get global `ORG_ADMIN` (signup default, owner decision 2026-10-09); any explicit claim outranks it and non-brokered tokens stay `NONE` (personal workspace owner is ORG_ADMIN by construction) |
 
 ## Frontend mirror (cosmetic only)
 
