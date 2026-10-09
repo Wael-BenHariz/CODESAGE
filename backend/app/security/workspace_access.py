@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -426,7 +426,7 @@ async def remove_membership(
 ) -> None:
     """Delete a member from both membership tables."""
     await db.execute(
-        WorkspaceMember.__table__.delete().where(
+        delete(WorkspaceMember).where(
             WorkspaceMember.workspace_id == workspace.id,
             WorkspaceMember.user_id == user_id,
         )
@@ -437,7 +437,7 @@ async def remove_membership(
         ).scalar_one_or_none()
         if org is not None:
             await db.execute(
-                OrgMember.__table__.delete().where(
+                delete(OrgMember).where(
                     OrgMember.org_id == org.id, OrgMember.user_id == user_id
                 )
             )
@@ -662,6 +662,19 @@ async def check_workspace_permission(
     return ctx
 
 
+def require_workspace(ctx: WorkspaceContext) -> Workspace:
+    """The resolved workspace of a workspace-scoped route (uniform 404).
+
+    Handlers guarded by :func:`require_workspace_permission` whose URL carries
+    a ``workspace_id`` must operate *inside* a workspace — a malformed or
+    missing workspace context is a 404, never a 500 from dereferencing
+    ``None``. Use this instead of touching ``ctx.workspace`` directly.
+    """
+    if ctx.workspace is None:
+        raise _not_found()
+    return ctx.workspace
+
+
 # ---------------------------------------------------------------------------
 # Self-review rule (target design §2.5)
 # ---------------------------------------------------------------------------
@@ -687,7 +700,7 @@ async def self_review_blocked(
     # Union across BOTH membership tables — a member provisioned through an
     # invitation may exist in only one of them, and the rule is about real
     # people in the workspace.
-    ws_ids = set(
+    ws_ids: set[UUID] = set(
         (
             await db.execute(
                 select(WorkspaceMember.user_id).where(
@@ -698,7 +711,7 @@ async def self_review_blocked(
         .scalars()
         .all()
     )
-    org_ids = set(
+    org_ids: set[UUID] = set(
         (
             await db.execute(
                 select(OrgMember.user_id)

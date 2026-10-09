@@ -114,7 +114,7 @@ async def mark_all_notifications_as_read(
     result = await db.execute(stmt.values(is_read=True))
     await db.commit()
 
-    return {"updated_count": result.rowcount}
+    return {"updated_count": int(getattr(result, "rowcount", 0) or 0)}
 
 
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)

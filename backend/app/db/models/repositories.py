@@ -2,9 +2,10 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -42,7 +43,7 @@ class Repository(Base):
 
     # Installation reference
     installation_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("github_installations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -103,7 +104,7 @@ class Repository(Base):
 
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=True,
         index=True,

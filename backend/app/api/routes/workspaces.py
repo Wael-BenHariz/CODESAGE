@@ -35,6 +35,7 @@ from app.security.workspace_access import (
     list_user_workspaces,
     membership_role,
     remove_membership,
+    require_workspace,
     require_workspace_permission,
     sync_membership_role,
 )
@@ -156,7 +157,7 @@ async def get_workspace(
     ),
 ):
     """Get a workspace by ID (members only — non-members get a uniform 404)."""
-    workspace = ctx.workspace
+    workspace = require_workspace(ctx)
     return _workspace_payload(workspace, ctx.effective_role, ctx.user.id)
 
 
@@ -172,7 +173,7 @@ async def update_workspace(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
     """Update a workspace — ORG_ADMIN+ in *this* workspace (§2.3 repo_admin)."""
-    workspace = ctx.workspace
+    workspace = require_workspace(ctx)
 
     if name is not None and name != workspace.name:
         result = await db.execute(
@@ -210,7 +211,7 @@ async def delete_workspace(
     Personal workspaces are permanent (§2.1: exactly one per user) and an
     ORG workspace may never lose its last ORG_ADMIN.
     """
-    workspace = ctx.workspace
+    workspace = require_workspace(ctx)
 
     if workspace.type == "PERSONAL":
         raise HTTPException(
@@ -262,7 +263,7 @@ async def list_workspace_members(
     org invitation (``org_members``) shows up even before a
     ``workspace_members`` row exists.
     """
-    workspace = ctx.workspace
+    workspace = require_workspace(ctx)
 
     members: dict[UUID, dict] = {}
 
@@ -327,7 +328,7 @@ async def update_workspace_member_role(
             detail=f"Invalid role. Must be one of: {', '.join(_MEMBER_ROLES)}",
         )
 
-    workspace = ctx.workspace
+    workspace = require_workspace(ctx)
 
     # Target must be a member of THIS workspace (either table) — uniform 404.
     target_role = await membership_role(db, user_id, workspace)
@@ -387,7 +388,7 @@ async def remove_workspace_member(
     You may not remove yourself (leave via your own action instead), and the
     last ORG_ADMIN of an ORG workspace may not be removed.
     """
-    workspace = ctx.workspace
+    workspace = require_workspace(ctx)
 
     if user_id == ctx.user.id:
         raise HTTPException(

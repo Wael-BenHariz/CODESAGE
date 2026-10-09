@@ -260,7 +260,7 @@ def upgrade() -> None:
         SELECT 
             gen_random_uuid() as id,
             'PERSONAL' as type,
-            u.login || "'s Personal Workspace" as name,
+            u.login || '''s Personal Workspace' as name,
             u.id as owner_user_id,
             NOW() as created_at,
             NOW() as updated_at
@@ -394,29 +394,23 @@ def downgrade() -> None:
 
     # Drop indexes and foreign keys for workspace_id columns
     op.drop_index("ix_orgs_workspace_id", table_name="orgs")
-    op.drop_constraint(None, "orgs", type_="foreignkey")
     op.drop_column("orgs", "workspace_id")
 
     op.drop_index("ix_watched_repos_workspace_id", table_name="watched_repos")
-    op.drop_constraint(None, "watched_repos", type_="foreignkey")
     op.drop_column("watched_repos", "workspace_id")
 
     op.drop_index("ix_pull_requests_workspace_id", table_name="pull_requests")
-    op.drop_constraint(None, "pull_requests", type_="foreignkey")
     op.drop_column("pull_requests", "workspace_id")
 
     op.drop_index("ix_reviews_workspace_id", table_name="reviews")
-    op.drop_constraint(None, "reviews", type_="foreignkey")
     op.drop_column("reviews", "workspace_id")
 
     op.drop_index(
         "ix_github_installations_workspace_id", table_name="github_installations"
     )
-    op.drop_constraint(None, "github_installations", type_="foreignkey")
     op.drop_column("github_installations", "workspace_id")
 
     op.drop_index("ix_repositories_workspace_id", table_name="repositories")
-    op.drop_constraint(None, "repositories", type_="foreignkey")
     op.drop_column("repositories", "workspace_id")
 
     # Drop tables

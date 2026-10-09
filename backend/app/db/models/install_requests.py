@@ -25,6 +25,7 @@ class InstallRequest(Base):
         requested_by: Foreign key to the user who requested the installation
         status: Status of the request (PENDING, APPROVED, REJECTED)
         resolved_by: Foreign key to the user who resolved the request (optional)
+        resolved_at: Timestamp when the request was resolved (optional)
     """
 
     __tablename__ = "install_requests"
@@ -61,6 +62,12 @@ class InstallRequest(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         comment="Reference to the user who resolved the request",
+    )
+
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp when the request was resolved",
     )
 
     # Timestamps

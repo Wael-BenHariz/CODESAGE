@@ -2,9 +2,11 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -97,7 +99,7 @@ class GitHubInstallation(Base):
 
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=True,
         index=True,

@@ -237,7 +237,14 @@ async def approve_dismissal_request(
             select(Review).where(Review.id == comment.review_id)
         )
         review = review_result.scalar_one_or_none()
-        if review is not None and review.posted_at is not None:
+        if review is None:
+            # Same contract as create — a comment without its review cannot
+            # be state-checked or resolved.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Associated review not found",
+            )
+        if review.posted_at is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Review already posted",

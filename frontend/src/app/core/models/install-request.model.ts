@@ -16,13 +16,12 @@ export interface InstallRequest {
   updated_at: string;
 }
 
-/** `PATCH …/approve|reject` response — carries the GitHub resolution. */
+/** `PATCH …/approve|reject` response — who resolved it and when. */
 export interface InstallRequestResolution {
   id: string;
   status: InstallRequestStatus;
   resolved_by: string;
   resolved_at: string;
-  github_error: string | null;
 }
 
 /** Query options for `GET /install-requests`. */

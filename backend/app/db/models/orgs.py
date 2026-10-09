@@ -8,6 +8,7 @@ reviews or repositories this release.
 """
 
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
@@ -18,7 +19,8 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -89,7 +91,7 @@ class Org(Base):
 
     # Workspace association (migration 020: orgs.workspace_id → workspaces)
     workspace_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -140,7 +142,7 @@ class OrgMember(Base):
     )
 
     org_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("orgs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -148,7 +150,7 @@ class OrgMember(Base):
     )
 
     user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -187,7 +189,7 @@ class OrgSetting(Base):
     )
 
     org_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("orgs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
