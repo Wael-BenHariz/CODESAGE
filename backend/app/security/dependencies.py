@@ -126,9 +126,14 @@ def _via_github(payload: dict) -> bool:
 
     The ``github-claims`` client scope only maps them from user attributes
     that the GitHub IdP mappers populate at broker login — their presence in
-    the JWT means this session authenticated through GitHub.
+    the JWT means this session authenticated through GitHub. Both claim
+    spellings are accepted: the live realm emits ``githubLogin`` while the
+    realm export (and ``docs/keycloak-changes.md``) renamed the mapper to
+    ``github_login`` — a realm re-import must not break identity detection.
     """
-    return payload.get("githubId") is not None or bool(payload.get("githubLogin"))
+    return payload.get("githubId") is not None or bool(
+        payload.get("githubLogin") or payload.get("github_login")
+    )
 
 
 async def _find_or_create_user(db: AsyncSession, payload: dict) -> User | None:
@@ -168,6 +173,7 @@ async def _find_or_create_user(db: AsyncSession, payload: dict) -> User | None:
     login = (
         str(payload.get("preferred_username") or "")
         or str(payload.get("githubLogin") or "")
+        or str(payload.get("github_login") or "")
         or sub
     )
     name = payload.get("name") or None

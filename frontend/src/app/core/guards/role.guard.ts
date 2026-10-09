@@ -139,7 +139,12 @@ export class RoleGuard extends KeycloakAuthGuard {
 
     const parsed = this.keycloakAngular.getKeycloakInstance()?.tokenParsed;
     const viaGitHub =
-      parsed != null && (parsed['githubId'] != null || parsed['githubLogin'] != null);
+      parsed != null &&
+      (parsed['githubId'] != null ||
+        parsed['githubLogin'] != null ||
+        // Realm export renamed the mapper to snake_case (see
+        // docs/keycloak-changes.md) — accept both spellings.
+        parsed['github_login'] != null);
     const subject =
       parsed != null
         ? ((parsed['preferred_username'] ?? parsed['sub']) as string | undefined)

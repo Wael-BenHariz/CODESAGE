@@ -20,6 +20,10 @@ This document describes the exact steps needed to update the Keycloak realm to s
 - Modified the githubLogin protocol mapper in the github-claims client scope
   - Changed claim name from "githubLogin" to "github_login" to match the expected attribute name
   - This ensures the GitHub login is available in the access token as the "github_login" claim
+  - **Safety note (2026-10-09):** the backend (`_via_github`, JIT login fallback)
+    and the frontend guard accept **both** spellings — the live realm still
+    emits `githubLogin` (the realm has not been re-imported) and applying this
+    rename cannot break identity detection either way.
 
 ## Steps to Apply Changes to an Existing Realm
 

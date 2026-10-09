@@ -366,3 +366,22 @@ pytest route-inventory test.
 `016` finding validations · `017` invitations · `018` `org_invitations.updated_at`
 (hotfix: 017 omitted the `Base` timestamp — tests use `create_all`, so only a
 migrated DB caught it).
+
+---
+
+## 8. workspace-RBAC rollout (2026-10-09, local k3s, `v0.4.0-workspace-rbac`)
+
+| Gate / check | Result | Evidence |
+|---|---|---|
+| Fresh-DB migration check | ✅ `upgrade head` 001→021 + `downgrade 019` on a scratch DB | run output (caught the 020 backfill quoting bug) |
+| Alembic `019 → 021` (one-shot pod) | ✅ `alembic_version=021` | pod `alembic-migrate-021` logs |
+| 020 backfill on live data | ✅ 3 PERSONAL + 1 ORG workspace, 2 members in sync (`workspace_members` = `org_members`), 35 repositories + 1 installation + 1 org bound | psql counts |
+| `kubectl diff` before apply | ✅ 4 image bumps + realm ConfigMap (role deprecations, group removals) — no data-tier pod restarts (postgres/redis pod ages unchanged) | shown pre-apply |
+| Single-node rollout | ⚠️→✅ first attempt `FailedScheduling: Insufficient cpu` (requests 91% of 4000m; default surge rounds 25% of 1 replica **up** to +1 pod) → explicit `maxSurge: 0, maxUnavailable: 1` (terminate-first) on all 5 app Deployments → all rolled out | scheduler events, rollout status |
+| Same-tag trap | ✅ new tag `v0.4.0-workspace-rbac` (no `IfNotPresent` stale-cache eviction needed) | deployment images |
+| Smoke through ingress `10.171.24.201` | ✅ `/` → 200 `CodeSage - AI Code Review`, `/api/v1/health` → 200, `/api/v1/auth/keycloak/config` → 200, `/auth/` → 302; backend log clean (startup + health 200s), worker `listening on queue: review-requests` | curl + pod logs |
+| Realm ConfigMap | ⚠️ applied but **dormant** — `--import-realm` skips an existing realm and keycloak was not restarted; live realm still emits `githubLogin`. Code accepts **both** spellings (`githubLogin`/`github_login`, backend + frontend guard) so the documented re-import (`docs/keycloak-changes.md`) is safe whenever it runs | code grep + configmap diff |
+| Full gates | ✅ ruff+black clean on all touched files; mypy 52 errors < 57 baseline (0 new); backend `483 passed / 5 skipped`; frontend `544/544` + tsc/lint/format + build exit 0 (NG8109 signal-call warning fixed) | local runs |
+
+**Migrations in this release:** `020` workspace RBAC (tables + `workspace_id`
+columns + backfill) · `021` `install_requests.resolved_at`.
