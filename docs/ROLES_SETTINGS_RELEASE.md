@@ -16,7 +16,7 @@ Keycloak role migration, and the cluster release procedure.
 | `PLATFORM_ADMIN` | group `/platform-admins` (realm role `PLATFORM_ADMIN`) | — (global-only, never in `org_members`) | platform settings, `/users`, PA bypass (below) |
 | `ORG_ADMIN` | group `/org-admins` | `org_members.role` | org settings + invitations + all review writes |
 | `REVIEWER` | group `/reviewers` | `org_members.role` | finding validation + all `DEVELOPER` writes |
-| `DEVELOPER` | group `/developers` (or broker fallback, F1) | `org_members.role` | trigger reviews, post/dismiss/restore/summary edit |
+| `DEVELOPER` | group `/developers` | `org_members.role` | trigger reviews, post/dismiss/restore/summary edit |
 | `NONE` | (internal sentinel — no realm role and no GitHub identity) | — | **every write → 403** (guard step 1) |
 
 - **Global derive precedence** (`app/security/roles.py::derive_role`):
@@ -218,8 +218,9 @@ What it does (**idempotent, additive only** — never deletes a realm role/group
    **before** leaving `/super-admins` — a user is never left without an admin
    claim); `DEVELOPER` holders → `/developers` when in no group yet;
 4. does **not** touch `GUEST` members (F4/N5): they are **listed** for manual
-   assignment, as are users with no recognized realm role (they derive `NONE` or
-   hit the F1 broker fallback) — both lists print in dry-run **and** apply;
+   assignment, as are users with no recognized realm role (they derive `NONE`
+   when not brokered, `ORG_ADMIN` for a GitHub-brokered session — signup
+   default) — both lists print in dry-run **and** apply;
 5. runs `kcadm.sh` inside the keycloak pod (admin creds from
    `secret/keycloak-secret`; master realm) and parses JSON on the host with
    `python3`.
@@ -385,3 +386,27 @@ migrated DB caught it).
 
 **Migrations in this release:** `020` workspace RBAC (tables + `workspace_id`
 columns + backfill) · `021` `install_requests.resolved_at`.
+
+### 8.1 Full state reset (2026-10-09) — fresh install for manual testing
+
+Cluster wiped to a first-install state (local test DBs untouched):
+`codesage` + `codesage_test` dropped/recreated → alembic `001→022`, Redis
+`FLUSHALL`, `codesage-realm` deleted via admin REST and re-imported on the
+keycloak restart (new signing keys; issuer unchanged). GitHub data
+(`github_installations`/`repositories`) intentionally left empty — repopulated
+by reinstall / delivery redelivery.
+
+| Issue found during the reset | Fix | Evidence |
+|---|---|---|
+| Realm ConfigMap JSON invalid (3 trailing commas from `080a2b5` — never parsed while the realm existed; re-import would have **failed**, no realm, no login) | commas removed in `keycloak-configmap.yaml`, `json.loads` clean, applied before the delete | preflight diff + parse |
+| `superadmin` mapped to `/super-admins` (`SUPER_ADMIN`, compat map slated for removal) — live realm had it in `/platform-admins` | ConfigMap user → `/platform-admins`; fresh token shows `realm_access.roles: [PLATFORM_ADMIN]` | password grant via `codesage-angular` |
+| `create_all`-vs-alembic drift: 020's five tables lacked `gen_random_uuid()` on `id` + `workspaces.owner_user_id` FK missing → **first login 500** (`NotNullViolation workspaces.id`) | migration `022` (5 × `SET DEFAULT` + FK); fresh-DB `001→022` + live `021→022` verified; `/auth/me` now 200 | pod logs, psql catalog diff |
+| `/me` never self-healed a failed first-login workspace provision (comment promised it) | `ensure_personal_workspace` call added to `GET /auth/me` (try/rollback, best-effort) + test `test_me_self_heals_missing_personal_workspace` | backend suite |
+| Sidecars rejected every JWT (`Jwks doesn't have key to match kid`) — istiod caches the JWKS it fetched at ITS startup, i.e. **pre-wipe keys** | `kubectl rollout restart deploy/istiod -n istio-system` → sidecar `local_jwks` shows the new kids | envoy `config_dump` |
+| — | backend image `v0.4.1-workspace-rbac` (ships 022 + /me heal), only the backend Deployment bumped | docker push + rollout |
+
+Post-reset smoke: `/` 200, `/api/v1/health` 200, `/api/v1/auth/keycloak/config`
+200, realm 200 (new kids `SUf94…`/`Wp6nl…`), anonymous `/api/v1/auth/me` →
+403 mesh fail-closed (expected), authenticated `/api/v1/auth/me` → 200 with
+`PLATFORM_ADMIN` capabilities, worker listening on `review-requests`,
+`alembic_version=022`, all app tables empty.
