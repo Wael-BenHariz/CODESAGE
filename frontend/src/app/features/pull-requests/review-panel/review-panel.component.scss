@@ -1163,6 +1163,53 @@
     font-size: 12px;
     color: var(--text-3);
   }
+  // --- Self-review note + dismissal-request UI (workspace RBAC §2.5) --------
+
+  .self-review-note {
+    margin: 8px 0 0;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-2);
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  .dismissal-requested-tag {
+    font-size: 10px;
+    border: 1px dashed var(--border-strong);
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  .dismissal-form {
+    margin: 6px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .dismissal-reason {
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 6px 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      background: var(--bg-1);
+      color: var(--text-1);
+    }
+
+    .dismissal-form-actions {
+      display: flex;
+      gap: 8px;
+    }
+  }
 }
 
 @keyframes review-panel-spin {

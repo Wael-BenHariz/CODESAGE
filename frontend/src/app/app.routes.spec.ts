@@ -15,23 +15,30 @@ describe('app routes (plan Step 9: /help)', () => {
   });
 });
 
-describe('app routes (/platform-admin static console)', () => {
-  const consoleRoute = routes.find(route => route.path === 'platform-admin');
-  const children = consoleRoute?.children ?? [];
+describe('app routes (/platform consolidated console)', () => {
+  const platformRoute = routes.find(route => route.path === 'platform');
+  const children = platformRoute?.children ?? [];
   const childPaths = children.map(child => child.path);
 
-  it('ships the console layout with all six pages', () => {
-    expect(consoleRoute).toBeDefined();
-    expect(consoleRoute?.loadComponent).toBeDefined();
-    expect(childPaths).toEqual(['', 'users', 'settings', 'system', 'logs', 'quotas']);
+  it('ships the console layout with the real overview + all prototype pages', () => {
+    expect(platformRoute).toBeDefined();
+    expect(platformRoute?.loadComponent).toBeDefined();
+    expect(childPaths).toEqual(['', 'dashboard', 'users', 'settings', 'system', 'logs', 'quotas']);
     for (const child of children) {
       expect(child.loadComponent).toBeDefined();
     }
   });
 
-  it('is platform-admin-only and renders its own shell', () => {
-    expect(consoleRoute?.canActivate).toBeDefined();
-    expect(consoleRoute?.data?.['capabilities']).toEqual(['platform']);
-    expect(consoleRoute?.data?.['shell']).toBe(false);
+  it('is platform-only and renders its own shell', () => {
+    expect(platformRoute?.canActivate).toBeDefined();
+    expect(platformRoute?.data?.['capabilities']).toEqual(['platform']);
+    expect(platformRoute?.data?.['shell']).toBe(false);
+  });
+
+  it('keeps /platform-admin as a legacy redirect into /platform', () => {
+    const legacy = routes.find(route => route.path === 'platform-admin');
+    expect(legacy?.redirectTo).toBe('platform');
+    expect(legacy?.loadComponent).toBeUndefined();
+    expect(legacy?.canActivate).toBeUndefined();
   });
 });

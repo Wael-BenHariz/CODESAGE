@@ -63,7 +63,8 @@ describe('SidebarComponent', () => {
   it('shows read-only navigation to a NONE-role user', () => {
     render('NONE');
 
-    expect(linkTexts()).toEqual(['Repositories']);
+    // Workspaces is readable by every role (workspace RBAC §2.5).
+    expect(linkTexts()).toEqual(['Repositories', 'Workspaces']);
     expect(el().querySelector('[data-testid="nav-org-settings"]')).toBeNull();
     expect(el().querySelector('[data-testid="nav-dashboard"]')).toBeNull();
     expect(el().querySelector('[data-testid="nav-settings"]')).toBeNull();

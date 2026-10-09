@@ -4,6 +4,7 @@ import {
   computed,
   ElementRef,
   EventEmitter,
+  HostListener,
   inject,
   input,
   OnInit,
@@ -17,6 +18,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { AuthContextService } from '../../../core/services/auth-context.service';
+import { NotificationService } from '../../../core/services/notification.service';
+import { AppNotification } from '../../../core/models/notification.model';
 import { OrgSummary, effectiveRole } from '../../../core/services/org-settings.service';
 
 interface Crumb {
@@ -44,6 +47,7 @@ export class TopbarComponent implements OnInit {
   readonly auth = inject(AuthService);
   readonly ctx = inject(AuthContextService);
   private readonly router = inject(Router);
+  private readonly notificationsApi = inject(NotificationService);
 
   /** Whether the mobile drawer is currently open (drives aria-expanded). */
   readonly navOpen = input(false);
@@ -74,6 +78,10 @@ export class TopbarComponent implements OnInit {
     // Fire-and-forget: an org-list failure must never break the top bar —
     // nav and user menu still render from the JWT-derived context.
     void this.ctx.ensureOrgs().catch(() => undefined);
+    // Same isolation for notifications — the bell simply shows no badge.
+    if (this.auth.currentUser()) {
+      this.loadNotifications();
+    }
   }
 
   get orgs(): OrgSummary[] {
@@ -104,6 +112,67 @@ export class TopbarComponent implements OnInit {
   /** Get the active workspace */
   get activeWorkspace() {
     return this.ctx.activeWorkspace();
+  }
+
+  // --- Notifications (bell dropdown) ----------------------------------------
+
+  readonly notifications = signal<AppNotification[]>([]);
+  readonly notificationsOpen = signal(false);
+  readonly notificationsLoading = signal(false);
+  readonly notificationsError = signal<string | null>(null);
+
+  readonly unreadCount = computed(
+    () => this.notifications().filter(notification => !notification.is_read).length
+  );
+
+  toggleNotifications(): void {
+    const open = !this.notificationsOpen();
+    this.notificationsOpen.set(open);
+    if (open) {
+      this.loadNotifications();
+    }
+  }
+
+  /** Escape closes the panel (the toggle button itself handles focus). */
+  @HostListener('document:keydown.escape')
+  closeNotifications(): void {
+    this.notificationsOpen.set(false);
+  }
+
+  loadNotifications(): void {
+    this.notificationsLoading.set(true);
+    this.notificationsError.set(null);
+    this.notificationsApi.list({ limit: 15 }).subscribe({
+      next: list => {
+        this.notifications.set(list);
+        this.notificationsLoading.set(false);
+      },
+      error: () => {
+        this.notificationsLoading.set(false);
+        this.notificationsError.set('Could not load notifications.');
+      }
+    });
+  }
+
+  /** Mark one notification read (cosmetic panel — failures stay silent). */
+  markNotificationRead(notification: AppNotification): void {
+    if (notification.is_read) {
+      return;
+    }
+    this.notificationsApi.markRead(notification.id).subscribe({
+      next: updated =>
+        this.notifications.update(list =>
+          list.map(existing => (existing.id === updated.id ? updated : existing))
+        ),
+      error: () => undefined
+    });
+  }
+
+  markAllNotificationsRead(): void {
+    this.notificationsApi.markAllRead().subscribe({
+      next: () => this.loadNotifications(),
+      error: () => undefined
+    });
   }
 
   switchOrg(event: Event): void {
@@ -159,6 +228,9 @@ export class TopbarComponent implements OnInit {
       const crumbs: Crumb[] = [{ label: 'Settings', link: ['/settings'] }];
       if (segs[1] === 'org') {
         crumbs.push({ label: 'Organization', link: ['/settings', 'org'] });
+      }
+      if (segs[1] === 'workspaces') {
+        crumbs.push({ label: 'Workspaces', link: ['/settings', 'workspaces'] });
       }
       return crumbs;
     }

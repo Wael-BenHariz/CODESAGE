@@ -10,7 +10,7 @@ interface QuickAction {
 }
 
 /**
- * Platform Administration → Dashboard (static PFE prototype) — `/platform-admin`.
+ * Platform Administration → Dashboard (static PFE prototype) — `/platform`.
  *
  * Every figure comes from the local `mock/` modules: no API call, no
  * backend dependency, the page renders with the backend offline.
@@ -30,10 +30,10 @@ export class PlatformDashboardComponent {
   readonly demoDate = 'Jeudi 8 octobre 2026';
 
   readonly quickActions: readonly QuickAction[] = [
-    { link: '/platform-admin/users', label: 'Gérer les utilisateurs' },
-    { link: '/platform-admin/logs', label: 'Consulter les journaux' },
-    { link: '/platform-admin/system', label: "Voir l'état du système" },
-    { link: '/platform-admin/quotas', label: 'Gérer les quotas' }
+    { link: '/platform/users', label: 'Gérer les utilisateurs' },
+    { link: '/platform/logs', label: 'Consulter les journaux' },
+    { link: '/platform/system', label: "Voir l'état du système" },
+    { link: '/platform/quotas', label: 'Gérer les quotas' }
   ];
 
   /** Max of the week series — bar heights are relative to it. */

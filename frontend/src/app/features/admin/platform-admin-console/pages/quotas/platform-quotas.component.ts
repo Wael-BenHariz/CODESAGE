@@ -12,7 +12,7 @@ import {
 
 /**
  * Platform Administration → Quotas & Utilisation (static PFE prototype) —
- * `/platform-admin/quotas`.
+ * `/platform/quotas`.
  *
  * Usage figures are fixed mock data; the quota editor mutates a local copy
  * of `MOCK_ORG_QUOTAS` in memory (visible in the "Quotas par organisation"

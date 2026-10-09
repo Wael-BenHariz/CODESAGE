@@ -117,25 +117,24 @@ export const routes: Routes = [
     data: { capabilities: ['org:settings'] }
   },
   {
-    // Platform admin screen (plan Step 9) — PLATFORM_ADMIN only. Not an
-    // "admin route" for the guard's org-membership elevation (the role
-    // list is not ADMIN_ROLES), so an ORG_ADMIN can never open it; the
-    // backend re-authorizes every /users and /orgs read regardless.
-    path: 'platform',
+    // Workspace management (workspace RBAC §2.5) — every member can see
+    // their workspaces; mutations are gated per workspace by the backend.
+    path: 'settings/workspaces',
     loadComponent: () =>
-      import('./features/admin/platform-admin/platform-admin.component').then(
-        m => m.PlatformAdminComponent
+      import('./features/settings/workspaces/workspaces.component').then(
+        m => m.WorkspacesComponent
       ),
     canActivate: [RoleGuard],
-    data: { capabilities: ['platform'] }
+    data: { capabilities: ['read'] }
   },
   {
-    // Static Platform Administration console (PFE prototype) — its own
-    // sidebar/topbar layout instead of the app shell (shell: false), so
-    // PLATFORM_ADMIN-only navigation stays self-contained. Guarded by
-    // PLATFORM_ROLES like /platform (no org-membership elevation); every
-    // page renders from local mock data — no API calls anywhere inside.
-    path: 'platform-admin',
+    // Platform administration — the ONE platform entry point (consolidated
+    // from the former /platform overview and the /platform-admin console).
+    // PLATFORM_ADMIN only (no org-membership elevation); its own sidebar/
+    // topbar layout instead of the app shell (shell: false). The home page
+    // is the real API-backed overview; the console pages are the PFE
+    // prototype screens (local mock data, no API calls anywhere inside).
+    path: 'platform',
     loadComponent: () =>
       import('./features/admin/platform-admin-console/platform-admin-console.component').then(
         m => m.PlatformAdminConsoleComponent
@@ -144,7 +143,16 @@ export const routes: Routes = [
     data: { capabilities: ['platform'], shell: false },
     children: [
       {
+        // Real, API-backed overview (GET /users, GET /orgs) — the console
+        // home. Read-only by design (no cross-user update routes exist).
         path: '',
+        loadComponent: () =>
+          import('./features/admin/platform-admin/platform-admin.component').then(
+            m => m.PlatformAdminComponent
+          )
+      },
+      {
+        path: 'dashboard',
         loadComponent: () =>
           import(
             './features/admin/platform-admin-console/pages/dashboard/platform-dashboard.component'
@@ -186,6 +194,12 @@ export const routes: Routes = [
           ).then(m => m.PlatformQuotasComponent)
       }
     ]
+  },
+  {
+    // Legacy alias — /platform-admin was consolidated into /platform.
+    path: 'platform-admin',
+    redirectTo: 'platform',
+    pathMatch: 'full'
   },
   {
     // Generic 404 (rule 5) — also the wildcard target below, so an unknown

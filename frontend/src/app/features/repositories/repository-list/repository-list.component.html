@@ -9,12 +9,75 @@
     @if (nav().write) {
       <div class="header-actions">
         @if (!githubInstalled()) {
-          <button class="btn btn-ghost" (click)="installGitHubApp()">Install GitHub App</button>
+          @if (canRequestInstall()) {
+            @if (installRequestSent()) {
+              <span class="install-request-sent" data-testid="install-request-sent"
+                >Request sent to workspace admins</span
+              >
+            } @else {
+              <button
+                class="btn btn-ghost"
+                data-testid="request-install"
+                [disabled]="creatingInstallRequest()"
+                (click)="requestGitHubAppInstall()"
+              >
+                {{ creatingInstallRequest() ? 'Sending…' : 'Request GitHub App install' }}
+              </button>
+            }
+          } @else {
+            <button class="btn btn-ghost" (click)="installGitHubApp()">Install GitHub App</button>
+          }
         }
         <button class="btn btn-primary" (click)="openConnectModal()">+ Connect</button>
       </div>
     }
   </header>
+
+  <!-- Pending install requests — admins of an ORG workspace resolve them (§2.5). -->
+  @if (canManageInstallRequests() && !githubInstalled()) {
+    <section class="install-requests" data-testid="install-requests">
+      <h2>Pending install requests</h2>
+      @if (installRequestLoading()) {
+        <p class="install-requests-note">Loading…</p>
+      } @else if (installRequestError()) {
+        <p class="install-requests-note" role="alert" data-testid="install-requests-error">
+          {{ installRequestError() }}
+        </p>
+      } @else if (pendingInstallRequests().length === 0) {
+        <p class="install-requests-note" data-testid="install-requests-empty">
+          No pending requests.
+        </p>
+      } @else {
+        <ul class="install-requests-list">
+          @for (request of pendingInstallRequests(); track request.id) {
+            <li class="install-request" data-testid="install-request">
+              <span class="install-request-meta"
+                >Requested {{ request.created_at | date: 'medium' }}</span
+              >
+              <span class="install-request-actions">
+                <button
+                  class="btn btn-ghost"
+                  data-testid="approve-install"
+                  [disabled]="resolvingRequestId() === request.id"
+                  (click)="approveInstallRequest(request)"
+                >
+                  Approve
+                </button>
+                <button
+                  class="btn btn-ghost"
+                  data-testid="reject-install"
+                  [disabled]="resolvingRequestId() === request.id"
+                  (click)="rejectInstallRequest(request)"
+                >
+                  Reject
+                </button>
+              </span>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
 
   <div class="toolbar">
     <div class="search-box">
@@ -134,7 +197,22 @@
     >
       @if (nav().write) {
         @if (!githubInstalled()) {
-          <button class="btn btn-primary" (click)="installGitHubApp()">Install GitHub App</button>
+          @if (canRequestInstall()) {
+            @if (installRequestSent()) {
+              <p data-testid="install-request-sent">Install request sent to workspace admins.</p>
+            } @else {
+              <button
+                class="btn btn-primary"
+                data-testid="request-install"
+                [disabled]="creatingInstallRequest()"
+                (click)="requestGitHubAppInstall()"
+              >
+                {{ creatingInstallRequest() ? 'Sending…' : 'Request GitHub App install' }}
+              </button>
+            }
+          } @else {
+            <button class="btn btn-primary" (click)="installGitHubApp()">Install GitHub App</button>
+          }
         } @else {
           <button class="btn btn-primary" (click)="openConnectModal()">
             + Select Repositories
@@ -260,10 +338,17 @@
           } @else if (githubRepos().length === 0) {
             <div class="empty">
               @if (!githubInstalled()) {
-                <p>Install or update the GitHub App to grant repository access.</p>
-                <button class="btn btn-primary" (click)="installGitHubApp()">
-                  Install GitHub App
-                </button>
+                @if (canDirectInstall()) {
+                  <p>Install or update the GitHub App to grant repository access.</p>
+                  <button class="btn btn-primary" (click)="installGitHubApp()">
+                    Install GitHub App
+                  </button>
+                } @else {
+                  <p>
+                    Ask a workspace admin to install the GitHub App — or send a request from the
+                    repositories page.
+                  </p>
+                }
               } @else {
                 <p>No repositories are available for this installation.</p>
               }

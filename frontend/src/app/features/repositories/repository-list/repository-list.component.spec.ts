@@ -5,7 +5,9 @@ import { NEVER, of, throwError } from 'rxjs';
 
 import { RepositoryListComponent } from './repository-list.component';
 import { AuthService } from '../../../core/services/auth.service';
+import { AuthContextService } from '../../../core/services/auth-context.service';
 import { GithubAppService } from '../../../core/services/github-app.service';
+import { InstallRequestService } from '../../../core/services/install-request.service';
 import { OrgSettingsService } from '../../../core/services/org-settings.service';
 import { RepositoryService } from '../../../core/services/repository.service';
 import { GitHubAppRepo } from '../../../core/models/github-app.model';
@@ -104,6 +106,18 @@ describe('RepositoryListComponent — grid, filters, search, views and connect m
         },
         { provide: GithubAppService, useValue: github },
         { provide: RepositoryService, useValue: repos },
+        // Install-request flows (§2.5) — no active workspace in these tests
+        // (install CTA stays the direct one for PERSONAL/undefined).
+        { provide: AuthContextService, useValue: { activeWorkspace: signal(null) } },
+        {
+          provide: InstallRequestService,
+          useValue: jasmine.createSpyObj<InstallRequestService>('InstallRequestService', [
+            'list',
+            'create',
+            'approve',
+            'reject'
+          ])
+        },
         // <app-site-header> loads the org switcher through this service.
         {
           provide: OrgSettingsService,

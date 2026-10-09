@@ -9,7 +9,7 @@ import {
 
 /**
  * Platform Administration → État du système (static PFE prototype) —
- * `/platform-admin/system`.
+ * `/platform/system`.
  *
  * Static service states, resource levels, uptime figures and "last check"
  * timestamps — there is no health endpoint and no polling anywhere.

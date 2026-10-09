@@ -11,9 +11,12 @@ import {
 import { CommonModule } from '@angular/common';
 import { Subscription, switchMap, timer } from 'rxjs';
 import { ApiError } from '../../../core/services/api.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { DismissalRequestService } from '../../../core/services/dismissal-request.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { DismissalRequest } from '../../../core/models/dismissal-request.model';
 import {
   CommentValidation,
   ReviewComment,
@@ -211,6 +214,8 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
   private readonly pullRequests = inject(PullRequestService);
   private readonly reviewApi = inject(ReviewService);
   private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+  private readonly dismissalApi = inject(DismissalRequestService);
 
   /** Client-side cap for the summary editor (backend rejects over-cap too). */
   readonly summaryMaxChars = SUMMARY_MAX_CHARS;
@@ -224,6 +229,8 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
   readonly number = input.required<number>();
   /** Show the "run a review" CTA (write-capable viewers; backend authoritative). */
   readonly canTrigger = input(false);
+  /** PR author login — enables the cosmetic self-review rule (§2.5). */
+  readonly authorLogin = input<string | null>(null);
 
   readonly state = signal<PanelState>('loading');
   readonly detail = signal<ReviewDetail | null>(null);
@@ -252,6 +259,27 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
   readonly validatingCommentId = signal<string | null>(null);
   /** Per-comment draft of the severity-override + note inputs (keyed by comment id). */
   readonly validationDrafts = signal<Record<string, ValidationDraft>>({});
+
+  // --- Dismissal requests (workspace RBAC §2.5) ------------------------------
+  /** Dismissal requests on this review; failure to load = empty (isolated). */
+  readonly dismissalRequests = signal<DismissalRequest[]>([]);
+  /** Comment id whose inline "request dismissal" form is open. */
+  readonly dismissalFormOpen = signal<string | null>(null);
+  readonly dismissalReasonDraft = signal('');
+  readonly creatingDismissal = signal(false);
+  /** Request id of an in-flight approve/reject — one at a time. */
+  readonly resolvingDismissalId = signal<string | null>(null);
+
+  /**
+   * Self-review rule (§2.5): the author of the PR cannot validate or
+   * dismiss its findings — the backend blocks it, this only hides the
+   * controls so the dead end is visible up front.
+   */
+  readonly selfReview = computed(() => {
+    const author = this.authorLogin();
+    const me = this.auth.currentUser()?.login ?? null;
+    return !!author && !!me && author.toLowerCase() === me.toLowerCase();
+  });
 
   // --- Walkthrough (plan Step 7 / §4.3) --------------------------------------
   /** Active walkthrough tab; inactive panels are `[hidden]` in the DOM. */
@@ -321,6 +349,9 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
         // Parallel, failure-isolated: the scan report only enriches — its
         // absence or failure must never take the comments down with it.
         this.loadScanReport(reviewId);
+        // Likewise the pending dismissal requests — an empty list on
+        // failure only hides the request chips, never the findings.
+        this.loadDismissalRequests(reviewId);
       },
       error: () => this.state.set('error')
     });
@@ -904,6 +935,108 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
         // Roll back the optimistic flip to the pre-click snapshot.
         this.pendingCommentId.set(null);
         this.detail.update(current => (current ? { ...current, comments: snapshot } : current));
+        this.actionError.set(actionErrorMessage(err));
+      }
+    });
+  }
+
+  // --- Dismissal requests (§2.5: request → approve/reject) -------------------
+
+  /**
+   * Fetch the review's dismissal requests. Parallel and failure-isolated
+   * like the scan report — a failure just renders no request chips.
+   */
+  private loadDismissalRequests(reviewId: string): void {
+    this.dismissalApi.list({ reviewId }).subscribe({
+      next: requests => this.dismissalRequests.set(requests),
+      error: () => this.dismissalRequests.set([])
+    });
+  }
+
+  /** PENDING dismissal request on a comment, if any (drives the chips). */
+  pendingDismissalFor(commentId: string): DismissalRequest | null {
+    return (
+      this.dismissalRequests().find(
+        request => request.review_comment_id === commentId && request.status === 'PENDING'
+      ) ?? null
+    );
+  }
+
+  openDismissalForm(commentId: string): void {
+    this.dismissalFormOpen.set(commentId);
+    this.dismissalReasonDraft.set('');
+  }
+
+  cancelDismissalForm(): void {
+    this.dismissalFormOpen.set(null);
+    this.dismissalReasonDraft.set('');
+  }
+
+  onDismissalReasonInput(event: Event): void {
+    this.dismissalReasonDraft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  submitDismissalRequest(commentId: string): void {
+    const reason = this.dismissalReasonDraft().trim();
+    if (!reason || this.creatingDismissal()) {
+      return;
+    }
+    this.creatingDismissal.set(true);
+    this.actionError.set(null);
+    this.dismissalApi.create(commentId, reason).subscribe({
+      next: request => {
+        this.creatingDismissal.set(false);
+        this.cancelDismissalForm();
+        this.dismissalRequests.update(list => [...list, request]);
+        this.toast.success('Dismissal request sent to the workspace reviewers.');
+      },
+      error: (err: unknown) => {
+        this.creatingDismissal.set(false);
+        this.actionError.set(actionErrorMessage(err));
+      }
+    });
+  }
+
+  approveDismissal(request: DismissalRequest): void {
+    this.resolveDismissal(request, true);
+  }
+
+  rejectDismissal(request: DismissalRequest): void {
+    this.resolveDismissal(request, false);
+  }
+
+  private resolveDismissal(request: DismissalRequest, approve: boolean): void {
+    if (this.resolvingDismissalId()) {
+      return;
+    }
+    this.resolvingDismissalId.set(request.id);
+    this.actionError.set(null);
+    const answer = approve
+      ? this.dismissalApi.approve(request.id)
+      : this.dismissalApi.reject(request.id);
+    answer.subscribe({
+      next: resolution => {
+        this.resolvingDismissalId.set(null);
+        this.dismissalRequests.update(list =>
+          list.map(existing =>
+            existing.id === resolution.id
+              ? {
+                  ...existing,
+                  status: resolution.status,
+                  resolved_by: resolution.resolved_by,
+                  resolved_at: resolution.resolved_at
+                }
+              : existing
+          )
+        );
+        if (approve) {
+          // Approving dismisses the comment server-side — reload so the
+          // findings reflect the new state.
+          this.load();
+        }
+      },
+      error: (err: unknown) => {
+        this.resolvingDismissalId.set(null);
         this.actionError.set(actionErrorMessage(err));
       }
     });

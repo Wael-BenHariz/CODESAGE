@@ -43,10 +43,10 @@ describe('PlatformDashboardComponent (static mock data)', () => {
       a => a.getAttribute('href') ?? ''
     );
     expect(hrefs).toEqual([
-      '/platform-admin/users',
-      '/platform-admin/logs',
-      '/platform-admin/system',
-      '/platform-admin/quotas'
+      '/platform/users',
+      '/platform/logs',
+      '/platform/system',
+      '/platform/quotas'
     ]);
   });
 });

@@ -42,8 +42,13 @@ describe('route capability declarations', () => {
 
   it('keeps platform routes strictly platform-gated (never org-elevated)', () => {
     const byPath = (path: string) => routes.find(route => route.path === path);
-    expect(byPath('platform')?.data?.['capabilities']).toEqual(['platform']);
-    expect(byPath('platform-admin')?.data?.['capabilities']).toEqual(['platform']);
+    // /platform is THE gated platform entry (console layout, own shell, no
+    // org elevation); /platform-admin is only a legacy redirect into it.
+    const platform = byPath('platform');
+    expect(platform?.data?.['capabilities']).toEqual(['platform']);
+    const legacy = byPath('platform-admin');
+    expect(legacy?.redirectTo).toBe('platform');
+    expect(legacy?.canActivate).toBeUndefined();
   });
 });
 
