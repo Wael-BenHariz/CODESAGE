@@ -40,6 +40,7 @@ from app.security.keycloak import KeycloakTokenError, decode_keycloak_token
 from app.security.workspace_access import (
     capability_flags,
     check_permission_in_workspace,
+    ensure_personal_workspace,
     list_user_workspaces,
 )
 
@@ -128,6 +129,19 @@ async def get_current_user_info(
     ``capabilities`` mirrors the flags of the global realm role. The
     frontend renders from these flags — it never re-derives role lists.
     """
+    # Target design §2.1 self-heal: the first-login provision in
+    # dependencies.py is best-effort (a failure must not block auth) — /me
+    # retries it so a user is never permanently stranded with an empty
+    # workspace list if that one attempt failed.
+    try:
+        await ensure_personal_workspace(db, current_user)
+        await db.commit()
+    except Exception:
+        logger.exception(
+            "Personal workspace self-heal failed for user %s", current_user.id
+        )
+        await db.rollback()
+
     memberships = await list_user_workspaces(db, current_user)
     payload = UserResponse.model_validate(current_user).model_dump()
     return MeResponse(

@@ -271,6 +271,27 @@ async def test_me_for_none_role_is_view_only(client, rbac):
     assert org_ws["capabilities"]["review"] is False
 
 
+async def test_me_self_heals_missing_personal_workspace(client, db):
+    """A user whose first-login provision failed must not be stranded.
+
+    The create-path provision in ``dependencies.py`` is best-effort; ``/me``
+    retries it (target design §2.1) so the workspace list recovers.
+    """
+    user = await _make_user(db, "kc-rbac-heal", role="DEVELOPER")
+
+    resp = await client.get(f"{API}/auth/me", headers=_auth("kc-rbac-heal"))
+    assert resp.status_code == 200
+    personal = [w for w in resp.json()["workspaces"] if w["is_personal"]]
+    assert len(personal) == 1
+    assert personal[0]["role"] == "ORG_ADMIN"
+    assert personal[0]["capabilities"]["repo_admin"] is True
+
+    row = (
+        await db.execute(select(Workspace).where(Workspace.owner_user_id == user.id))
+    ).scalar_one()
+    assert row.type == "PERSONAL"
+
+
 # ---------------------------------------------------------------------------
 # Install-url — workspace_id gate + signed wid (§2.5 request-install flow)
 # ---------------------------------------------------------------------------

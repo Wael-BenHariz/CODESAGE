@@ -30,15 +30,15 @@ data:
           },
           {
             "name": "ORG_ADMIN",
-            "description": "Administers one organization: org settings, invitations, member roles (DEPRECATED: use workspace roles instead)",
+            "description": "Administers one organization: org settings, invitations, member roles (DEPRECATED: use workspace roles instead)"
           },
           {
             "name": "REVIEWER",
-            "description": "Validates review findings (confirm / false positive / severity override) in their orgs (DEPRECATED: use workspace roles instead)",
+            "description": "Validates review findings (confirm / false positive / severity override) in their orgs (DEPRECATED: use workspace roles instead)"
           },
           {
             "name": "DEVELOPER",
-            "description": "Can install GitHub App, manage repos, view own reviews, staged-post controls (DEPRECATED: use workspace roles instead)",
+            "description": "Can install GitHub App, manage repos, view own reviews, staged-post controls (DEPRECATED: use workspace roles instead)"
           },
           {
             "name": "SUPER_ADMIN",
@@ -601,7 +601,7 @@ data:
             }
           ],
           "groups": [
-            "/super-admins"
+            "/platform-admins"
           ],
           "firstName": "Code",
           "lastName": "Sage"
