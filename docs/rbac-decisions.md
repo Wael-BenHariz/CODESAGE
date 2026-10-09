@@ -2,6 +2,12 @@
 
 This document tracks assumptions and decisions made during the RBAC implementation process.
 
+**Status (v0.5.0, branch `feat/workspace-rbac`)**: all initial assumptions were
+confirmed by discovery and all open questions below are now **resolved** — see
+"Resolved Decisions". The endpoint-level outcome of these decisions is
+documented in `docs/rbac-endpoints.md`; the enforced matrix in
+`docs/rbac-target-design.md` §2.3–§2.5.
+
 ## Initial Assumptions (from discovery phase)
 
 1. **Role Precedence Bug Confirmed**: The current implementation in `/backend/app/security/roles.py` lines 78-82 shows precedence as `PLATFORM_ADMIN > NONE > ORG_ADMIN > REVIEWER > DEVELOPER`, which incorrectly places NONE above ORG_ADMIN. This needs to be fixed to `PLATFORM_ADMIN > ORG_ADMIN > REVIEWER > DEVELOPER > NONE`.
@@ -21,33 +27,64 @@ This document tracks assumptions and decisions made during the RBAC implementati
 
 6. **Field Naming Inconsistency**: The task mentions renaming to `viewer_role` consistently and removing `reviewer_role`. Need to investigate where these fields exist.
 
-## Open Questions for Clarification
+## Resolved Decisions (answers to the former Open Questions)
 
-1. **Workspace Type Values**: Should workspace types be strings ("PERSONAL", "ORG") or use an enum/boolean?
+1. **Workspace Type Values** → Plain strings `"PERSONAL"` / `"ORG"`, enforced by a
+   DB check constraint (`ck_workspaces_type` in migration 020). No enum table —
+   the vocabulary is tiny and mirrors the existing role-string convention.
 
-2. **Personal Workspace Naming**: What should determine the name of a personal workspace? Username? A default like "Personal Workspace"?
+2. **Personal Workspace Naming** → `"{login}'s workspace"` (e.g.
+   `octocat's workspace`), created in `workspace_access.ensure_personal_workspace`.
+   Display-only; the unique key is `(type, owner_user_id)`.
 
-3. **Migration Strategy**: For existing data, should we:
-   - Create one personal workspace per existing user
-   - Map existing organizations to org workspaces
-   - Migrate existing org_members to workspace_members
-   - Assign repositories based on GitHub installation → org → workspace chain
+3. **Migration Strategy** → Alembic `020` performs all four steps in one
+   transaction: one PERSONAL workspace per existing user; one ORG workspace per
+   existing org (with `github_account_login`); `org_members` → `workspace_members`
+   seeded from `orgs.workspace_id`; repositories, pull requests, reviews,
+   watched repos and GitHub installations bound to a workspace through the
+   installation → org → workspace chain (linker's personal workspace as
+   fallback, org ownership wins when both apply). Columns are nullable —
+   unbound rows fall back to the global JWT role, so nothing gets stricter
+   mid-migration.
 
-4. **GitHub App Installation Ownership**: Should GitHub App installations belong to workspaces or users? The task says "every repository, PR, review, finding and GitHub App installation belongs to exactly one workspace."
+4. **GitHub App Installation Ownership** → Installations belong to a workspace:
+   `github_installations.workspace_id` (migration 020), bound from the signed
+   install state (`wid`) on the App callback and from the webhook provisioning
+   chain. The install URL endpoint enforces `repo_admin` in the target workspace.
 
-5. **Personal Workspace Creation Timing**: Should personal workspaces be created:
-   - On first login only
-   - On every login (idempotent)
-   - Via a background process
+5. **Personal Workspace Creation Timing** → Idempotent, on first login
+   (`ensure_personal_workspace` — select-then-create, also ensures the explicit
+   ORG_ADMIN membership row). Pre-seeded for existing users by the 020 backfill;
+   no background process needed.
 
-6. **Default Workspace Context**: When a user logs in, what should be their default workspace context? Their personal workspace?
+6. **Default Workspace Context** → No server-side "current workspace": every
+   request carries its own context (`workspace_id` param, resource traversal, or
+   `X-Workspace-Id` header). The frontend remembers a stored selection
+   (`codesage_active_workspace`) and defaults to the personal workspace, else the
+   first workspace (`auth-context.service.ts`).
 
-7. **Cross-Workspace Access**: How should cross-workspace access be handled? Should it return 404 (to avoid leaking existence) as mentioned for org access?
+7. **Cross-Workspace Access** → Uniform **404** (`"Resource not found"`) for
+   unknown workspace ids and non-members alike — existence must not leak; 403 is
+   reserved for "you are a member but under-qualified" (`"Insufficient
+   permissions"`, no role names echoed).
 
-8. **Platform Admin Scope**: Is PLATFORM_ADMIN truly global across all workspaces, or does it need to be assigned to specific workspaces?
+8. **Platform Admin Scope** → Truly global; never a membership row. It bypasses
+   the *membership* step on workspace endpoints, but the F2 carve-out still
+   applies: summary edit / dismiss / restore / validate / post go through
+   `org_access` with `platform_admin_bypass=False`, so a platform admin must be
+   a real org member to touch a customer's PR. An explicit `NONE` downgrade is
+   never outranked (NONE sits at rank 0 on the ladder).
 
-9. **Role Field Migration**: When renaming role fields to `viewer_role`, what tables/columns need to be changed?
+9. **Role Field Migration** → The response field is `viewer_role` (review
+   detail payload); `reviewer_role` no longer exists anywhere in backend or
+   frontend (verified by grep). Internal comparisons use the explicit
+   permission lists in `workspace_access.PERMISSION_MAP`, never `!== 'NONE'`.
 
-10. **Backwards Compatibility**: During migration, how do we handle backwards compatibility for any external consumers of the API?
-
-These questions will be logged and answered as implementation progresses, with each decision recorded here.
+10. **Backwards Compatibility** → Additive only: existing endpoints keep their
+    paths and shapes; new payloads (`capabilities`, `viewer_role`, workspace
+    objects) are additions. Legacy role tokens were mapped for one release
+    (`SUPER_ADMIN→PLATFORM_ADMIN`, `GUEST→NONE`) and removed in v0.4.0. Data
+    without a `workspace_id` is evaluated exactly as before (global role), so
+    un-migrated rows behave identically for old clients. The old frontend
+    `deriveRole` is retained purely as the JWT fallback for tokens issued before
+    `/auth/me` carried capabilities.
