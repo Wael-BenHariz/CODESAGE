@@ -59,6 +59,22 @@
       </label>
     }
 
+    @if (workspaces.length > 1) {
+      <label class="workspace-switch">
+        <span class="visually-hidden">Active workspace</span>
+        <select
+          [value]="activeWorkspaceId"
+          (change)="switchWorkspace($event)"
+          data-testid="workspace-switcher"
+          aria-label="Active workspace"
+        >
+          @for (workspace of workspaces; track workspace.id) {
+            <option [value]="workspace.id">{{ workspace.name }}</option>
+          }
+        </select>
+      </label>
+    }
+
     @if (auth.currentUser(); as user) {
       <div class="user-menu">
         @if (user.avatarUrl) {

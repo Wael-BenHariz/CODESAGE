@@ -18,7 +18,7 @@
     </div>
   } @else {
     @if (view() === 'organization') {
-      @if (isPlatformAdmin && platformError(); as platformErrMsg) {
+      @if (isPlatformAdmin() && platformError(); as platformErrMsg) {
         <div class="banner error" role="alert">
           <span>{{ platformErrMsg }}</span>
           <button class="btn btn-secondary" type="button" (click)="retryPlatform()">Retry</button>

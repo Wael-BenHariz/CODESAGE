@@ -1,5 +1,4 @@
 import { routes } from './app.routes';
-import { PLATFORM_ROLES } from './core/guards/role.guard';
 
 describe('app routes (plan Step 9: /help)', () => {
   const help = routes.find(route => route.path === 'help');
@@ -32,7 +31,7 @@ describe('app routes (/platform-admin static console)', () => {
 
   it('is platform-admin-only and renders its own shell', () => {
     expect(consoleRoute?.canActivate).toBeDefined();
-    expect(consoleRoute?.data?.['roles']).toEqual(PLATFORM_ROLES);
+    expect(consoleRoute?.data?.['capabilities']).toEqual(['platform']);
     expect(consoleRoute?.data?.['shell']).toBe(false);
   });
 });

@@ -91,10 +91,34 @@ export class TopbarComponent implements OnInit {
     return effectiveRole(user.role, this.ctx.activeOrg()?.role ?? null);
   });
 
+  /** Get the user's workspaces */
+  get workspaces() {
+    return this.ctx.workspaces() ?? [];
+  }
+
+  /** Get the active workspace ID */
+  get activeWorkspaceId(): string | null {
+    return this.ctx.activeWorkspaceId() ?? null;
+  }
+
+  /** Get the active workspace */
+  get activeWorkspace() {
+    return this.ctx.activeWorkspace();
+  }
+
   switchOrg(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     if (value) {
       this.ctx.setActiveOrg(value);
+    }
+  }
+
+  switchWorkspace(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value) {
+      this.ctx.setActiveWorkspace(value);
+      // Reload the current page to reflect the new workspace context
+      window.location.reload();
     }
   }
 

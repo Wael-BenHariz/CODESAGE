@@ -1,11 +1,5 @@
 import { Routes } from '@angular/router';
-import {
-  ADMIN_ROLES,
-  ANY_ROLE,
-  PLATFORM_ROLES,
-  RoleGuard,
-  WRITE_ROLES
-} from './core/guards/role.guard';
+import { RoleGuard } from './core/guards/role.guard';
 import { confirmUnsavedSummaryGuard } from './features/pull-requests/pr-detail/pr-detail.guard';
 
 export const routes: Routes = [
@@ -33,7 +27,7 @@ export const routes: Routes = [
     data: { shell: false }
   },
   {
-    // No guard here: this route is GitHub's post-install redirect target and
+    // No guard: this route is GitHub's post-install redirect target and
     // must render even when the session is still being restored (check-sso).
     path: 'github/callback',
     loadComponent: () =>
@@ -65,7 +59,7 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
     canActivate: [RoleGuard],
-    data: { roles: WRITE_ROLES }
+    data: { capabilities: ['write'] }
   },
   {
     path: 'repositories',
@@ -74,7 +68,7 @@ export const routes: Routes = [
         m => m.RepositoryListComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'repositories/:owner/:repo',
@@ -83,14 +77,14 @@ export const routes: Routes = [
         m => m.RepositoryDetailComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'repositories/:owner/:repo/pulls',
     loadComponent: () =>
       import('./features/pull-requests/pr-list/pr-list.component').then(m => m.PrListComponent),
     canActivate: [RoleGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'repositories/:owner/:repo/pulls/:number',
@@ -101,14 +95,14 @@ export const routes: Routes = [
     canActivate: [RoleGuard],
     // Plan Step 4: warn before leaving with an unsaved summary edit.
     canDeactivate: [confirmUnsavedSummaryGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.component').then(m => m.SettingsComponent),
     canActivate: [RoleGuard],
-    data: { roles: WRITE_ROLES }
+    data: { capabilities: ['write'] }
   },
   {
     // Org + platform settings (Step 5). ADMIN_ROLES on the JWT, or — same
@@ -120,7 +114,7 @@ export const routes: Routes = [
         m => m.OrgSettingsComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: ADMIN_ROLES }
+    data: { capabilities: ['org:settings'] }
   },
   {
     // Platform admin screen (plan Step 9) — PLATFORM_ADMIN only. Not an
@@ -133,7 +127,7 @@ export const routes: Routes = [
         m => m.PlatformAdminComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: PLATFORM_ROLES }
+    data: { capabilities: ['platform'] }
   },
   {
     // Static Platform Administration console (PFE prototype) — its own
@@ -147,7 +141,7 @@ export const routes: Routes = [
         m => m.PlatformAdminConsoleComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: PLATFORM_ROLES, shell: false },
+    data: { capabilities: ['platform'], shell: false },
     children: [
       {
         path: '',
