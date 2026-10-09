@@ -173,7 +173,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     # Workspace relationships
     workspace_memberships: Mapped[list["WorkspaceMember"]] = relationship(
         "WorkspaceMember",
@@ -181,7 +181,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     owned_workspaces: Mapped[list["Workspace"]] = relationship(
         "Workspace",
         foreign_keys="[Workspace.owner_user_id]",
@@ -189,7 +189,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     # Dismissal request relationships
     dismissal_requests_made: Mapped[list["DismissalRequest"]] = relationship(
         "DismissalRequest",
@@ -198,7 +198,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     dismissal_requests_resolved: Mapped[list["DismissalRequest"]] = relationship(
         "DismissalRequest",
         foreign_keys="[DismissalRequest.resolved_by]",
@@ -206,7 +206,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     # Install request relationships
     install_requests_made: Mapped[list["InstallRequest"]] = relationship(
         "InstallRequest",
@@ -215,7 +215,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     install_requests_resolved: Mapped[list["InstallRequest"]] = relationship(
         "InstallRequest",
         foreign_keys="[InstallRequest.resolved_by]",
@@ -223,7 +223,7 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     # Notification relationships
     notifications: Mapped[list["Notification"]] = relationship(
         "Notification",

@@ -1,10 +1,8 @@
 """Pull request model."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-import sqlalchemy as sa
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,13 +11,9 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.repositories import Repository
+    from app.db.models.review_comments import ReviewComment
     from app.db.models.reviews import Review
     from app.db.models.workspaces import Workspace
-
-if TYPE_CHECKING:
-    from app.db.models.repositories import Repository
-    from app.db.models.reviews import Review
-    from app.db.models.review_comments import ReviewComment
 
 
 class PullRequest(Base):
@@ -81,7 +75,7 @@ class PullRequest(Base):
         comment="Pull request title",
     )
 
-    body: Mapped[Optional[str]] = mapped_column(
+    body: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Pull request description body",
@@ -104,7 +98,7 @@ class PullRequest(Base):
         comment="GitHub username of PR author",
     )
 
-    author_avatar_url: Mapped[Optional[str]] = mapped_column(
+    author_avatar_url: Mapped[str | None] = mapped_column(
         String(1024),
         nullable=True,
         comment="Avatar URL of PR author",
@@ -172,7 +166,7 @@ class PullRequest(Base):
         onupdate=func.now(),
         index=True,
     )
-    
+
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -187,7 +181,7 @@ class PullRequest(Base):
         "Repository",
         back_populates="pull_requests",
     )
-    
+
     workspace: Mapped["Workspace"] = relationship(
         "Workspace",
         back_populates="pull_requests",

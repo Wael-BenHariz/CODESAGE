@@ -1,10 +1,7 @@
 """Watched repository model for GitHub App repository selection."""
 
-from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
 
-import sqlalchemy as sa
 from sqlalchemy import BigInteger, Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -54,7 +51,7 @@ class WatchedRepo(Base):
         default=True,
         comment="Whether review processing is enabled",
     )
-    
+
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -68,7 +65,7 @@ class WatchedRepo(Base):
         "User",
         back_populates="watched_repos",
     )
-    
+
     # Workspace relationship
     workspace: Mapped["Workspace"] = relationship(
         "Workspace",

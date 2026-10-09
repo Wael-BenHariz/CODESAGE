@@ -42,7 +42,7 @@ async def handle_github_webhook(
 ):
     """
     Handle incoming GitHub webhook events.
-    
+
     Supports:
     - pull_request: Trigger reviews and track PRs
     - installation: Handle app installation events
@@ -50,12 +50,12 @@ async def handle_github_webhook(
     """
     # Get raw body for signature verification
     body = await request.body()
-    
+
     # Get signature and event type
     signature = request.headers.get("X-Hub-Signature-256", "")
     event_type = request.headers.get("X-GitHub-Event", "")
     delivery_id = request.headers.get("X-GitHub-Delivery", "")
-    
+
     # Verify signature
     if not github_service.verify_webhook_signature(body, signature):
         logger.warning(
@@ -67,7 +67,7 @@ async def handle_github_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature",
         )
-    
+
     # Parse payload
     try:
         payload = json.loads(body)
@@ -76,21 +76,25 @@ async def handle_github_webhook(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid JSON payload",
         )
-    
+
     # Handle different event types
     if event_type == "pull_request":
         return await _handle_pull_request_event(payload, delivery_id, db)
-    
+
     elif event_type == "installation":
         return await _handle_installation_event(payload, delivery_id, db)
-    
+
     elif event_type == "installation_repositories":
         return await _handle_installation_repos_event(payload, delivery_id, db)
-    
+
     else:
         # Any event type outside the review workflow (and the GitHub App
         # installation lifecycle handled above) is skipped cleanly.
-        logger.info("Skipping unhandled webhook event type %r (delivery=%r)", event_type, delivery_id)
+        logger.info(
+            "Skipping unhandled webhook event type %r (delivery=%r)",
+            event_type,
+            delivery_id,
+        )
         return {"status": "skipped"}
 
 
@@ -101,14 +105,14 @@ async def _handle_pull_request_event(
 ) -> WebhookProcessResult:
     """
     Handle pull_request webhook events.
-    
+
     Creates/updates PR records and triggers reviews for opened/synchronize actions.
     """
     action = payload.get("action")
     pr_data = payload.get("pull_request", {})
     repo_data = payload.get("repository", {})
     installation = payload.get("installation", {})
-    
+
     if not installation:
         return WebhookProcessResult(
             event_id="",
@@ -116,7 +120,7 @@ async def _handle_pull_request_event(
             action_taken=None,
             error="No installation data in payload",
         )
-    
+
     installation_id = installation.get("id")
     install_record = await _get_installation_record(db, installation_id)
     if not install_record:
@@ -126,7 +130,7 @@ async def _handle_pull_request_event(
         # `installation created` webhook never arrived. Idempotent.
         await provision_installation_org(db, install_record)
         await db.commit()
-    
+
     # Find or create repository record for the real GitHub App installation.
     repo_result = await db.execute(
         select(Repository)
@@ -134,7 +138,7 @@ async def _handle_pull_request_event(
         .where(Repository.github_repo_id == repo_data.get("id"))
     )
     repo = repo_result.scalar_one_or_none()
-    
+
     if not repo:
         # Create new repository record
         repo = Repository(
@@ -159,7 +163,7 @@ async def _handle_pull_request_event(
         if repo.workspace_id is None:
             repo.workspace_id = install_record.workspace_id
         await db.commit()
-    
+
     # Create webhook event record
     webhook_event = WebhookEvent(
         repository_id=repo.id,
@@ -176,10 +180,12 @@ async def _handle_pull_request_event(
         # Duplicate delivery (delivery_id is unique): acknowledge without
         # queueing a second review job for the same event.
         await db.rollback()
-        logger.info("Skipping duplicate webhook delivery %r (event=pull_request)", delivery_id)
+        logger.info(
+            "Skipping duplicate webhook delivery %r (event=pull_request)", delivery_id
+        )
         return {"status": "skipped"}
     await db.refresh(webhook_event)
-    
+
     # Process based on action
     if action in ["opened", "synchronize", "reopened"]:
         # Create or update PR record
@@ -189,7 +195,7 @@ async def _handle_pull_request_event(
             .where(PullRequest.github_pr_id == pr_data.get("id"))
         )
         existing_pr = pr_result.scalar_one_or_none()
-        
+
         if existing_pr:
             # Update existing PR
             existing_pr.title = pr_data.get("title", "")
@@ -205,7 +211,7 @@ async def _handle_pull_request_event(
             base = pr_data.get("base", {})
             head = pr_data.get("head", {})
             user = pr_data.get("user", {})
-            
+
             new_pr = PullRequest(
                 repository_id=repo.id,
                 github_pr_id=pr_data.get("id"),
@@ -226,19 +232,23 @@ async def _handle_pull_request_event(
             )
             db.add(new_pr)
             pr_record = new_pr
-        
+
         await db.commit()
         await db.refresh(pr_record)
 
         # Resolve installation owner(s): users whose column matches this
         # installation; the first one watching the repo (enabled) wins.
         owners = (
-            await db.execute(
-                select(User)
-                .where(User.github_installation_id == installation_id)
-                .order_by(User.created_at.asc())
+            (
+                await db.execute(
+                    select(User)
+                    .where(User.github_installation_id == installation_id)
+                    .order_by(User.created_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         watched_repo = None
         for owner in owners:
             watched_repo = await db.scalar(
@@ -294,7 +304,8 @@ async def _handle_pull_request_event(
                     WebhookEvent.delivery_id != delivery_id,
                     WebhookEvent.processed.is_(True),
                     WebhookEvent.payload["pull_request"]["id"].astext == str(pr_gh_id),
-                    WebhookEvent.payload["pull_request"]["head"]["sha"].astext == head_sha,
+                    WebhookEvent.payload["pull_request"]["head"]["sha"].astext
+                    == head_sha,
                 )
                 .limit(1)
             )
@@ -412,12 +423,12 @@ async def _handle_pull_request_event(
             .where(PullRequest.github_pr_id == pr_data.get("id"))
         )
         pr = pr_result.scalar_one_or_none()
-        
+
         if pr:
             merged = pr_data.get("merged", False)
             pr.state = "merged" if merged else "closed"
             await db.commit()
-        
+
         webhook_event.processed = True
         await db.commit()
 
@@ -439,15 +450,15 @@ async def _handle_installation_event(
 ) -> dict:
     """
     Handle installation webhook events.
-    
+
     Creates/updates/deletes GitHub App installation records.
     """
     action = payload.get("action")
     installation = payload.get("installation", {})
-    
+
     installation_id = installation.get("id")
     account = installation.get("account", {})
-    
+
     if action in ["created", "suspended", "unsuspended"]:
         # Create or update installation record
         record = await _upsert_installation_record(db, installation)
@@ -477,13 +488,13 @@ async def _handle_installation_event(
             await _upsert_repository_record(db, record, repo_data)
 
         await db.commit()
-        
+
         return {
             "status": "success",
             "action": action,
             "installation_id": installation_id,
         }
-    
+
     elif action == "deleted":
         # Delete installation and cascade to repositories; unlink users so
         # /github/status flips back to "not installed".
@@ -494,21 +505,22 @@ async def _handle_installation_event(
         )
         await db.commit()
         result = await db.execute(
-            select(GitHubInstallation)
-            .where(GitHubInstallation.installation_id == installation_id)
+            select(GitHubInstallation).where(
+                GitHubInstallation.installation_id == installation_id
+            )
         )
         record = result.scalar_one_or_none()
-        
+
         if record:
             await db.delete(record)
             await db.commit()
-        
+
         return {
             "status": "success",
             "action": action,
             "installation_id": installation_id,
         }
-    
+
     return {
         "status": "acknowledged",
         "action": action,
@@ -522,27 +534,27 @@ async def _handle_installation_repos_event(
 ) -> dict:
     """
     Handle installation_repositories webhook events.
-    
+
     Updates repository access for an installation.
     """
     installation = payload.get("installation", {})
     repos_added = payload.get("repositories_added", [])
     repos_removed = payload.get("repositories_removed", [])
-    
+
     installation_id = installation.get("id")
-    
+
     install_record = await _get_installation_record(db, installation_id)
-    
+
     if not install_record:
         return {
             "status": "error",
             "message": "Installation not found",
         }
-    
+
     # Add new repositories
     for repo in repos_added:
         await _upsert_repository_record(db, install_record, repo)
-    
+
     # Remove repositories (and turn off the review switch for them)
     removed_ids = [repo.get("id") for repo in repos_removed if repo.get("id")]
     for repo in repos_removed:
@@ -586,7 +598,9 @@ async def _get_installation_record(
     installation_id: int,
 ) -> GitHubInstallation | None:
     result = await db.execute(
-        select(GitHubInstallation).where(GitHubInstallation.installation_id == installation_id)
+        select(GitHubInstallation).where(
+            GitHubInstallation.installation_id == installation_id
+        )
     )
     return result.scalar_one_or_none()
 

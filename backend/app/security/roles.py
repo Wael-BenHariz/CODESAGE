@@ -17,7 +17,7 @@ Layout (v0.4.0):
   - legacy claims (``SUPER_ADMIN``, ``GUEST``) are mapped through
     ``_COMPAT_MAP`` — **removed in v0.4.0** together with the old realm
     roles/groups;
-  - the GitHub-broker ``DEVELOPER`` fallback (F1) is **removed** — 
+  - the GitHub-broker ``DEVELOPER`` fallback (F1) is **removed** —
     GitHub-brokered logins now receive ``NONE`` role and gain roles
     through workspace membership only.
 """

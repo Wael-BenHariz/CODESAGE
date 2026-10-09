@@ -2,9 +2,7 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import UUID
 
-import sqlalchemy as sa
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -148,7 +146,7 @@ class Review(Base):
         nullable=True,
         comment="When the review completed",
     )
-    
+
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -172,7 +170,7 @@ class Review(Base):
         "User",
         back_populates="reviews",
     )
-    
+
     workspace: Mapped["Workspace"] = relationship(
         "Workspace",
         back_populates="reviews",

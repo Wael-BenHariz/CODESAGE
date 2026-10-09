@@ -1,10 +1,8 @@
 """Repository model for GitHub repositories."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
-from uuid import UUID
+from typing import TYPE_CHECKING
 
-import sqlalchemy as sa
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -89,7 +87,7 @@ class Repository(Base):
     )
 
     # Webhook Configuration
-    webhook_id: Mapped[Optional[int]] = mapped_column(
+    webhook_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         comment="GitHub webhook ID for this repository",
@@ -102,7 +100,7 @@ class Repository(Base):
         default=True,
         comment="Whether CodeSage is enabled for this repository",
     )
-    
+
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -145,7 +143,7 @@ class Repository(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
-    
+
     # Workspace relationship
     workspace: Mapped["Workspace"] = relationship(
         "Workspace",

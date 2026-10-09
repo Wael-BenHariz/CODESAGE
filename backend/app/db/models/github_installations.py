@@ -94,7 +94,7 @@ class GitHubInstallation(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    
+
     # Workspace association
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -111,7 +111,7 @@ class GitHubInstallation(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    
+
     # Workspace relationship
     workspace: Mapped["Workspace"] = relationship(
         "Workspace",

@@ -127,7 +127,9 @@ async def test_disable_fires_on_deselect(client, user, db, monkeypatch):
     assert rec.enables == []
 
 
-async def test_disable_fires_for_repo_absent_from_sync_payload(client, user, db, monkeypatch):
+async def test_disable_fires_for_repo_absent_from_sync_payload(
+    client, user, db, monkeypatch
+):
     """sync=true full-state payload: a watched repo missing from it is
     deselected -> teardown."""
     await _watched(db, user, enabled=True)

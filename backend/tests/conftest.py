@@ -196,7 +196,7 @@ async def user(db):
 async def personal_workspace(db, user):
     """A personal workspace for the test user."""
     from app.db.models.workspaces import Workspace
-    
+
     workspace = Workspace(
         type="PERSONAL",
         name=f"{user.login}'s Personal Workspace",
@@ -212,7 +212,7 @@ async def personal_workspace(db, user):
 async def org_workspace(db):
     """An organization workspace for testing."""
     from app.db.models.workspaces import Workspace
-    
+
     workspace = Workspace(
         type="ORG",
         name="Test Organization",
@@ -228,7 +228,7 @@ async def org_workspace(db):
 async def workspace_member(db, org_workspace, user):
     """A workspace member in the organization workspace with DEVELOPER role."""
     from app.db.models.workspaces import WorkspaceMember
-    
+
     member = WorkspaceMember(
         workspace_id=org_workspace.id,
         user_id=user.id,
@@ -245,7 +245,7 @@ async def org_admin_user(db):
     """A user with ORG_ADMIN role in an organization workspace."""
     from app.db.models.users import User
     from app.db.models.workspaces import Workspace, WorkspaceMember
-    
+
     # Create user
     user = User(
         github_id=444555666,
@@ -256,7 +256,7 @@ async def org_admin_user(db):
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
+
     # Create organization workspace
     workspace = Workspace(
         type="ORG",
@@ -266,7 +266,7 @@ async def org_admin_user(db):
     db.add(workspace)
     await db.commit()
     await db.refresh(workspace)
-    
+
     # Add user as ORG_ADMIN in the workspace
     member = WorkspaceMember(
         workspace_id=workspace.id,
@@ -276,7 +276,7 @@ async def org_admin_user(db):
     db.add(member)
     await db.commit()
     await db.refresh(member)
-    
+
     return user, workspace, member
 
 
@@ -285,7 +285,7 @@ async def reviewer_user(db):
     """A user with REVIEWER role in an organization workspace."""
     from app.db.models.users import User
     from app.db.models.workspaces import Workspace, WorkspaceMember
-    
+
     # Create user
     user = User(
         github_id=777888999,
@@ -296,7 +296,7 @@ async def reviewer_user(db):
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
+
     # Create organization workspace
     workspace = Workspace(
         type="ORG",
@@ -306,7 +306,7 @@ async def reviewer_user(db):
     db.add(workspace)
     await db.commit()
     await db.refresh(workspace)
-    
+
     # Add user as REVIEWER in the workspace
     member = WorkspaceMember(
         workspace_id=workspace.id,
@@ -316,7 +316,7 @@ async def reviewer_user(db):
     db.add(member)
     await db.commit()
     await db.refresh(member)
-    
+
     return user, workspace, member
 
 
@@ -325,7 +325,7 @@ async def developer_user(db):
     """A user with DEVELOPER role in an organization workspace."""
     from app.db.models.users import User
     from app.db.models.workspaces import Workspace, WorkspaceMember
-    
+
     # Create user
     user = User(
         github_id=111222333,
@@ -336,7 +336,7 @@ async def developer_user(db):
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
+
     # Create organization workspace
     workspace = Workspace(
         type="ORG",
@@ -346,7 +346,7 @@ async def developer_user(db):
     db.add(workspace)
     await db.commit()
     await db.refresh(workspace)
-    
+
     # Add user as DEVELOPER in the workspace
     member = WorkspaceMember(
         workspace_id=workspace.id,
@@ -356,7 +356,7 @@ async def developer_user(db):
     db.add(member)
     await db.commit()
     await db.refresh(member)
-    
+
     return user, workspace, member
 
 

@@ -86,7 +86,7 @@ class Org(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    
+
     # Workspace association (migration 020: orgs.workspace_id → workspaces)
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True),
