@@ -39,8 +39,6 @@ from app.db.models import (
     Org,
     OrgMember,
     User,
-    Workspace,
-    WorkspaceMember,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,126 +64,6 @@ def least_privilege_role(linked_user_count: int) -> str | None:
     return ROLE_DEVELOPER
 
 
-async def ensure_org_workspace(
-    db: AsyncSession,
-    org: Org,
-    installation: GitHubInstallation | None = None,
-) -> Workspace:
-    """Ensure the org's ORG workspace exists and is linked both ways (§2.1).
-
-    Lookup order: workspace with the backfill's identity
-    (``github_account_login == "{account_type}:{name}"``) → an ORG workspace
-    already carrying the org's name (a user pre-created it — adopt instead of
-    duplicating) → create new. Then ``org.workspace_id`` is linked and an
-    unbound ``installation`` row is stamped with the same workspace (an
-    installation belongs to exactly one workspace; existing bindings win).
-
-    Flushes only; the caller commits.
-    """
-    identity = f"{org.account_type}:{org.name}"
-
-    workspace: Workspace | None = None
-    if org.workspace_id is not None:
-        workspace = (
-            await db.execute(select(Workspace).where(Workspace.id == org.workspace_id))
-        ).scalar_one_or_none()
-        if workspace is None:  # dangling link (workspace deleted) — re-resolve
-            org.workspace_id = None
-
-    if workspace is None:
-        # `.limit(1)` rather than scalar_one_or_none: workspaces.py lets
-        # admins set github_account_login freely, so duplicates are possible.
-        workspace = (
-            await db.execute(
-                select(Workspace)
-                .where(
-                    Workspace.type == "ORG",
-                    Workspace.github_account_login == identity,
-                )
-                .order_by(Workspace.created_at.asc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-    if workspace is None:
-        # Adopt an ORG workspace a user already created under this name
-        # (keeps workspaces.py's name-uniqueness rule honest).
-        workspace = (
-            await db.execute(
-                select(Workspace)
-                .where(Workspace.type == "ORG", Workspace.name == org.name)
-                .order_by(Workspace.created_at.asc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if workspace is not None and workspace.github_account_login is None:
-            workspace.github_account_login = identity
-
-    if workspace is None:
-        workspace = Workspace(
-            type="ORG",
-            name=org.name,
-            github_account_login=identity,
-        )
-        db.add(workspace)
-        await db.flush()
-        logger.info(
-            "workspace_created workspace_id=%s type=ORG name=%r",
-            workspace.id,
-            org.name,
-        )
-
-    if org.workspace_id != workspace.id:
-        org.workspace_id = workspace.id
-    if installation is not None and installation.workspace_id is None:
-        installation.workspace_id = workspace.id
-
-    return workspace
-
-
-async def mirror_org_members(db: AsyncSession, org: Org) -> int:
-    """Insert ``workspace_members`` rows missing for ``org_members`` rows.
-
-    Insert-only (``ON CONFLICT DO NOTHING``): workspace-side role edits are
-    never overwritten from here, and a role demoted to NONE (org row deleted
-    by ``sync_membership_role``) is never resurrected because it has no
-    ``org_members`` row left to mirror.
-
-    Flushes only; the caller commits. Returns the number of rows inserted.
-    """
-    if org.workspace_id is None:
-        return 0
-
-    missing = await db.execute(
-        select(OrgMember.user_id, OrgMember.role)
-        .where(
-            OrgMember.org_id == org.id,
-            OrgMember.user_id.not_in(
-                select(WorkspaceMember.user_id).where(
-                    WorkspaceMember.workspace_id == org.workspace_id
-                )
-            ),
-        )
-        .order_by(OrgMember.user_id.asc())
-    )
-    rows = [
-        {"workspace_id": org.workspace_id, "user_id": user_id, "role": role}
-        for user_id, role in missing.all()
-    ]
-    if not rows:
-        return 0
-
-    inserted = await db.execute(
-        pg_insert(WorkspaceMember)
-        .values(rows)
-        .on_conflict_do_nothing(
-            index_elements=["workspace_id", "user_id"],
-        )
-    )
-    await db.flush()
-    return int(getattr(inserted, "rowcount", 0) or 0)
-
-
 async def provision_installation_org(
     db: AsyncSession,
     installation: GitHubInstallation,
@@ -197,10 +75,9 @@ async def provision_installation_org(
     nulled by an uninstall (reinstall under a new id — never duplicate)
     → insert a new org.
 
-    RBAC (target design §2.1): also ensures the org's ORG workspace exists,
-    links ``orgs.workspace_id`` / stamps an unbound installation, and mirrors
-    seeded members into ``workspace_members`` (dual-read picks up either
-    table, this keeps them aligned for writes and member lists).
+    This is the "install the App → org is auto-created, installer is its
+    ORG_ADMIN" path (decisions #12, rule 3), shared with the webhook and
+    the signed-state install callback.
 
     Flushes only; the caller commits.
     """
@@ -249,15 +126,9 @@ async def provision_installation_org(
         org.name = installation.account_login
         org.account_type = installation.account_type
 
-    await ensure_org_workspace(db, org, installation)
-
     inserted = await sync_org_members(db, org)
     if inserted:
         logger.info("org_members_seeded org_id=%s inserted=%s", org.id, inserted)
-
-    mirrored = await mirror_org_members(db, org)
-    if mirrored:
-        logger.info("workspace_members_seeded org_id=%s inserted=%s", org.id, mirrored)
     return org
 
 

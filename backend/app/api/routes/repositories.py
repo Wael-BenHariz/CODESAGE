@@ -5,11 +5,11 @@ Repository management and configuration endpoints.
 
 import logging
 import secrets
-from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,8 +17,6 @@ from app.db import get_db
 from app.db.models import (
     GitHubInstallation,
     OAuthToken,
-    Org,
-    OrgMember,
     Repository,
     User,
     WatchedRepo,
@@ -31,18 +29,26 @@ from app.schemas.repository import (
     RepositoryUpdate,
 )
 from app.security.dependencies import get_current_user
-from app.security.roles import ROLE_PLATFORM_ADMIN
-from app.security.workspace_access import (
-    WorkspaceContext,
-    require_workspace_permission,
-)
+from app.security.org_access import OrgAccess, require_repository_access
+from app.security.roles import ROLE_ORG_ADMIN, ROLE_REVIEWER, require_developer
 from app.services import repo_tenant
 from app.services.github import github_service
 from app.services.org_provisioning import provision_installation_org
+from app.services.repository_visibility import (
+    ensure_repository_visible,
+    org_attribution,
+    visible_repositories_condition,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Repository-scoped guards (decisions #12): the repo's ORG role is the
+# effective one — repo config (patch/enable/disable) needs REVIEWER+ in
+# the repo's org, delete needs ORG_ADMIN+; unknown/cross-org → 404.
+_repo_config_writer = require_repository_access(ROLE_REVIEWER, write=True)
+_repo_admin_writer = require_repository_access(ROLE_ORG_ADMIN, write=True)
 
 # Legacy install-state map: state -> the github_id that minted it (None for
 # Keycloak-only users with no GitHub identity).
@@ -99,10 +105,7 @@ async def sync_github_app_installation(
         None, description="Optional installation state returned by GitHub"
     ),
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    current_user: User = Depends(get_current_user),  # noqa: B008
-    ctx: WorkspaceContext = Depends(  # noqa: B008
-        require_workspace_permission("repo_admin")  # noqa: B008
-    ),
+    current_user: User = Depends(require_developer),  # noqa: B008
 ):
     """Sync a real GitHub App installation and its accessible repositories."""
 
@@ -115,11 +118,9 @@ async def sync_github_app_installation(
             )
 
     installation_data = await github_service.get_app_installation(installation_id)
-    installation = await _upsert_installation(db, installation_data, ctx.workspace_id)
+    installation = await _upsert_installation(db, installation_data)
     await _ensure_installation_accessible_to_user(db, installation, current_user)
-    repos = await _sync_installation_repositories(
-        db, installation, installation_id, ctx.workspace_id
-    )
+    repos = await _sync_installation_repositories(db, installation, installation_id)
     # Org provisioning (Step 3): sync is the manual counterpart of the
     # installation webhook — keep orgs/members fresh here too (the user
     # link itself is written by the callback/webhook/adoption paths).
@@ -244,7 +245,6 @@ async def _get_current_oauth_token(
 async def _upsert_installation(
     db: AsyncSession,
     installation_data: dict,
-    workspace_id: UUID | None = None,
 ) -> GitHubInstallation:
     installation_id = installation_data.get("id")
     account = installation_data.get("account", {})
@@ -270,7 +270,6 @@ async def _upsert_installation(
         account_login=account.get("login", ""),
         account_type=account.get("type", "User"),
         permissions=installation_data.get("permissions", {}),
-        workspace_id=workspace_id,
     )
     db.add(record)
     await db.flush()
@@ -281,12 +280,11 @@ async def _sync_installation_repositories(
     db: AsyncSession,
     installation: GitHubInstallation,
     github_installation_id: int,
-    workspace_id: UUID | None = None,
 ) -> list[Repository]:
     repos_data = await github_service.get_installed_repos(github_installation_id)
     synced: list[Repository] = []
     for repo_data in repos_data:
-        repo = await _upsert_repository(db, installation, repo_data, workspace_id)
+        repo = await _upsert_repository(db, installation, repo_data)
         synced.append(repo)
     return synced
 
@@ -295,15 +293,8 @@ async def _upsert_repository(
     db: AsyncSession,
     installation: GitHubInstallation,
     repo_data: dict,
-    workspace_id: UUID | None = None,
 ) -> Repository:
-    """Insert-or-update a repository row, binding it to exactly one workspace.
-
-    Workspace binding precedence: the repository's existing binding (never
-    moved), then the installation's bound workspace (set by the GitHub App
-    install callback), then the caller's active workspace.
-    """
-    bound_workspace = installation.workspace_id or workspace_id
+    """Insert-or-update a repository row (bound to its installation)."""
     result = await db.execute(
         select(Repository).where(Repository.github_repo_id == repo_data.get("id"))
     )
@@ -314,8 +305,6 @@ async def _upsert_repository(
         repo.full_name = repo_data.get("full_name", repo.full_name)
         repo.private = repo_data.get("private", repo.private)
         repo.default_branch = repo_data.get("default_branch", repo.default_branch)
-        if repo.workspace_id is None and bound_workspace is not None:
-            repo.workspace_id = bound_workspace
         return repo
 
     repo = Repository(
@@ -326,7 +315,6 @@ async def _upsert_repository(
         private=repo_data.get("private", False),
         default_branch=repo_data.get("default_branch", "main"),
         enabled=True,
-        workspace_id=bound_workspace,
     )
     db.add(repo)
     await db.flush()
@@ -442,10 +430,7 @@ async def _set_repository_enabled(
 async def connect_repository(
     github_repo_id: int = Query(..., description="GitHub repository ID"),
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    current_user: User = Depends(get_current_user),  # noqa: B008
-    ctx: WorkspaceContext = Depends(  # noqa: B008
-        require_workspace_permission("repo_config")  # noqa: B008
-    ),
+    current_user: User = Depends(require_developer),  # noqa: B008
 ):
     """
     Connect a GitHub repository to CodeSage.
@@ -484,9 +469,7 @@ async def connect_repository(
             detail="Repository is not available through the installed GitHub App.",
         )
 
-    repo = await _upsert_repository(
-        db, selected_installation, selected_repo, ctx.workspace_id
-    )
+    repo = await _upsert_repository(db, selected_installation, selected_repo)
     # Connecting implies intent to review: create the watched (review) row too.
     transition = await _set_watched_state(db, current_user.id, repo, True)
     await db.commit()
@@ -509,38 +492,42 @@ async def list_repositories(
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     enabled: bool | None = Query(None, description="Filter by enabled status"),
     search: str | None = Query(None, description="Search by name"),
+    visibility: Literal["all", "personal", "organization"] = Query(
+        "all",
+        description=(
+            "Scope: all = everything the caller may see (personal + "
+            "organization); personal = the caller's own GitHub account's "
+            "installations; organization = repositories shared with the "
+            "caller by their organizations (grants + administered orgs)."
+        ),
+    ),
 ):
     """
-    List all repositories accessible by the current user.
+    List repositories visible to the current user, split by ``visibility``.
+
+    Read scope (repo-scoped invitations, migrations 017/019):
+
+    * personal — installations owned by the caller's GitHub account;
+    * organization — installations of orgs with a live membership where
+      the caller's org-scoped role is ORG_ADMIN or they hold an explicit
+      ``org_member_repos`` grant (accepted invitations only — a
+      pending/revoked/expired invitation writes nothing). A membership
+      without grants never falls back to the whole org; a grant whose
+      membership row is gone is dead. The global realm role (including
+      the GitHub-signup ORG_ADMIN default) never widens this scope.
+
+    The default ``all`` keeps the union the SPA's owner/name resolution
+    and the dashboard rely on: granted repositories stay resolvable
+    (deep links work), ungranted ones are absent (the nil-UUID 404).
+    Rows carry the installation's org attribution (``org_id``/
+    ``org_name``) — viewer-independent, used by the frontend to split
+    collections and scope the invitation repository picker.
     """
-    # Visibility (plan §2 F3): an installation's repositories are listed for
-    # (a) the GitHub account that owns the installation (the installer) and
-    # (b) members of the org seeded from that installation. Without (b) an
-    # org member who did not install the App — e.g. an invited REVIEWER, whose
-    # github_id never matches account_id — sees an empty list, the SPA's
-    # owner/name resolution dead-ends in a nil-UUID 404, and every deep link
-    # shows "not found". PLATFORM_ADMIN bypasses both branches (F2 read),
-    # mirroring GET /reviews.
     query = select(Repository).join(GitHubInstallation)
     count_query = select(func.count(Repository.id)).join(GitHubInstallation)
 
-    if current_user.role != ROLE_PLATFORM_ADMIN:
-        scope_parts = []
-        if current_user.github_id is not None:
-            scope_parts.append(GitHubInstallation.account_id == current_user.github_id)
-        member_installations = (
-            select(GitHubInstallation.id)
-            .join(Org, Org.installation_id == GitHubInstallation.installation_id)
-            .join(
-                OrgMember,
-                and_(
-                    OrgMember.org_id == Org.id,
-                    OrgMember.user_id == current_user.id,
-                ),
-            )
-        )
-        scope_parts.append(GitHubInstallation.id.in_(member_installations))
-        scope = scope_parts[0] if len(scope_parts) == 1 else or_(*scope_parts)
+    scope = visible_repositories_condition(current_user, visibility)
+    if scope is not None:
         query = query.where(scope)
         count_query = count_query.where(scope)
 
@@ -567,16 +554,22 @@ async def list_repositories(
     result = await db.execute(query)
     repos = result.scalars().all()
     watched = await _watched_state_map(db, current_user.id)
+    attribution = await org_attribution(db, repos)
+
+    def _response(r: Repository) -> RepositoryResponse:
+        org_id, org_name = attribution.get(r.id, (None, None))
+        # Badge truth: watched_repos is the review switch; no watched row
+        # means not watching (disabled) even if the legacy flag is True.
+        return RepositoryResponse.model_validate(r).model_copy(
+            update={
+                "enabled": watched.get(r.github_repo_id, False),
+                "org_id": org_id,
+                "org_name": org_name,
+            }
+        )
 
     return RepositoryListResponse(
-        items=[
-            # Badge truth: watched_repos is the review switch; no watched row
-            # means not watching (disabled) even if the legacy flag is True.
-            RepositoryResponse.model_validate(r).model_copy(
-                update={"enabled": watched.get(r.github_repo_id, False)}
-            )
-            for r in repos
-        ],
+        items=[_response(r) for r in repos],
         total=total,
         page=page,
         per_page=per_page,
@@ -592,6 +585,11 @@ async def get_repository(
 ):
     """
     Get repository by ID.
+
+    Read-scoped like ``GET /repositories`` (uniform 404 outside the
+    caller's visibility — personal, administered org, or explicitly
+    granted): the SPA resolves owner/name through the list, then fetches
+    by UUID; both paths must agree, or a known UUID would bypass grants.
     """
     result = await db.execute(
         select(Repository)
@@ -606,9 +604,16 @@ async def get_repository(
             detail="Repository not found",
         )
 
+    await ensure_repository_visible(db, current_user, repo)
+
     watched = await _watched_state_map(db, current_user.id)
+    org_id, org_name = (await org_attribution(db, [repo])).get(repo.id, (None, None))
     return RepositoryResponse.model_validate(repo).model_copy(
-        update={"enabled": watched.get(repo.github_repo_id, False)}
+        update={
+            "enabled": watched.get(repo.github_repo_id, False),
+            "org_id": org_id,
+            "org_name": org_name,
+        }
     )
 
 
@@ -620,6 +625,9 @@ async def get_repository_detail(
 ):
     """
     Get detailed repository information with stats.
+
+    Read-scoped identically to ``GET /repositories/{id}`` (uniform 404
+    outside the caller's visibility).
     """
     result = await db.execute(
         select(Repository)
@@ -637,6 +645,8 @@ async def get_repository_detail(
             detail="Repository not found",
         )
 
+    await ensure_repository_visible(db, current_user, repo)
+
     # Get review stats - join through PullRequest since Review has pull_request_id FK
     from app.db.models import PullRequest, Review
 
@@ -648,6 +658,7 @@ async def get_repository_detail(
     )
 
     watched = await _watched_state_map(db, current_user.id)
+    org_id, org_name = (await org_attribution(db, [repo])).get(repo.id, (None, None))
     return RepositoryDetail(
         id=str(repo.id),
         installation_id=str(repo.installation_id),
@@ -660,6 +671,8 @@ async def get_repository_detail(
         enabled=watched.get(repo.github_repo_id, False),
         created_at=repo.created_at,
         updated_at=repo.updated_at,
+        org_id=org_id,
+        org_name=org_name,
         settings=RepositorySettings(),
         total_prs=len(repo.pull_requests),
         total_reviews=reviews_count.scalar_one() if reviews_count else 0,
@@ -672,9 +685,7 @@ async def update_repository(
     update_data: RepositoryUpdate,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     current_user: User = Depends(get_current_user),  # noqa: B008
-    ctx: WorkspaceContext = Depends(  # noqa: B008
-        require_workspace_permission("repo_config")  # noqa: B008
-    ),
+    access: OrgAccess = Depends(_repo_config_writer),  # noqa: B008
 ):
     """
     Update repository configuration.
@@ -715,9 +726,7 @@ async def enable_repository(
     repository_id: str,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     current_user: User = Depends(get_current_user),  # noqa: B008
-    ctx: WorkspaceContext = Depends(  # noqa: B008
-        require_workspace_permission("repo_config")  # noqa: B008
-    ),
+    access: OrgAccess = Depends(_repo_config_writer),  # noqa: B008
 ):
     """Grid toggle: enable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, True, db, current_user)
@@ -728,9 +737,7 @@ async def disable_repository(
     repository_id: str,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     current_user: User = Depends(get_current_user),  # noqa: B008
-    ctx: WorkspaceContext = Depends(  # noqa: B008
-        require_workspace_permission("repo_config")  # noqa: B008
-    ),
+    access: OrgAccess = Depends(_repo_config_writer),  # noqa: B008
 ):
     """Grid toggle: disable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, False, db, current_user)
@@ -741,9 +748,7 @@ async def delete_repository(
     repository_id: str,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     current_user: User = Depends(get_current_user),  # noqa: B008
-    ctx: WorkspaceContext = Depends(  # noqa: B008
-        require_workspace_permission("repo_admin")  # noqa: B008
-    ),
+    access: OrgAccess = Depends(_repo_admin_writer),  # noqa: B008
 ):
     """
     Delete a repository from CodeSage.

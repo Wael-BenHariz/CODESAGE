@@ -137,9 +137,9 @@ async def test_unrecognized_role_names_fall_back_to_none(client):
 
 async def test_github_session_default_roles_derives_org_admin(client):
     """GitHub-brokered token (githubId claim) with only default realm roles
-    → ORG_ADMIN: the account-creation default for GitHub signups (first
-    login creates their personal workspace, where they hold ORG_ADMIN
-    membership). An explicit claim still outranks it (next tests)."""
+    → ORG_ADMIN: the account-creation default for GitHub signups (global
+    ORG_ADMIN; the org they install/are invited into decides the in-org
+    role). An explicit claim still outranks it (next tests)."""
     token = make_keycloak_token(
         sub="kc-sub-github-defaults",
         roles=("default-roles-codesage-realm", "offline_access", "uma_authorization"),

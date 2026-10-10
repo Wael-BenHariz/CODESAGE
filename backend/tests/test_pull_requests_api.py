@@ -53,11 +53,17 @@ def test_model_validate_accepts_uuid_fields():
 
 
 async def test_list_with_pr_returns_200_not_500(client, db, user):
-    """A repository holding a PR answers 200 with string ids."""
+    """A repository holding a PR answers 200 with string ids.
+
+    The installation is owned by the requesting user's GitHub account
+    (the ``user`` fixture carries github_id=111222333): PR listings are
+    read-scoped like ``GET /repositories``, so an unrelated caller would
+    get the uniform 404 instead of exercising serialization at all.
+    """
     installation = GitHubInstallation(
         app_id=1,
         installation_id=987656,
-        account_id=1,
+        account_id=111222333,
         account_login="test-owner",
         account_type="User",
     )

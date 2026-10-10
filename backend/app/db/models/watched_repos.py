@@ -10,7 +10,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.users import User
-    from app.db.models.workspaces import Workspace
 
 
 class WatchedRepo(Base):
@@ -52,23 +51,8 @@ class WatchedRepo(Base):
         comment="Whether review processing is enabled",
     )
 
-    # Workspace association
-    workspace_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-        comment="Reference to the workspace",
-    )
-
     user: Mapped["User"] = relationship(
         "User",
-        back_populates="watched_repos",
-    )
-
-    # Workspace relationship
-    workspace: Mapped["Workspace"] = relationship(
-        "Workspace",
         back_populates="watched_repos",
     )
 

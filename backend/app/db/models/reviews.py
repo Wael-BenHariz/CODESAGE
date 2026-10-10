@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from app.db.models.pull_requests import PullRequest
     from app.db.models.review_comments import ReviewComment
     from app.db.models.users import User
-    from app.db.models.workspaces import Workspace
 
 
 class Review(Base):
@@ -148,15 +147,6 @@ class Review(Base):
         comment="When the review completed",
     )
 
-    # Workspace association
-    workspace_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-        comment="Reference to the workspace",
-    )
-
     # Timestamps (inherited from Base)
     # created_at: datetime
     # updated_at: datetime
@@ -169,11 +159,6 @@ class Review(Base):
 
     user: Mapped[Optional["User"]] = relationship(
         "User",
-        back_populates="reviews",
-    )
-
-    workspace: Mapped["Workspace"] = relationship(
-        "Workspace",
         back_populates="reviews",
     )
 

@@ -159,10 +159,16 @@ async def _make_chain(
 
 @pytest_asyncio.fixture
 async def stage(db):
-    """Org A's review (member: dev_a) and org B's review (member: dev_b).
+    """Org A's review (REVIEWER member: dev_a) and org B's review
+    (DEVELOPER member: dev_b).
 
     Plus: a global PLATFORM_ADMIN with *no* membership row, and a
     membership-carrying user whose JWT role is NONE (to prove NONE-first).
+
+    The org role is the *only* in-org ladder input (decisions #12): dev_a
+    must hold the REVIEWER membership for the staged actions (summary /
+    dismiss / post), no matter what the token says — see
+    ``test_jwt_role_does_not_elevate_the_org_membership``.
     """
     a = await _make_chain(
         db, installation_id=_INSTALLATION_A, owner="owner-a", org_name="org-a", number=1
@@ -174,7 +180,7 @@ async def stage(db):
     dev_b = await _make_user(db, "kc-dev-b")
     pa = await _make_user(db, "kc-pa", role="PLATFORM_ADMIN")
     none_user = await _make_user(db, "kc-none")
-    db.add(OrgMember(org_id=a.org.id, user_id=dev_a.id, role="DEVELOPER"))
+    db.add(OrgMember(org_id=a.org.id, user_id=dev_a.id, role="REVIEWER"))
     db.add(OrgMember(org_id=b.org.id, user_id=dev_b.id, role="DEVELOPER"))
     db.add(OrgMember(org_id=a.org.id, user_id=none_user.id, role="DEVELOPER"))
     await db.commit()
@@ -513,6 +519,20 @@ async def test_malformed_ids_are_404_not_500(client, stage):
 # ---------------------------------------------------------------------------
 # PATCH /reviews/{id}/summary
 # ---------------------------------------------------------------------------
+
+
+async def test_jwt_role_does_not_elevate_the_org_membership(client, stage):
+    """Org role wins inside the org (decisions #12): a DEVELOPER member
+    stays DEVELOPER even when their token says REVIEWER — the JWT only
+    decides the NONE write sentinel and the no-membership PLATFORM_ADMIN
+    bypass, never the in-org ladder (no more ``max(JWT, membership)``)."""
+    headers = _auth("kc-dev-b", ("REVIEWER",))  # dev_b: DEVELOPER in org B
+    resp = await client.patch(
+        f"{_REVIEWS}/{stage.b.review.id}/summary",
+        json={"summary": "JWT says REVIEWER; the org says DEVELOPER."},
+        headers=headers,
+    )
+    assert resp.status_code == 403
 
 
 async def test_summary_happy_path_round_trips(client, stage):

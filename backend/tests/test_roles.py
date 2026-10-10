@@ -94,11 +94,12 @@ def test_claim_matching_is_case_insensitive():
 
 def test_broker_signup_default_is_org_admin(caplog):
     """GitHub-brokered session with NO recognized or legacy claim derives
-    ORG_ADMIN — the account-creation default (first login creates the
-    personal workspace where that user holds ORG_ADMIN membership, and the
-    global floor keeps nav/trigger rights working there). Any explicit
-    claim still outranks it (next test); no fallback warning is logged —
-    this is a default, not the removed F1 DEVELOPER fallback."""
+    ORG_ADMIN — the account-creation default for GitHub signups (a fresh
+    account gets global ORG_ADMIN rights; installing the App auto-creates
+    their org with them as ORG_ADMIN member, invitations set the in-org
+    role). Any explicit claim still outranks it (next test); no fallback
+    warning is logged — this is a default, not the removed F1 DEVELOPER
+    fallback."""
     with caplog.at_level(logging.WARNING, logger="app.security.roles"):
         assert derive_role([], via_github=True, subject="user-42") == ROLE_ORG_ADMIN
         assert (

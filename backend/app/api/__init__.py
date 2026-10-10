@@ -7,12 +7,9 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     auth,
-    dismissal_requests,
     github_repos,
     health,
-    install_requests,
     invitations,
-    notifications,
     orgs,
     platform,
     pull_requests,
@@ -21,7 +18,6 @@ from app.api.routes import (
     settings,
     users,
     webhooks,
-    workspaces,
 )
 
 # Main API router
@@ -51,10 +47,5 @@ api_router.include_router(
 api_router.include_router(
     platform.router, prefix="/platform", tags=["Platform Settings"]
 )
-# Workspace RBAC routers carry their own prefix (e.g. "/workspaces").
-api_router.include_router(workspaces.router)
-api_router.include_router(dismissal_requests.router)
-api_router.include_router(install_requests.router)
-api_router.include_router(notifications.router)
 
 __all__ = ["api_router"]

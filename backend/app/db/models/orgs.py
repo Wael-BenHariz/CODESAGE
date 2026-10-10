@@ -27,7 +27,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.users import User
-    from app.db.models.workspaces import Workspace
 
 
 class Org(Base):
@@ -87,21 +86,6 @@ class Org(Base):
         back_populates="org",
         cascade="all, delete-orphan",
         lazy="selectin",
-    )
-
-    # Workspace association (migration 020: orgs.workspace_id → workspaces)
-    workspace_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("workspaces.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="Reference to the workspace",
-    )
-
-    # Workspace relationship
-    workspace: Mapped["Workspace"] = relationship(
-        "Workspace",
-        back_populates="orgs",
     )
 
     settings: Mapped["OrgSetting | None"] = relationship(

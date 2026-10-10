@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from app.db.models.repositories import Repository
     from app.db.models.review_comments import ReviewComment
     from app.db.models.reviews import Review
-    from app.db.models.workspaces import Workspace
 
 
 class PullRequest(Base):
@@ -167,23 +166,9 @@ class PullRequest(Base):
         index=True,
     )
 
-    # Workspace association
-    workspace_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-        comment="Reference to the workspace",
-    )
-
     # Relationships
     repository: Mapped["Repository"] = relationship(
         "Repository",
-        back_populates="pull_requests",
-    )
-
-    workspace: Mapped["Workspace"] = relationship(
-        "Workspace",
         back_populates="pull_requests",
     )
 

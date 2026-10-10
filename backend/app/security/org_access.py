@@ -1,4 +1,4 @@
-"""Org-scoped authorization — the plan §2 capability model as a dependency.
+"""Org-scoped authorization — permission model as a dependency.
 
 Every org-scoped endpoint guards in this exact order:
 
@@ -9,11 +9,15 @@ Every org-scoped endpoint guards in this exact order:
    must not learn whether the org exists). ``PLATFORM_ADMIN`` bypasses
    this step only when ``platform_admin_bypass=True`` — reads and
    settings endpoints (flag F2). Mutating review actions (dismiss,
-   restore, summary edit, post, validate — Steps 7/9) pass
+   restore, summary edit, post, validate) pass
    ``platform_admin_bypass=False`` so a platform admin can never post to
    a customer's GitHub PR without being an org member.
-3. **Effective role** = ``max(JWT role, org_members.role)``; when below
-   the endpoint's required role → **403**.
+3. **Effective role = the ``org_members`` role — the invitation wins**
+   (decisions #12: "org role wins"). A user invited as DEVELOPER is a
+   DEVELOPER in that org even when their global token says ORG_ADMIN;
+   the JWT role only decides (a) the NONE write sentinel above and
+   (b) the no-membership PLATFORM_ADMIN bypass, whose effective role is
+   the JWT role. When below the endpoint's required role → **403**.
 
 Reading-order consequence: cross-org yields 404 *before* any role 403 for
 DEVELOPER+ callers, while NONE hits step 1 first on writes — satisfying
@@ -41,27 +45,21 @@ from app.db.models import (
 )
 from app.security.dependencies import get_current_user
 from app.security.roles import (
-    ROLE_DEVELOPER,
+    LADDER_ROLES as _LADDER_ROLES,
+)
+from app.security.roles import (
+    RANK as _RANK,
+)
+from app.security.roles import (
     ROLE_NONE,
-    ROLE_ORG_ADMIN,
     ROLE_PLATFORM_ADMIN,
-    ROLE_REVIEWER,
 )
 
 logger = logging.getLogger(__name__)
 
-# Ladder rank (plan §2). NONE has no ladder position — ranked lowest so
-# max(NONE, member role) resolves to the member role; step 1 already
-# blocks NONE from every write regardless.
-_RANK = {
-    ROLE_NONE: 0,
-    ROLE_DEVELOPER: 1,
-    ROLE_REVIEWER: 2,
-    ROLE_ORG_ADMIN: 3,
-    ROLE_PLATFORM_ADMIN: 4,
-}
-
-_LADDER_ROLES = (ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN)
+# Ladder rank + ladder roles are shared with roles.py (single source).
+# NONE ranks lowest: a missing/unknown membership resolves to NONE, and
+# step 1 already blocks NONE from every write regardless.
 
 
 @dataclass(frozen=True)
@@ -71,7 +69,9 @@ class OrgAccess:
     user: User
     org: Org
     membership: OrgMember | None
-    effective_role: str  # max(JWT, org role); None-membership (PLATFORM_ADMIN) = JWT
+    effective_role: (
+        str  # org_members.role (invitation wins); no row (PLATFORM_ADMIN bypass) = JWT
+    )
 
 
 @dataclass(frozen=True)
@@ -114,6 +114,13 @@ def _pull_request_not_found() -> HTTPException:
     )
 
 
+def _repository_not_found() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Repository not found",
+    )
+
+
 def _forbidden() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -122,14 +129,16 @@ def _forbidden() -> HTTPException:
 
 
 def _effective_role(jwt_role: str, membership: OrgMember | None) -> str:
-    """Plan §2 step 3: ``max(JWT role, org_members.role)``."""
-    jwt = jwt_role if jwt_role in _RANK else ROLE_NONE
-    member = (
-        membership.role
-        if membership is not None and membership.role in _RANK
-        else ROLE_NONE
-    )
-    return jwt if _RANK[jwt] >= _RANK[member] else member
+    """Effective role inside the org (decisions #12): **the org role wins**.
+
+    A membership row decides on its own — a user invited as DEVELOPER is a
+    DEVELOPER here even when their global token says ORG_ADMIN. Without a
+    row (only reachable through the PLATFORM_ADMIN bypass) the JWT role is
+    the effective one.
+    """
+    if membership is not None and membership.role in _RANK:
+        return membership.role
+    return jwt_role if jwt_role in _RANK else ROLE_NONE
 
 
 async def _resolve_org_and_membership(
@@ -218,14 +227,8 @@ def require_org_role(
         ):
             raise _not_found()
 
-        # Step 3: effective role = max(JWT, org role).
-        jwt_role = current_user.role if current_user.role in _RANK else ROLE_NONE
-        member_role = (
-            membership.role
-            if membership is not None and membership.role in _RANK
-            else ROLE_NONE
-        )
-        effective = jwt_role if _RANK[jwt_role] >= _RANK[member_role] else member_role
+        # Step 3: effective role = the org membership role (invitations win).
+        effective = _effective_role(current_user.role, membership)
         if _RANK[effective] < _RANK[min_role]:
             raise _forbidden()
 
@@ -354,6 +357,80 @@ def require_pull_request_access(
             platform_admin_bypass and current_user.role == ROLE_PLATFORM_ADMIN
         ):
             raise _pull_request_not_found()
+
+        effective = _effective_role(current_user.role, membership)
+        if _RANK[effective] < _RANK[min_role]:
+            raise _forbidden()
+
+        return OrgAccess(
+            user=current_user,
+            org=org_row,
+            membership=membership,
+            effective_role=effective,
+        )
+
+    return dependency
+
+
+def require_repository_access(
+    min_role: str,
+    *,
+    write: bool,
+    platform_admin_bypass: bool = True,
+):
+    """Dependency factory for repository-scoped routes.
+
+    Same capability model as :func:`require_review_access` but keyed by
+    ``repository_id`` — for ``PATCH /repositories/{id}``, its
+    ``enable``/``disable``/``delete`` toggles. Resolves
+    ``repository -> installation -> org``; unknown repository, missing org
+    row and cross-org all raise the *same* "Repository not found" 404.
+    """
+    if min_role not in _LADDER_ROLES:
+        raise ValueError(
+            f"require_repository_access needs a ladder role, got {min_role!r}"
+        )
+
+    async def dependency(
+        repository_id: str = Path(...),
+        db: AsyncSession = Depends(get_db),  # noqa: B008
+        current_user: User = Depends(get_current_user),  # noqa: B008
+    ) -> OrgAccess:
+        if write and current_user.role == ROLE_NONE:
+            raise _forbidden()
+
+        try:
+            repo_uuid = UUID(repository_id)
+        except (ValueError, TypeError):
+            raise _repository_not_found() from None
+
+        chain = await db.execute(
+            select(GitHubInstallation.installation_id)
+            .join(Repository, Repository.installation_id == GitHubInstallation.id)
+            .where(Repository.id == repo_uuid)
+        )
+        installation_id = chain.scalar_one_or_none()
+        if installation_id is None:
+            raise _repository_not_found()
+
+        org_result = await db.execute(
+            select(Org).where(Org.installation_id == installation_id)
+        )
+        org_row = org_result.scalar_one_or_none()
+        if org_row is None:
+            raise _repository_not_found()
+
+        member_result = await db.execute(
+            select(OrgMember).where(
+                OrgMember.org_id == org_row.id,
+                OrgMember.user_id == current_user.id,
+            )
+        )
+        membership = member_result.scalar_one_or_none()
+        if membership is None and not (
+            platform_admin_bypass and current_user.role == ROLE_PLATFORM_ADMIN
+        ):
+            raise _repository_not_found()
 
         effective = _effective_role(current_user.role, membership)
         if _RANK[effective] < _RANK[min_role]:

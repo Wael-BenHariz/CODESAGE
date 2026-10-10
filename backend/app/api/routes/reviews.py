@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.db.models import (
-    DismissalRequest,
     GitHubInstallation,
     Org,
     OrgMember,
@@ -53,7 +52,6 @@ from app.security.roles import (
     ROLE_REVIEWER,
     require_developer,
 )
-from app.security.workspace_access import self_review_blocked
 from app.services.review_posting import ReviewPostError, post_review_to_github
 from app.services.scan_report_store import finding_from_row
 
@@ -111,30 +109,6 @@ def _ensure_actionable(review: Review) -> None:
             detail=(
                 f"Review is not actionable (status={review.status!r}); "
                 "only a staged review ready to post accepts finding actions"
-            ),
-        )
-
-
-async def _reject_self_review(db: AsyncSession, access: ReviewAccess) -> None:
-    """Self-review rule (§2.5): on a PR you authored, in an ORG workspace
-    with more than one member, you may not validate or dismiss findings.
-    Disabled for PERSONAL workspaces, single-member ORG workspaces, and
-    reviews whose workspace cannot be resolved (legacy rows).
-    """
-    author_login = (
-        await db.execute(
-            select(PullRequest.author_login).where(
-                PullRequest.id == access.review.pull_request_id
-            )
-        )
-    ).scalar_one_or_none()
-    workspace_id = access.review.workspace_id or access.org.workspace_id
-    if await self_review_blocked(db, workspace_id, author_login, access.user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "You cannot validate or dismiss findings on a pull "
-                "request you authored"
             ),
         )
 
@@ -578,11 +552,10 @@ async def dismiss_comment(
     Dismiss a finding: it is excluded from the staged ``## Findings``
     body (plan Q3) but stays in the review for auditability.
 
-    §2.5: actionable-state gate + self-review rule (no dismissing findings
-    on your own PR in a multi-member ORG workspace).
+    Actionable-state gate only (decisions #12: the self-review rule was
+    dropped with the workspace layer).
     """
     _ensure_actionable(access.review)
-    await _reject_self_review(db, access)
     comment = await _set_comment_dismissed(db, access, comment_id, dismissed=True)
     return ReviewCommentResponse.model_validate(comment)
 
@@ -639,10 +612,9 @@ async def validate_comment(
             detail="Comment not found",
         )
 
-    # §2.5: actionable-state gate + self-review rule (own PR, ORG
-    # workspace, >1 member).
+    # Actionable-state gate (decisions #12: self-review rule dropped with
+    # the workspace layer).
     _ensure_actionable(access.review)
-    await _reject_self_review(db, access)
 
     now = datetime.now(timezone.utc)
     stmt = (
@@ -740,29 +712,8 @@ async def post_review_now(
             ),
         )
 
-    # §2.5: posting is blocked while any finding on this review still has
-    # an unresolved dismissal request (checked under the row lock, so a
-    # request created concurrently either lands before this read — 409 —
-    # or after the post, when it is a no-op).
-    pending_request = (
-        await db.execute(
-            select(DismissalRequest.id)
-            .join(ReviewComment, ReviewComment.id == DismissalRequest.review_comment_id)
-            .where(
-                ReviewComment.review_id == review.id,
-                DismissalRequest.status == "PENDING",
-            )
-            .limit(1)
-        )
-    ).first()
-    if pending_request is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Pending dismissal requests must be approved or rejected "
-                "before posting"
-            ),
-        )
+    # Posting is gated by the staged state above only (decisions #12: the
+    # pending-dismissal-request block was dropped with the workspace layer).
 
     try:
         github_review_id = await post_review_to_github(db, review)

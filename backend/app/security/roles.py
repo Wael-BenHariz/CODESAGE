@@ -19,10 +19,10 @@ Layout (v0.4.0):
     roles/groups;
   - the GitHub-broker ``DEVELOPER`` fallback (F1) is **removed** — a
     GitHub-brokered session with no recognized claim derives
-    ``ORG_ADMIN`` (the account-creation default: first login also
-    creates their personal workspace, where they hold ORG_ADMIN
-    membership). Any explicit claim still outranks the default, and
-    non-brokered tokens without a recognized claim stay fail-closed
+    ``ORG_ADMIN`` (the account-creation default, decisions #11/#12:
+    the signup role; inside an org the invitation's ``org_members``
+    role wins instead). Any explicit claim still outranks the default,
+    and non-brokered tokens without a recognized claim stay fail-closed
     ``NONE``.
 """
 
@@ -87,10 +87,10 @@ def derive_role(
     3. **No recognized or legacy claim at all** (e.g. only ``default-roles-*``
        or an unknown name):
        - ``via_github`` (GitHub-brokered session) → ``ORG_ADMIN``
-         (the account-creation default — a GitHub signup starts as
-         admin of the personal workspace first login creates; an
-         explicit claim above still outranks it, and inside any other
-         org the membership row decides);
+         (the account-creation default — decisions #11/#12: a GitHub
+         signup starts as ORG_ADMIN globally; an explicit claim above
+         still outranks it, and inside any org the invitation's
+         ``org_members`` role decides);
        - otherwise → ``NONE`` (fail-closed).
 
     A token with *no* role claim at all never reaches this function —
@@ -154,3 +154,85 @@ require_developer = require_role(
 )
 require_reviewer = require_role(ROLE_PLATFORM_ADMIN, ROLE_ORG_ADMIN, ROLE_REVIEWER)
 require_super_admin = require_role(ROLE_PLATFORM_ADMIN)
+
+# ---------------------------------------------------------------------------
+# Capability flags — single source of truth for ``GET /auth/me``'s
+# ``capabilities`` payload. The SPA renders nav/route gating from
+# ``capability_flags(role)`` instead of re-deriving role lists, so a rule
+# change lands in exactly one place (this map) on the backend.
+# ---------------------------------------------------------------------------
+
+#: ladder rank; NONE ranks lowest (read-only sentinel, never outranks).
+RANK: dict[str, int] = {
+    ROLE_NONE: 0,
+    ROLE_DEVELOPER: 1,
+    ROLE_REVIEWER: 2,
+    ROLE_ORG_ADMIN: 3,
+    ROLE_PLATFORM_ADMIN: 4,
+}
+
+#: Roles that carry a real ladder position (usable as a minimum requirement).
+LADDER_ROLES = (ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN)
+
+VIEW_ROLES = [
+    ROLE_NONE,
+    ROLE_DEVELOPER,
+    ROLE_REVIEWER,
+    ROLE_ORG_ADMIN,
+    ROLE_PLATFORM_ADMIN,
+]
+TRIGGER_ROLES = [ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN]
+REQUEST_ROLES = [ROLE_DEVELOPER, ROLE_REVIEWER, ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN]
+REVIEW_ROLES = [ROLE_REVIEWER, ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN]
+REPO_CONFIG_ROLES = [ROLE_REVIEWER, ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN]
+REPO_ADMIN_ROLES = [ROLE_ORG_ADMIN, ROLE_PLATFORM_ADMIN]
+PLATFORM_ROLES = [ROLE_PLATFORM_ADMIN]
+
+#: permission name -> every role allowed to perform it.
+PERMISSION_MAP: dict[str, list[str]] = {
+    "view": VIEW_ROLES,
+    "trigger": TRIGGER_ROLES,
+    "request": REQUEST_ROLES,
+    "review": REVIEW_ROLES,
+    "repo_config": REPO_CONFIG_ROLES,
+    "repo_admin": REPO_ADMIN_ROLES,
+    "platform": PLATFORM_ROLES,
+}
+
+#: permission -> the *lowest* role that satisfies it (the threshold).
+_MIN_ROLE: dict[str, str] = {
+    name: min(roles, key=lambda r: RANK[r]) for name, roles in PERMISSION_MAP.items()
+}
+
+
+def min_role_for(permission: str) -> str:
+    """Lowest role satisfying ``permission`` (raises on an unknown name)."""
+    try:
+        return _MIN_ROLE[permission]
+    except KeyError:  # pragma: no cover - programming error, fail fast at import
+        raise ValueError(
+            f"unknown permission {permission!r}; expected one of {sorted(PERMISSION_MAP)}"
+        ) from None
+
+
+def allowed(permission: str, role: str) -> bool:
+    """Is ``role`` allowed to perform ``permission``? (No DB — pure matrix.)"""
+    return RANK.get(role, RANK[ROLE_NONE]) >= RANK[min_role_for(permission)]
+
+
+def capability_flags(role: str) -> dict[str, bool]:
+    """Permission flags for the *global* realm role, as ``GET /auth/me``
+    presents them.
+
+    The frontend renders from these instead of re-deriving role lists, so
+    a rule change lands in exactly one place (this function).
+    """
+    return {
+        "view": allowed("view", role),
+        "trigger": allowed("trigger", role),
+        "request": allowed("request", role),
+        "review": allowed("review", role),
+        "repo_config": allowed("repo_config", role),
+        "repo_admin": allowed("repo_admin", role),
+        "platform": allowed("platform", role),
+    }

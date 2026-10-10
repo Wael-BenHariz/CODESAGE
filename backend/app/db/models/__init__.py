@@ -1,9 +1,6 @@
 """Models package initialization."""
 
-from app.db.models.dismissal_requests import DismissalRequest
 from app.db.models.github_installations import GitHubInstallation
-from app.db.models.install_requests import InstallRequest
-from app.db.models.notifications import Notification
 from app.db.models.oauth_tokens import OAuthToken
 from app.db.models.org_invitations import OrgInvitation
 from app.db.models.org_member_repos import OrgMemberRepo
@@ -17,13 +14,9 @@ from app.db.models.scan_reports import ScanFindingRow, ScanReportRow
 from app.db.models.users import User
 from app.db.models.watched_repos import WatchedRepo
 from app.db.models.webhook_events import WebhookEvent
-from app.db.models.workspaces import Workspace, WorkspaceMember
 
 __all__ = [
-    "DismissalRequest",
     "GitHubInstallation",
-    "InstallRequest",
-    "Notification",
     "OAuthToken",
     "Org",
     "OrgInvitation",
@@ -41,6 +34,4 @@ __all__ = [
     "User",
     "WatchedRepo",
     "WebhookEvent",
-    "Workspace",
-    "WorkspaceMember",
 ]
