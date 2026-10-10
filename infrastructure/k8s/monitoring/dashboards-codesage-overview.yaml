@@ -1,7 +1,10 @@
 # Authored dashboard — CodeSage mesh overview (RED metrics from the
 # istio-envoy sidecar scrape, prometheus-scrape-secret.yaml job `istio-envoy`).
 # Data lives in Envoy's /stats/prometheus output: istio_requests_total etc.
-# with destination_namespace / destination_workload label tags.
+# Labels follow Istio telemetry v2: destination_workload_namespace (there is
+# NO destination_namespace label — that bug made every panel show "No data")
+# and reporter="destination" so each mesh hop is counted once (source AND
+# destination sidecars report every request).
 #
 # Datasource wiring: `${datasource}` template var (type datasource, query
 # prometheus, current = Prometheus) → resolves to kube-prometheus-stack's
@@ -38,7 +41,7 @@ data:
           "id": 1,
           "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "targets": [
-            { "expr": "sum(rate(istio_requests_total{destination_namespace=\"codesage\"}[5m])) by (destination_workload)", "legendFormat": "{{destination_workload}}", "refId": "A" }
+            { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])) by (destination_workload)", "legendFormat": "{{destination_workload}}", "refId": "A" }
           ],
           "title": "Request rate by workload",
           "type": "timeseries"
@@ -59,7 +62,7 @@ data:
           "id": 2,
           "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
           "targets": [
-            { "expr": "sum(rate(istio_requests_total{destination_namespace=\"codesage\",response_code=~\"2..\"}[5m])) / clamp_min(sum(rate(istio_requests_total{destination_namespace=\"codesage\"}[5m])), 0.0001)", "legendFormat": "2xx success rate", "refId": "A" }
+            { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\",response_code=~\"2..\"}[5m])) / clamp_min(sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])), 0.0001)", "legendFormat": "2xx success rate", "refId": "A" }
           ],
           "title": "Success rate (2xx / all)",
           "type": "timeseries"
@@ -78,7 +81,7 @@ data:
           "id": 3,
           "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "targets": [
-            { "expr": "sum(rate(istio_requests_total{destination_namespace=\"codesage\",response_code=~\"5..\"}[5m])) by (destination_workload)", "legendFormat": "{{destination_workload}}", "refId": "A" }
+            { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\",response_code=~\"5..\"}[5m])) by (destination_workload)", "legendFormat": "{{destination_workload}}", "refId": "A" }
           ],
           "title": "5xx rate by workload",
           "type": "timeseries"
@@ -93,7 +96,7 @@ data:
           "id": 4,
           "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "targets": [
-            { "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{destination_namespace=\"codesage\"}[5m])) by (le, destination_workload))", "legendFormat": "p95 {{destination_workload}}", "refId": "A" }
+            { "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])) by (le, destination_workload))", "legendFormat": "p95 {{destination_workload}}", "refId": "A" }
           ],
           "title": "Latency p95 (ms) by workload",
           "type": "timeseries"
@@ -114,14 +117,14 @@ data:
           "id": 5,
           "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "targets": [
-            { "expr": "sum(rate(istio_requests_total{destination_namespace=\"codesage\",response_code=~\"2..\"}[5m])) by (destination_workload) / clamp_min(sum(rate(istio_requests_total{destination_namespace=\"codesage\"}[5m])) by (destination_workload), 0.0001)", "legendFormat": "{{destination_workload}}", "refId": "A" }
+            { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\",response_code=~\"2..\"}[5m])) by (destination_workload) / clamp_min(sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])) by (destination_workload), 0.0001)", "legendFormat": "{{destination_workload}}", "refId": "A" }
           ],
           "title": "Success rate by workload",
           "type": "timeseries"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "description": "Scrape health for every CodeSage monitoring job (1 = UP). Sources: istio-envoy sidecars, keycloak :9000, repo-tenant actuator, istiod, ingress-nginx, postgres-exporter.",
+          "description": "Scrape health for every CodeSage monitoring job (1 = UP). Sources: istio-envoy sidecars, keycloak :8080 /auth/metrics, repo-tenant actuator, istiod, ingress-nginx, postgres-exporter.",
           "fieldConfig": {
             "defaults": {
               "mappings": [ { "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" } ],
@@ -148,7 +151,7 @@ data:
           "id": 7,
           "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "targets": [
-            { "expr": "sum(rate(istio_requests_total{destination_namespace=\"codesage\"}[5m])) by (response_code)", "legendFormat": "{{response_code}}", "refId": "A" }
+            { "expr": "sum(rate(istio_requests_total{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])) by (response_code)", "legendFormat": "{{response_code}}", "refId": "A" }
           ],
           "title": "Request rate by response code",
           "type": "timeseries"
@@ -163,8 +166,8 @@ data:
           "id": 8,
           "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
           "targets": [
-            { "expr": "sum(rate(istio_request_bytes_sum{destination_namespace=\"codesage\"}[5m])) by (destination_workload)", "legendFormat": "req B/s {{destination_workload}}", "refId": "C" },
-            { "expr": "sum(rate(istio_response_bytes_sum{destination_namespace=\"codesage\"}[5m])) by (destination_workload)", "legendFormat": "resp B/s {{destination_workload}}", "refId": "D" }
+            { "expr": "sum(rate(istio_request_bytes_sum{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])) by (destination_workload)", "legendFormat": "req B/s {{destination_workload}}", "refId": "C" },
+            { "expr": "sum(rate(istio_response_bytes_sum{reporter=\"destination\", destination_workload_namespace=\"codesage\"}[5m])) by (destination_workload)", "legendFormat": "resp B/s {{destination_workload}}", "refId": "D" }
           ],
           "title": "Throughput (req/resp bytes)",
           "type": "timeseries"
