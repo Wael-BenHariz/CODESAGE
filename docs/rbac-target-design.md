@@ -1,5 +1,15 @@
 # RBAC Target Design
 
+> **Status (v0.6.0, decisions #12):** this was the v0.5.0 *per-workspace*
+> design spec. The workspace layer it specifies (§2.1, the workspace-context
+> evaluation, per-workspace roles/members, the governance features fed by
+> `REQUEST_ROLES`) has since been **removed** — simple RBAC runs on orgs +
+> `org_members` only. Still in force: §2.2's precedence and `viewer_role`
+> rename, §2.3's permission lists (now in `backend/app/security/roles.py`),
+> and §2.5's business rules minus the dismissed workspace/self-review rows.
+> The living records are `docs/rbac-decisions.md` (#12) and
+> `docs/rbac-endpoints.md`.
+
 This document specifies the exact target design for implementing per-workspace RBAC in CodeSage as described in section 2 of the task.
 
 ## 2.1 Workspaces

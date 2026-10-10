@@ -1,5 +1,15 @@
 # Keycloak Changes for Workspace RBAC
 
+> **Status (v0.6.0, decisions #12):** the workspace model this document
+> describes has been **removed**. Realm roles are again the real roles —
+> the "DEPRECATED: use workspace roles instead" descriptions below were
+> reverted (ConfigMap in `infrastructure/k8s/base/keycloak/`; the live
+> realm still carries the old text until re-imported or patched via the
+> admin API — cosmetic only). What still applies: the four-role ladder,
+> the GitHub-broker `github-claims` scope, the ORG_ADMIN signup default
+> (#11) and the fail-closed NONE fallback; in-org power now comes from
+> `org_members.role` alone (#12), never from a workspace.
+
 This document describes the exact steps needed to update the Keycloak realm to support the workspace-based RBAC model.
 
 ## Changes Made

@@ -2,11 +2,12 @@
 
 This document tracks assumptions and decisions made during the RBAC implementation process.
 
-**Status (v0.5.0, branch `feat/workspace-rbac`)**: all initial assumptions were
-confirmed by discovery and all open questions below are now **resolved** — see
-"Resolved Decisions". The endpoint-level outcome of these decisions is
-documented in `docs/rbac-endpoints.md`; the enforced matrix in
-`docs/rbac-target-design.md` §2.3–§2.5.
+**Status (v0.6.0 "Simple RBAC", branch `feat/workspace-rbac`)**: all initial
+assumptions were confirmed by discovery and all open questions below are now
+**resolved** — see "Resolved Decisions"; **#12 removes the workspace layer
+itself** and supersedes the workspace-based decisions above it. The
+endpoint-level outcome is documented in `docs/rbac-endpoints.md`; the enforced
+matrix in `docs/rbac-target-design.md` §2.3–§2.5.
 
 ## Initial Assumptions (from discovery phase)
 
@@ -94,14 +95,57 @@ documented in `docs/rbac-endpoints.md`; the enforced matrix in
     token with **no recognized role claim** derives global **`ORG_ADMIN`**
     (`derive_role(via_github=True)`; mirrored by the frontend `deriveRole`).
     Rationale: a GitHub signup should land as an org-admin from day one —
-    first login already creates their personal workspace with an ORG_ADMIN
-    membership row, and the global default makes `users.role`, `/auth/me` and
-    cold-start route gating agree with that from the first request.
+    the global default makes `users.role`, `/auth/me` and cold-start route
+    gating agree with that from the first request; in-org power is then
+    decided by membership (install seeds ORG_ADMIN, invitation sets the
+    invited role — #12).
     Constraints kept: any explicit claim still outranks the default (a
     `GUEST` downgrade stays `NONE`, `PLATFORM_ADMIN` still wins), non-brokered
     tokens without a recognized claim stay fail-closed `NONE`, and platform
-    routes remain `platform: false` (PLATFORM_ADMIN only). Known trade-off:
-    effective role = `max(JWT, membership)`, so a brokered user holds an
-    ORG_ADMIN floor inside **every** org they are a member of — inviting one
-    as `DEVELOPER` does not lower them while their token carries no explicit
-    role.
+    routes remain `platform: false` (PLATFORM_ADMIN only). ~~Known trade-off:
+    effective role = `max(JWT, membership)`~~ — **superseded by #12**: the
+    effective role inside an org is the membership role alone, so inviting a
+    brokered ORG_ADMIN as `DEVELOPER` does lower them in that org.
+
+12. **Simple RBAC: the workspace layer is removed** (2026-10-10, owner
+    decision — supersedes the workspace-based decisions 4, 5, 6 (and #9's
+    `workspace_access.PERMISSION_MAP` pointer); Alembic **023**, version
+    `v0.6.0`) →
+
+    **Model.** Orgs + `org_members` only: no `workspaces`/`workspace_members`,
+    no workspace switcher or per-workspace roles, and all governance features
+    that hung off them are dropped without replacement — dismissal requests,
+    install requests, in-app notifications, and the self-review rule.
+    `workspace_id` columns/indexes are gone from `repositories`,
+    `github_installations`, `reviews`, `pull_requests`, `watched_repos` and
+    `orgs` (023's `downgrade()` recreates the 020–022 structure, minus
+    backfill, for one release of rollback room).
+
+    **Account creation = ORG_ADMIN.** A GitHub-brokered signup derives the
+    global `ORG_ADMIN` default (#11). Installing the GitHub App auto-creates
+    the org for that installation (idempotent upsert, shared by the callback
+    and the webhook) and seeds the installer as `ORG_ADMIN` via the existing
+    least-privilege rule (exactly one linked user → ORG_ADMIN; ≥2 → all
+    DEVELOPER; 0 → none; existing rows never changed). An invitation link
+    grants exactly the invitation's role on acceptance — nothing more.
+
+    **Org role wins inside orgs.** Effective role = `org_members.role`, with
+    **no `max(JWT, membership)`** — a member invited as DEVELOPER stays
+    DEVELOPER in that org even though every GitHub session carries the global
+    ORG_ADMIN default. The JWT decides only (a) the `NONE` write sentinel
+    (403 before any lookup) and (b) the no-membership `PLATFORM_ADMIN` read
+    bypass (F2; the F2 carve-outs still demand real membership). Non-members
+    and unbound resources keep the uniform 404; below-threshold members keep
+    the uniform 403.
+
+    **Authorization surface.** `roles.py` hosts `RANK`/`PERMISSION_MAP`/
+    `min_role_for`/`allowed`/`capability_flags` (moved out of the deleted
+    `workspace_access.py`); `org_access.py` adds
+    `require_repository_access(min_role, write=…)` (repository →
+    installation → org, same 404 semantics) and `_effective_role` implements
+    the membership-wins rule. `/auth/me` emits the global role plus
+    `capabilities` from `capability_flags()` — no per-workspace payload.
+    Repo mutations: `PATCH`/`enable`/`disable` = repository access ≥
+    REVIEWER, `DELETE` = ORG_ADMIN; `connect`/`sync` are global
+    `require_developer`. Unchanged: `viewer_role`, staged posting, invitation
+    repo grants, repository visibility rules, frontend `deriveRole` fallback.
