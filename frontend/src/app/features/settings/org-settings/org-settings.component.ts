@@ -386,7 +386,7 @@ export class OrgSettingsComponent implements OnInit {
       // Editing THIS org's settings: the effective role for the *selected*
       // org (max(JWT, org_members.role), plan §2) — the component's own
       // org list is already loaded, so the check is synchronous — plus the
-      // shared context as a fallback (workspace/org elevation).
+      // shared context as a fallback (org elevation).
       const jwt = this.auth.currentUser()?.role ?? null;
       return (
         this.org !== null &&

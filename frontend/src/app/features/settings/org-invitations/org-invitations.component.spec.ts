@@ -9,7 +9,12 @@ import { RepositoryService } from '../../../core/services/repository.service';
 import { OrgInvitation } from '../../../core/models/invitation.model';
 import { Repository } from '../../../core/models/repository.model';
 
-function makeRepo(id: string, fullName: string, isPrivate = false): Repository {
+function makeRepo(
+  id: string,
+  fullName: string,
+  isPrivate = false,
+  orgId: string | null = 'org-1'
+): Repository {
   const [owner = '', name = ''] = fullName.split('/');
   return {
     id,
@@ -26,7 +31,9 @@ function makeRepo(id: string, fullName: string, isPrivate = false): Repository {
     webhookEnabled: false,
     enabled: true,
     createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z'
+    updatedAt: '2026-01-01T00:00:00Z',
+    orgId,
+    orgName: orgId ? owner : null
   };
 }
 
@@ -148,6 +155,27 @@ describe('OrgInvitationsComponent — invite form, list, revoke (plan Step 12)',
     expect(q('invite-repo-repo-1')).not.toBeNull();
     expect(q('invite-repo-repo-2')).not.toBeNull();
     expect(q('invite-repos-count')?.textContent).toContain('0 of 2 selected');
+  });
+
+  it('offers only the selected organization’s repositories in the picker', () => {
+    // The backend 400s repository ids that do not belong to the org's
+    // installation — the picker must not offer them in the first place
+    // (foreign org + unattributed rows are filtered by the org attribution).
+    repositoryService.getRepositories.calls.reset();
+    repositoryService.getRepositories.and.returnValue(
+      of([
+        makeRepo('repo-1', 'acme/api'),
+        makeRepo('foreign-1', 'other/service', false, 'org-2'),
+        makeRepo('unattributed-1', 'legacy/thing', false, null)
+      ])
+    );
+    fixture.componentInstance.loadRepos();
+    fixture.detectChanges();
+
+    expect(q('invite-repo-repo-1')).not.toBeNull();
+    expect(q('invite-repo-foreign-1')).toBeNull();
+    expect(q('invite-repo-unattributed-1')).toBeNull();
+    expect(q('invite-repos-count')?.textContent).toContain('0 of 1 selected');
   });
 
   it('sends the one chosen role with every selected repository', () => {

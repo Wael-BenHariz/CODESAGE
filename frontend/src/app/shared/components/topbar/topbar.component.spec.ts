@@ -6,10 +6,8 @@ import { Observable, of, throwError } from 'rxjs';
 
 import { TopbarComponent } from './topbar.component';
 import { AuthService } from '../../../core/services/auth.service';
-import { NotificationService } from '../../../core/services/notification.service';
 import { OrgSettingsService, OrgSummary } from '../../../core/services/org-settings.service';
 import { User } from '../../../core/models/user.model';
-import { AppNotification } from '../../../core/models/notification.model';
 
 @Component({
   standalone: true,
@@ -25,20 +23,6 @@ describe('TopbarComponent', () => {
     switchAccount: jasmine.Spy;
   };
   let orgSvc: jasmine.SpyObj<OrgSettingsService>;
-  let notifications: jasmine.SpyObj<NotificationService>;
-
-  const notification = (id: string, isRead: boolean): AppNotification => ({
-    id,
-    workspace_id: null,
-    type: 'install_request',
-    title: 'Install requested',
-    message: 'A member asked for the GitHub App install.',
-    is_read: isRead,
-    related_id: null,
-    related_type: null,
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z'
-  });
 
   const org = (id: string, role: string, name = id): OrgSummary => ({
     id,
@@ -86,14 +70,6 @@ describe('TopbarComponent', () => {
     };
     orgSvc = jasmine.createSpyObj<OrgSettingsService>('OrgSettingsService', ['listOrgs']);
     setOrgs(of([]));
-    notifications = jasmine.createSpyObj<NotificationService>('NotificationService', [
-      'list',
-      'markRead',
-      'markAllRead'
-    ]);
-    notifications.list.and.returnValue(of([]));
-    notifications.markRead.and.returnValue(of(notification('n-1', true)));
-    notifications.markAllRead.and.returnValue(of({}));
 
     TestBed.configureTestingModule({
       imports: [TopbarComponent],
@@ -103,8 +79,7 @@ describe('TopbarComponent', () => {
           { path: 'repositories/:owner/:repo/pulls/:number', component: StubComponent }
         ]),
         { provide: AuthService, useValue: auth },
-        { provide: OrgSettingsService, useValue: orgSvc },
-        { provide: NotificationService, useValue: notifications }
+        { provide: OrgSettingsService, useValue: orgSvc }
       ]
     });
   });
@@ -229,76 +204,5 @@ describe('TopbarComponent', () => {
     expect(current?.textContent?.trim()).toBe('#42');
     // Every non-final crumb is a real link.
     expect(crumbs.querySelectorAll('a').length).toBe(3);
-  });
-
-  // --- Notifications bell ----------------------------------------------------
-
-  it('loads notifications on init and shows the unread badge', () => {
-    auth.currentUser.set(user('DEVELOPER'));
-    notifications.list.and.returnValue(of([notification('n-1', false), notification('n-2', true)]));
-
-    render();
-    fixture.detectChanges();
-
-    expect(notifications.list).toHaveBeenCalled();
-    expect(el().querySelector('[data-testid="notifications-badge"]')?.textContent?.trim()).toBe(
-      '1'
-    );
-  });
-
-  it('opens the panel, marks all read and closes on Escape', () => {
-    auth.currentUser.set(user('DEVELOPER'));
-    notifications.list.and.returnValue(of([notification('n-1', false)]));
-    render();
-    fixture.detectChanges();
-
-    const toggle = el().querySelector<HTMLButtonElement>(
-      '[data-testid="notifications-toggle"]'
-    ) as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    toggle.click();
-    fixture.detectChanges();
-
-    expect(el().querySelector('[data-testid="notifications-panel"]')).not.toBeNull();
-    expect(el().querySelector('[data-testid="notifications-empty"]')).toBeNull();
-
-    const markAll = el().querySelector<HTMLButtonElement>(
-      '[data-testid="mark-all-read"]'
-    ) as HTMLButtonElement;
-    markAll.click();
-    expect(notifications.markAllRead).toHaveBeenCalled();
-
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    fixture.detectChanges();
-    expect(el().querySelector('[data-testid="notifications-panel"]')).toBeNull();
-  });
-
-  it('shows the empty state when nothing is pending', () => {
-    auth.currentUser.set(user('DEVELOPER'));
-    notifications.list.and.returnValue(of([]));
-    render();
-    fixture.detectChanges();
-
-    el().querySelector<HTMLButtonElement>('[data-testid="notifications-toggle"]')?.click();
-    fixture.detectChanges();
-
-    expect(el().querySelector('[data-testid="notifications-empty"]')?.textContent).toContain(
-      'No notifications yet'
-    );
-  });
-
-  it('surfaces a load failure inside the panel without breaking the bar', () => {
-    auth.currentUser.set(user('DEVELOPER'));
-    notifications.list.and.returnValue(throwError(() => new Error('boom')));
-    render();
-    fixture.detectChanges();
-
-    el().querySelector<HTMLButtonElement>('[data-testid="notifications-toggle"]')?.click();
-    fixture.detectChanges();
-
-    expect(el().querySelector('[data-testid="notifications-error"]')?.textContent).toContain(
-      'Could not load notifications'
-    );
-    expect(el().querySelector('[data-testid="site-header"]')).not.toBeNull();
   });
 });

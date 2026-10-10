@@ -5,7 +5,6 @@ import { of } from 'rxjs';
 
 import { AppComponent } from './app.component';
 import { AuthService } from './core/services/auth.service';
-import { NotificationService } from './core/services/notification.service';
 import { OrgSettingsService } from './core/services/org-settings.service';
 import { User } from './core/models/user.model';
 
@@ -52,21 +51,9 @@ describe('AppComponent', () => {
           { path: 'dashboard', component: StubComponent }
         ]),
         { provide: AuthService, useValue: auth },
-        { provide: OrgSettingsService, useValue: orgSvc },
-        // The top bar's bell fetches notifications — empty in these tests.
-        {
-          provide: NotificationService,
-          useValue: jasmine.createSpyObj<NotificationService>('NotificationService', [
-            'list',
-            'markRead',
-            'markAllRead'
-          ])
-        }
+        { provide: OrgSettingsService, useValue: orgSvc }
       ]
     }).compileComponents();
-    (
-      TestBed.inject(NotificationService) as jasmine.SpyObj<NotificationService>
-    ).list.and.returnValue(of([]));
   });
 
   afterEach(() => localStorage.removeItem('codesage_active_org'));

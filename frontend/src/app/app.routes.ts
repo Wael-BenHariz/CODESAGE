@@ -71,6 +71,21 @@ export const routes: Routes = [
     data: { capabilities: ['read'] }
   },
   {
+    // Organization Repositories (repo-scoped invitations): repositories the
+    // caller's organizations granted them (accepted invitations + orgs they
+    // administer). Same guard floor as /repositories — authenticated reads;
+    // the *data* is what the backend scopes (visibility=organization), so
+    // direct URL navigation cannot bypass the grant restrictions and an
+    // ungranted repository never resolves.
+    path: 'organization-repositories',
+    loadComponent: () =>
+      import(
+        './features/repositories/organization-repositories/organization-repositories.component'
+      ).then(m => m.OrganizationRepositoriesComponent),
+    canActivate: [RoleGuard],
+    data: { capabilities: ['read'] }
+  },
+  {
     path: 'repositories/:owner/:repo',
     loadComponent: () =>
       import('./features/repositories/repository-detail/repository-detail.component').then(
@@ -115,17 +130,6 @@ export const routes: Routes = [
       ),
     canActivate: [RoleGuard],
     data: { capabilities: ['org:settings'] }
-  },
-  {
-    // Workspace management (workspace RBAC §2.5) — every member can see
-    // their workspaces; mutations are gated per workspace by the backend.
-    path: 'settings/workspaces',
-    loadComponent: () =>
-      import('./features/settings/workspaces/workspaces.component').then(
-        m => m.WorkspacesComponent
-      ),
-    canActivate: [RoleGuard],
-    data: { capabilities: ['read'] }
   },
   {
     // Platform administration — the ONE platform entry point (consolidated

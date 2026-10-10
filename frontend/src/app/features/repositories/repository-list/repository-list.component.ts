@@ -3,13 +3,9 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
-import { AuthContextService } from '../../../core/services/auth-context.service';
 import { GithubAppService } from '../../../core/services/github-app.service';
 import { GitHubAppRepo } from '../../../core/models/github-app.model';
-import { InstallRequestService } from '../../../core/services/install-request.service';
-import { InstallRequest } from '../../../core/models/install-request.model';
 import { RepositoryService } from '../../../core/services/repository.service';
-import { ToastService } from '../../../core/services/toast.service';
 import { navVisibility } from '../../../core/guards/role.guard';
 import { Repository } from '../../../core/models/repository.model';
 import { SpinnerComponent } from '../../../shared/components/spinner/spinner.component';
@@ -33,35 +29,9 @@ export class RepositoryListComponent implements OnInit {
   private readonly github = inject(GithubAppService);
   private readonly repoApi = inject(RepositoryService);
   private readonly auth = inject(AuthService);
-  private readonly ctx = inject(AuthContextService);
-  private readonly installRequestsApi = inject(InstallRequestService);
-  private readonly toast = inject(ToastService);
 
   /** Cosmetic write gating for header/card actions (backend stays authoritative). */
   readonly nav = computed(() => navVisibility(this.auth.currentUser()?.role));
-
-  /** Active workspace — the install-request flows are workspace-scoped (§2.5). */
-  readonly activeWorkspace = computed(() => this.ctx.activeWorkspace());
-
-  /** ORG workspace where the caller is not `repo_admin` → request, not install. */
-  readonly canRequestInstall = computed(() => {
-    const workspace = this.activeWorkspace();
-    return !!workspace && workspace.type === 'ORG' && !workspace.capabilities.repoAdmin;
-  });
-
-  readonly canManageInstallRequests = computed(() => {
-    const workspace = this.activeWorkspace();
-    return !!workspace && workspace.type === 'ORG' && workspace.capabilities.repoAdmin;
-  });
-
-  /** Pending install requests in the active workspace (admins resolve these). */
-  readonly pendingInstallRequests = signal<InstallRequest[]>([]);
-  readonly installRequestLoading = signal(false);
-  readonly installRequestError = signal<string | null>(null);
-  readonly creatingInstallRequest = signal(false);
-  readonly installRequestSent = signal(false);
-  /** Request id of an in-flight approve/reject. */
-  readonly resolvingRequestId = signal<string | null>(null);
 
   /** Shared GitHub App install status (refreshed on init and after the App callback). */
   readonly githubInstalled = this.github.githubInstalled;
@@ -122,9 +92,6 @@ export class RepositoryListComponent implements OnInit {
   ngOnInit(): void {
     this.loadRepositories();
     this.refreshInstallStatus();
-    if (!this.githubInstalled() && this.canManageInstallRequests()) {
-      this.loadPendingInstallRequests();
-    }
   }
 
   /** Always re-read install status on init so a stale "not installed" value is never shown. */
@@ -145,8 +112,14 @@ export class RepositoryListComponent implements OnInit {
     });
   }
 
+  /**
+   * `GET /repositories?visibility=personal` — the caller's own GitHub
+   * account's repositories only (server-side scope; organization
+   * repositories live under /organization-repositories and can never leak
+   * into this collection).
+   */
   private loadRepositories(): void {
-    this.repoApi.getRepositories().subscribe({
+    this.repoApi.getRepositories({ visibility: 'personal' }).subscribe({
       next: repos => {
         this.repositories.set(repos);
         this.isLoading.set(false);
@@ -254,88 +227,9 @@ export class RepositoryListComponent implements OnInit {
 
   installGitHubApp(): void {
     // Signed URL from GET /auth/github/app/install-url (state = JWT) — the
-    // URL is used exactly as returned, never rebuilt by hand. The active
-    // workspace id binds the installation to that workspace (§2.5); the
-    // backend gates it with repo_admin and signs `wid` into the state.
-    const workspaceId = this.activeWorkspace()?.id;
-    this.auth.getInstallUrl(workspaceId).subscribe(({ url }) => {
+    // URL is used exactly as returned, never rebuilt by hand.
+    this.auth.getInstallUrl().subscribe(({ url }) => {
       window.location.href = url;
-    });
-  }
-
-  /** Direct install is only completable by an admin of the GitHub account. */
-  canDirectInstall(): boolean {
-    const workspace = this.activeWorkspace();
-    return !workspace || workspace.type !== 'ORG' || workspace.capabilities.repoAdmin;
-  }
-
-  // --- Install requests (§2.5: member request → admin approve/reject) --------
-
-  private loadPendingInstallRequests(): void {
-    const workspace = this.activeWorkspace();
-    if (!workspace) return;
-    this.installRequestLoading.set(true);
-    this.installRequestError.set(null);
-    this.installRequestsApi.list({ workspaceId: workspace.id, statusFilter: 'PENDING' }).subscribe({
-      next: requests => {
-        this.pendingInstallRequests.set(requests);
-        this.installRequestLoading.set(false);
-      },
-      error: () => {
-        this.installRequestLoading.set(false);
-        this.installRequestError.set('Could not load install requests.');
-      }
-    });
-  }
-
-  /** Member without repo_admin asks an ORG_ADMIN to install the App. */
-  requestGitHubAppInstall(): void {
-    const workspace = this.activeWorkspace();
-    if (!workspace || this.creatingInstallRequest()) return;
-    this.creatingInstallRequest.set(true);
-    this.installRequestsApi.create(workspace.id).subscribe({
-      next: () => {
-        this.creatingInstallRequest.set(false);
-        this.installRequestSent.set(true);
-        this.toast.success('Install request sent to the workspace admins.');
-      },
-      error: () => {
-        this.creatingInstallRequest.set(false);
-        this.installRequestError.set('Could not send the install request.');
-      }
-    });
-  }
-
-  approveInstallRequest(request: InstallRequest): void {
-    this.resolveInstallRequest(request, true);
-  }
-
-  rejectInstallRequest(request: InstallRequest): void {
-    this.resolveInstallRequest(request, false);
-  }
-
-  private resolveInstallRequest(request: InstallRequest, approve: boolean): void {
-    if (this.resolvingRequestId()) return;
-    this.resolvingRequestId.set(request.id);
-    const answer = approve
-      ? this.installRequestsApi.approve(request.id)
-      : this.installRequestsApi.reject(request.id);
-    answer.subscribe({
-      next: resolution => {
-        this.resolvingRequestId.set(null);
-        this.pendingInstallRequests.update(list =>
-          list
-            .map(existing =>
-              existing.id === resolution.id ? { ...existing, status: resolution.status } : existing
-            )
-            .filter(existing => existing.status === 'PENDING')
-        );
-        this.toast.success(approve ? 'Install request approved.' : 'Install request rejected.');
-      },
-      error: () => {
-        this.resolvingRequestId.set(null);
-        this.installRequestError.set('Could not resolve the install request.');
-      }
     });
   }
 

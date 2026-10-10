@@ -63,31 +63,35 @@
       <span>Repositories</span>
     </a>
 
-    <!-- Workspace management (workspace RBAC §2.5) — readable by every role. -->
-    <a
-      routerLink="/settings/workspaces"
-      routerLinkActive="active"
-      class="nav-item"
-      data-testid="nav-workspaces"
-    >
-      <svg
-        class="nav-icon"
-        width="16"
-        height="16"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.4"
-        stroke-linejoin="round"
-        aria-hidden="true"
+    <!-- Organization Repositories (repo-scoped invitations): only members of
+         at least one organization see the entry — the same membership that
+         makes the collection non-empty. Cosmetic; the route and the data are
+         authorized server-side. -->
+    @if (hasOrg()) {
+      <a
+        routerLink="/organization-repositories"
+        routerLinkActive="active"
+        class="nav-item"
+        data-testid="nav-org-repositories"
       >
-        <rect x="2" y="2.5" width="5" height="5" rx="0.8" />
-        <rect x="9" y="2.5" width="5" height="5" rx="0.8" />
-        <rect x="2" y="9" width="5" height="4.5" rx="0.8" />
-        <rect x="9" y="9" width="5" height="4.5" rx="0.8" />
-      </svg>
-      <span>Workspaces</span>
-    </a>
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M2.5 13.5V6l5.5-2.5L13.5 6v7.5z" />
+          <path d="M6 13.5v-3h4v3" />
+        </svg>
+        <span>Organization Repositories</span>
+      </a>
+    }
 
     @if (can('write') || can('org:settings') || can('platform')) {
       <div class="nav-group">

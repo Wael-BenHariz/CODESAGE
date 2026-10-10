@@ -54,6 +54,50 @@ describe('RepositoryService (/repositories group)', () => {
     expect(repos[0].webhookEnabled).toBeTrue();
   });
 
+  it('forwards the visibility scope to GET /repositories (server-side collections)', () => {
+    const list: RepositoryListDto = { items: [dto], total: 1, page: 1, per_page: 20, pages: 1 };
+    api.get.and.returnValue(of(list));
+
+    service.getRepositories({ visibility: 'personal' }).subscribe();
+
+    expect(api.get).toHaveBeenCalledWith('/repositories', { visibility: 'personal' });
+  });
+
+  it('getOrganizationRepositories asks for the organization collection, up to 100 rows', () => {
+    const list: RepositoryListDto = { items: [], total: 0, page: 1, per_page: 100, pages: 0 };
+    api.get.and.returnValue(of(list));
+
+    let repos: Repository[] = [];
+    service.getOrganizationRepositories().subscribe(r => (repos = r));
+
+    expect(api.get).toHaveBeenCalledWith('/repositories', {
+      visibility: 'organization',
+      per_page: 100
+    });
+    expect(repos).toEqual([]);
+  });
+
+  it('maps the org attribution and tolerates its absence', () => {
+    const attributed = { ...dto, org_id: 'org-1', org_name: 'acme' };
+    const list: RepositoryListDto = {
+      items: [attributed, dto],
+      total: 2,
+      page: 1,
+      per_page: 20,
+      pages: 1
+    };
+    api.get.and.returnValue(of(list));
+
+    let repos: Repository[] = [];
+    service.getRepositories().subscribe(r => (repos = r));
+
+    expect(repos[0].orgId).toBe('org-1');
+    expect(repos[0].orgName).toBe('acme');
+    // No attribution on the wire → null, never a guess from the owner.
+    expect(repos[1].orgId).toBeNull();
+    expect(repos[1].orgName).toBeNull();
+  });
+
   it('tends toward defaults when optional fields are null or missing', () => {
     const sparse = { ...dto, description: null, language: null, webhook_id: null, owner: null };
     const mapped = toRepository(sparse);

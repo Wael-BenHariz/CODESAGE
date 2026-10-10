@@ -73,6 +73,9 @@ describe('InviteAcceptComponent — public invite landing (plan Step 12)', () =>
     spyOn(auth, 'isAuthenticated').and.returnValue(false);
     spyOn(auth, 'login');
     spyOn(auth, 'switchAccount');
+    // The acceptance refresh (org membership) is exercised
+    // through this spy — no real HTTP in this component's tests.
+    spyOn(auth, 'loadUser').and.returnValue(of(user('jo@example.com')) as never);
 
     await TestBed.compileComponents();
   });
@@ -185,6 +188,33 @@ describe('InviteAcceptComponent — public invite landing (plan Step 12)', () =>
     expect(q('invite-joined')).not.toBeNull();
     expect(q('invite-joined-role')?.textContent).toContain('REVIEWER');
     expect(q('invite-mismatch-note')).toBeNull();
+  });
+
+  it('refreshes the profile after acceptance so granted repositories appear without re-login', () => {
+    // Repo-scoped invitations: the sidebar's Organization Repositories
+    // entry and the org collection both derive from GET /orgs +
+    // visibility=organization — the acceptance must refresh the profile
+    // (org membership rows), not just flip the local state.
+    (auth.isAuthenticated as jasmine.Spy).and.returnValue(true);
+    spyOn(auth, 'currentUser').and.returnValue(user('jo@example.com'));
+    invitations.preview.and.returnValue(of(preview));
+    invitations.accept.and.returnValue(
+      of({
+        org_id: 'org-1',
+        org_name: 'acme',
+        role: 'REVIEWER',
+        email_mismatch: false,
+        github_error: null
+      })
+    );
+
+    create();
+    expect(auth.loadUser).not.toHaveBeenCalled(); // no refresh before acceptance
+
+    click('invite-accept-btn');
+
+    expect(auth.loadUser).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.state()).toBe('joined');
   });
 
   it('blocks on email mismatch with Continue anyway / switch account before accepting', () => {

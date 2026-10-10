@@ -1,8 +1,8 @@
 /**
  * Permission flags as `GET /auth/me` reports them (backend
- * `capability_flags()` in `app/security/workspace_access.py`) — the
- * frontend renders from these instead of re-deriving role lists, so a
- * matrix change lands in exactly one place (the backend).
+ * `capability_flags()`) — the frontend renders from these instead of
+ * re-deriving role lists, so a matrix change lands in exactly one place
+ * (the backend).
  *
  * The mapper (`core/services/mappers/user.mapper.ts`) converts the
  * snake_case wire keys (`repo_config` / `repo_admin`) to this camelCase
@@ -38,26 +38,6 @@ export interface User {
    * profile degrades to role-based fallbacks.
    */
   capabilities?: CapabilityFlags;
-  /**
-   * Workspaces the caller belongs to (per-workspace effective role +
-   * flags) — `GET /auth/me` → `workspaces[]`.
-   */
-  workspaces?: Workspace[];
-}
-
-/**
- * One workspace context as `GET /auth/me` presents it.
- */
-export interface Workspace {
-  id: string;
-  type: 'PERSONAL' | 'ORG';
-  name: string;
-  /** Effective role in this workspace (ladder max of realm role + membership). */
-  role: 'ORG_ADMIN' | 'REVIEWER' | 'DEVELOPER' | 'NONE';
-  isPersonal: boolean;
-  /** Not sent by `/auth/me`; the workspaces list endpoint includes it. */
-  githubAccountLogin?: string | null;
-  capabilities: CapabilityFlags;
 }
 
 /** One user as the PLATFORM_ADMIN user routes (`GET /users`,

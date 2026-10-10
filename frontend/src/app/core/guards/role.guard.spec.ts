@@ -81,7 +81,7 @@ describe('deriveRole', () => {
     // Fail-closed: unknown role names, default realm roles and an empty list
     // all land on the read-only sentinel for a session WITHOUT GitHub
     // identity claims (the F1 temporary DEVELOPER fallback was removed —
-    // roles come from workspace membership only).
+    // no recognized claim means no write access).
     expect(deriveRole(['some-other-realm-role'])).toBe('NONE');
     expect(deriveRole(['default-roles-codesage-realm'])).toBe('NONE');
     expect(deriveRole([])).toBe('NONE');
@@ -89,8 +89,8 @@ describe('deriveRole', () => {
 
   it('gives a GitHub-brokered session with no recognized claim ORG_ADMIN (signup default)', () => {
     // Mirrors the backend: viaGitHub + nothing recognized/legacy claimed
-    // → ORG_ADMIN (the account-creation default — first login creates the
-    // personal workspace where that user holds ORG_ADMIN membership).
+    // → ORG_ADMIN (the account-creation default for a GitHub-brokered
+    // signup — no explicit realm role is needed to start as ORG_ADMIN).
     // Any explicit claim outranks the default (GUEST stays NONE).
     expect(deriveRole([], true)).toBe('ORG_ADMIN');
     expect(deriveRole(['default-roles-codesage-realm'], true)).toBe('ORG_ADMIN');

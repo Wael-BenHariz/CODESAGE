@@ -29,6 +29,9 @@ export interface RepositoryDto {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  /** Org of the repository's installation (null when unattributed). */
+  org_id?: string | null;
+  org_name?: string | null;
 }
 
 export type RepositoryListDto = PaginatedResponse<RepositoryDto>;
@@ -51,7 +54,9 @@ export function toRepository(dto: RepositoryDto): Repository {
     webhookEnabled: Boolean(dto.webhook_enabled),
     enabled: Boolean(dto.enabled),
     createdAt: dto.created_at ?? '',
-    updatedAt: dto.updated_at ?? ''
+    updatedAt: dto.updated_at ?? '',
+    orgId: dto.org_id ?? null,
+    orgName: dto.org_name ?? null
   };
 }
 

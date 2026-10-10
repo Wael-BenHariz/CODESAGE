@@ -62,12 +62,6 @@
   @if (actionError() && !postDialogOpen()) {
     <div class="api-error" role="alert" data-testid="api-error">{{ actionError() }}</div>
   }
-  <!-- Self-review rule (§2.5): the author sees why the verdict controls are gone. -->
-  @if (selfReview() && state() === 'detail') {
-    <div class="self-review-note" role="status" data-testid="self-review-note">
-      You authored this pull request — validation and dismissal are disabled on its findings.
-    </div>
-  }
 
   @if (state() === 'loading') {
     <div class="panel-state" data-testid="review-panel-loading">
@@ -444,7 +438,7 @@
                               >dismissed</span
                             >
                           }
-                          @if (canEdit() && !selfReview()) {
+                          @if (canEdit()) {
                             <span class="comment-actions">
                               @if (comment.dismissed) {
                                 <button
@@ -468,81 +462,6 @@
                                 </button>
                               }
                             </span>
-                            @if (!comment.dismissed && !pendingDismissalFor(comment.id)) {
-                              <span class="comment-actions">
-                                <button
-                                  class="btn-mini"
-                                  data-testid="request-dismissal"
-                                  (click)="openDismissalForm(comment.id)"
-                                >
-                                  Request dismissal
-                                </button>
-                              </span>
-                            }
-                          }
-                          <!-- Pending dismissal request chip + reviewer resolution (§2.5). -->
-                          @if (pendingDismissalFor(comment.id); as dismissalRequest) {
-                            <span
-                              class="dismissal-requested-tag"
-                              data-testid="comment-dismissal-requested"
-                              >dismissal requested</span
-                            >
-                            @if (canValidate() && !selfReview()) {
-                              <span class="comment-actions">
-                                <button
-                                  class="btn-mini"
-                                  data-testid="approve-dismissal"
-                                  [disabled]="resolvingDismissalId() === dismissalRequest.id"
-                                  (click)="approveDismissal(dismissalRequest)"
-                                >
-                                  {{
-                                    resolvingDismissalId() === dismissalRequest.id
-                                      ? 'Working…'
-                                      : 'Approve'
-                                  }}
-                                </button>
-                                <button
-                                  class="btn-mini"
-                                  data-testid="reject-dismissal"
-                                  [disabled]="resolvingDismissalId() === dismissalRequest.id"
-                                  (click)="rejectDismissal(dismissalRequest)"
-                                >
-                                  Reject
-                                </button>
-                              </span>
-                            }
-                          }
-                          @if (dismissalFormOpen() === comment.id) {
-                            <div class="dismissal-form" data-testid="dismissal-form">
-                              <textarea
-                                class="dismissal-reason"
-                                data-testid="dismissal-reason"
-                                rows="2"
-                                placeholder="Why should this finding be dismissed?"
-                                [value]="dismissalReasonDraft()"
-                                (input)="onDismissalReasonInput($event)"
-                              ></textarea>
-                              <div class="dismissal-form-actions">
-                                <button
-                                  class="btn-mini"
-                                  data-testid="submit-dismissal"
-                                  [disabled]="
-                                    creatingDismissal() ||
-                                    dismissalReasonDraft().trim().length === 0
-                                  "
-                                  (click)="submitDismissalRequest(comment.id)"
-                                >
-                                  {{ creatingDismissal() ? 'Sending…' : 'Send request' }}
-                                </button>
-                                <button
-                                  class="btn-mini"
-                                  data-testid="cancel-dismissal"
-                                  (click)="cancelDismissalForm()"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
                           }
                         </div>
                         <!-- Interpolation escapes HTML — no innerHTML anywhere (Q3). -->
@@ -622,7 +541,7 @@
                             }
                           </ul>
                         }
-                        @if (canValidate() && !selfReview()) {
+                        @if (canValidate()) {
                           <div class="validation-controls" data-testid="validation-controls">
                             <button
                               class="btn-mini"

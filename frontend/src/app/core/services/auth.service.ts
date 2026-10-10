@@ -176,16 +176,9 @@ export class AuthService {
    * URL. The `state` claim is a JWT signed with STATE_TOKEN_SECRET so the
    * `/auth/github/app/callback` endpoint can identify the installing user —
    * never construct the GitHub URL manually.
-   * @param workspaceId Optional workspace ID to bind the installation to
    */
-  getInstallUrl(workspaceId?: string): Observable<{ url: string }> {
-    let url = `${environment.apiUrl}/auth/github/app/install-url`;
-    if (workspaceId) {
-      // FastAPI query params are snake_case — `workspace_id` is what the
-      // backend gates with repo_admin and signs into the state token (`wid`).
-      url += `?workspace_id=${encodeURIComponent(workspaceId)}`;
-    }
-    return this.http.get<{ url: string }>(url);
+  getInstallUrl(): Observable<{ url: string }> {
+    return this.http.get<{ url: string }>(`${environment.apiUrl}/auth/github/app/install-url`);
   }
 
   private getStoredUser(): User | null {

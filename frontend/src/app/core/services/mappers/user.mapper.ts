@@ -36,16 +36,6 @@ export interface UserResponseDto {
   updated_at?: string;
   /** Top-level `capabilities` of `GET /auth/me` (flags of the global role). */
   capabilities?: RawCapabilityFlags;
-  /** Workspace contexts of `GET /auth/me` (effective role + flags each). */
-  workspaces?: Array<{
-    id: string;
-    type: 'PERSONAL' | 'ORG';
-    name: string;
-    role: 'ORG_ADMIN' | 'REVIEWER' | 'DEVELOPER' | 'NONE';
-    github_account_login?: string | null;
-    /** Per-workspace permission flags — rendered, never re-derived. */
-    capabilities?: RawCapabilityFlags;
-  }>;
 }
 
 export type UserListResponseDto = PaginatedResponse<UserResponseDto>;
@@ -85,19 +75,6 @@ export function toUser(dto: UserResponseDto): User {
 
   if (dto.capabilities) {
     baseUser.capabilities = mapCapabilityFlags(dto.capabilities);
-  }
-
-  if (dto.workspaces) {
-    // Server flags are authoritative — no client-side role derivation.
-    baseUser.workspaces = dto.workspaces.map(ws => ({
-      id: ws.id,
-      type: ws.type,
-      name: ws.name,
-      role: ws.role,
-      isPersonal: ws.type === 'PERSONAL',
-      githubAccountLogin: ws.github_account_login ?? null,
-      capabilities: mapCapabilityFlags(ws.capabilities)
-    }));
   }
 
   return baseUser;

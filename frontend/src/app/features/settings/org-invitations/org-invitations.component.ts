@@ -23,12 +23,14 @@ function messageOf(err: unknown, fallback: string): string {
  * email.
  *
  * Repo-scoped extension: ONE role is picked once and applied to the
- * whole repository selection (`repository_ids`); the backend validates
- * each id against the org's GitHub App installation (400 before
- * anything is persisted) and, on accept, adds the invitee as a GitHub
- * collaborator (push for DEVELOPER, triage for REVIEWER). A stored
- * `github_error` is shown as a warning on the row — the invitation is
- * still valid, only the GitHub side failed.
+ * whole repository selection (`repository_ids`); the picker offers
+ * exactly the selected organization's repositories (the `org_id`
+ * attribution on `GET /repositories` rows), the backend validates each
+ * id against the org's GitHub App installation (400 before anything is
+ * persisted) and, on accept, adds the invitee as a GitHub collaborator
+ * (push for DEVELOPER, triage for REVIEWER). A stored `github_error` is
+ * shown as a warning on the row — the invitation is still valid, only
+ * the GitHub side failed.
  *
  * Dev note (plan Step 7 — kept here, out of the UI): with the default
  * `MAIL_BACKEND=console` no email is sent; the invite link is the
@@ -96,12 +98,17 @@ export class OrgInvitationsComponent implements OnInit {
   loadRepos(): void {
     this.reposLoading.set(true);
     this.reposError.set(null);
+    // The invitation's repository_ids must belong to THIS org's GitHub App
+    // installation (the backend 400s foreign ids before any write), so the
+    // picker offers exactly that org's repositories — the server-side org
+    // attribution (`org_id`) on each row, not the admin's whole union.
     this.repositoryService.getRepositories({ page: 1, per_page: 100 }).subscribe({
       next: rows => {
-        this.repos.set(rows);
+        const orgRows = rows.filter(repo => repo.orgId === this.orgId());
+        this.repos.set(orgRows);
         this.reposLoading.set(false);
         // Drop ids whose repository disappeared since the picker was shown.
-        this.repositoryIds.update(ids => ids.filter(id => rows.some(r => r.id === id)));
+        this.repositoryIds.update(ids => ids.filter(id => orgRows.some(r => r.id === id)));
       },
       error: (err: unknown) => {
         this.reposLoading.set(false);

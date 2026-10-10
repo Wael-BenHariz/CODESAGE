@@ -10,7 +10,6 @@ import { PrDetailComponent } from './pr-detail.component';
 import { ReviewPanelComponent } from '../review-panel/review-panel.component';
 import { ApiError } from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { DismissalRequestService } from '../../../core/services/dismissal-request.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
 import { OrgSettingsService } from '../../../core/services/org-settings.service';
@@ -132,22 +131,9 @@ describe('PrDetailComponent — load error state (F3 pre-check b)', () => {
         // <app-site-header> → AuthContextService needs the org list API.
         { provide: OrgSettingsService, useValue: { listOrgs: () => of([]) } },
         // The component only reads currentUser()?.role.
-        { provide: AuthService, useValue: { currentUser: roleSignal } },
-        // <app-review-panel> loads dismissal requests — none in these tests.
-        {
-          provide: DismissalRequestService,
-          useValue: jasmine.createSpyObj<DismissalRequestService>('DismissalRequestService', [
-            'list',
-            'create',
-            'approve',
-            'reject'
-          ])
-        }
+        { provide: AuthService, useValue: { currentUser: roleSignal } }
       ]
     });
-    (
-      TestBed.inject(DismissalRequestService) as jasmine.SpyObj<DismissalRequestService>
-    ).list.and.returnValue(of([]));
   });
 
   function create(): void {
@@ -501,23 +487,9 @@ describe('PrDetailComponent — shared review cache (one request per page load)'
         provideHttpClientTesting(),
         { provide: PullRequestService, useValue: pullRequests },
         { provide: OrgSettingsService, useValue: { listOrgs: () => of([]) } },
-        { provide: AuthService, useValue: { currentUser: () => ({ role: 'DEVELOPER' }) } },
-        // The panel's dismissal-request fetch must not become an open HTTP
-        // request here — httpMock.verify() would flag it as unexpected.
-        {
-          provide: DismissalRequestService,
-          useValue: jasmine.createSpyObj<DismissalRequestService>('DismissalRequestService', [
-            'list',
-            'create',
-            'approve',
-            'reject'
-          ])
-        }
+        { provide: AuthService, useValue: { currentUser: () => ({ role: 'DEVELOPER' }) } }
       ]
     });
-    (
-      TestBed.inject(DismissalRequestService) as jasmine.SpyObj<DismissalRequestService>
-    ).list.and.returnValue(of([]));
     httpMock = TestBed.inject(HttpTestingController);
   });
 

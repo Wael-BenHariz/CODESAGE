@@ -129,6 +129,14 @@ export class InviteAcceptComponent implements OnInit {
         this.result.set(result);
         this.state.set('joined');
         this.accepting.set(false);
+        // Best-effort profile refresh (repo-scoped invitations): the
+        // acceptance just wrote the org membership rows — reloading
+        // GET /auth/me updates the effective role immediately (the
+        // Organization Repositories entry is derived from the org
+        // membership list) instead of waiting for the next
+        // login/refresh. The invitation is already accepted; a failed
+        // refresh never downgrades the joined state.
+        this.auth.loadUser().subscribe({ error: () => undefined });
       },
       error: (err: unknown) => {
         this.accepting.set(false);

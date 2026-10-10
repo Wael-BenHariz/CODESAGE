@@ -26,9 +26,9 @@ const COMPAT_MAP: Record<string, string> = {
  *    lowest rank (fail-closed: an explicit downgrade is honored but still
  *    below DEVELOPER);
  * 3. no recognized or legacy claim at all -> the GitHub-brokered signup
- *    default ORG_ADMIN (a GitHub session starts as admin of the personal
- *    workspace first login creates), otherwise NONE (fail-closed) — an
- *    explicit claim always outranks the default.
+ *    default ORG_ADMIN (a GitHub-brokered signup starts as ORG_ADMIN),
+ *    otherwise NONE (fail-closed) — an explicit claim always outranks the
+ *    default.
  *
  * A token with no role claim at all never gets this far — the backend
  * rejects it with a 401 before any role list is consulted. Keeping both

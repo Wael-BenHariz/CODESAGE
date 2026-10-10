@@ -1,4 +1,3 @@
-import { signal, WritableSignal } from '@angular/core';
 import { TestBed, ComponentFixture, fakeAsync, tick } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
@@ -10,13 +9,9 @@ import {
   uncoveredScanFindings
 } from './review-panel.component';
 import { ApiError } from '../../../core/services/api.service';
-import { AuthService } from '../../../core/services/auth.service';
-import { DismissalRequestService } from '../../../core/services/dismissal-request.service';
 import { PullRequestService } from '../../../core/services/pull-request.service';
 import { ReviewService } from '../../../core/services/review.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { DismissalRequest } from '../../../core/models/dismissal-request.model';
-import { User } from '../../../core/models/user.model';
 import {
   CommentValidation,
   ReviewComment,
@@ -30,8 +25,6 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   let fixture: ComponentFixture<ReviewPanelComponent>;
   let pullRequests: jasmine.SpyObj<PullRequestService>;
   let reviewApi: jasmine.SpyObj<ReviewService>;
-  /** Session signal for the self-review rule (§2.5) — set per test. */
-  let authUser: WritableSignal<User | null>;
 
   const summary = (over: Partial<ReviewSummary> = {}): ReviewSummary => ({
     id: 'rev-1',
@@ -119,7 +112,6 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   });
 
   beforeEach(() => {
-    authUser = signal<User | null>(null);
     pullRequests = jasmine.createSpyObj<PullRequestService>('PullRequestService', [
       'getPullRequestReviews',
       'triggerReview'
@@ -168,35 +160,18 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       providers: [
         provideRouter([]),
         { provide: PullRequestService, useValue: pullRequests },
-        { provide: ReviewService, useValue: reviewApi },
-        // Self-review rule reads the session; empty list = no dismissal
-        // requests on any panel under test (§2.5).
-        { provide: AuthService, useValue: { currentUser: authUser } },
-        {
-          provide: DismissalRequestService,
-          useValue: jasmine.createSpyObj<DismissalRequestService>('DismissalRequestService', [
-            'list',
-            'create',
-            'approve',
-            'reject'
-          ])
-        }
+        { provide: ReviewService, useValue: reviewApi }
       ]
     });
-    const dismissalApi = TestBed.inject(
-      DismissalRequestService
-    ) as jasmine.SpyObj<DismissalRequestService>;
-    dismissalApi.list.and.returnValue(of([]));
   });
 
-  function create(canTrigger = true, authorLogin: string | null = null): void {
+  function create(canTrigger = true): void {
     fixture = TestBed.createComponent(ReviewPanelComponent);
     fixture.componentRef.setInput('prId', 'pr-1');
     fixture.componentRef.setInput('owner', 'acme');
     fixture.componentRef.setInput('repo', 'demo');
     fixture.componentRef.setInput('number', 7);
     fixture.componentRef.setInput('canTrigger', canTrigger);
-    fixture.componentRef.setInput('authorLogin', authorLogin);
     fixture.detectChanges(); // ngOnInit → load (sync of()/throwError)
   }
 
@@ -835,164 +810,6 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
   });
 
   // --- reviewer validation (plan Step 10) ----------------------------------
-
-  // --- workspace RBAC §2.5: self-review rule + dismissal requests ------------
-
-  describe('self-review rule and dismissal requests (§2.5)', () => {
-    const sessionUser = (login: string, role = 'REVIEWER'): User => ({
-      id: 'u-1',
-      login,
-      email: `${login}@example.com`,
-      name: null,
-      avatarUrl: '',
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-      role
-    });
-
-    const finding = (): ReviewComment =>
-      comment({
-        id: 'c-1',
-        severity: 'error',
-        body: 'SQL injection risk',
-        file_path: 'src/a.py',
-        line_number: 5
-      });
-
-    const dismissalRequest = (over: Partial<DismissalRequest> = {}): DismissalRequest => ({
-      id: 'dr-1',
-      review_comment_id: 'c-1',
-      requested_by: 'u-9',
-      reason: 'Intentional example code',
-      status: 'PENDING',
-      review_id: 'rev-1',
-      resolved_by: null,
-      resolved_at: null,
-      created_at: '2026-01-01T00:10:00Z',
-      ...over
-    });
-
-    /** Staged review with one finding; viewer_role defaults to REVIEWER. */
-    function createStaged(over: Partial<ReviewDetail> = {}): void {
-      pullRequests.getPullRequestReviews.and.returnValue(
-        of([summary({ status: 'ready_to_post' })])
-      );
-      reviewApi.getReviewDetail.and.returnValue(
-        of(detail({ status: 'ready_to_post', viewer_role: 'REVIEWER', ...over }, [finding()]))
-      );
-    }
-
-    it('hides dismiss, request and validate controls for the PR author', () => {
-      authUser.set(sessionUser('octocat'));
-      createStaged();
-      create(true, 'Octocat'); // case-insensitive match, like the backend
-
-      expect(testid('self-review-note')).not.toBeNull();
-      expect(testid('dismiss-finding')).toBeNull();
-      expect(testid('restore-finding')).toBeNull();
-      expect(testid('request-dismissal')).toBeNull();
-      expect(testid('validation-controls')).toBeNull();
-    });
-
-    it('keeps every control for a reviewer who is not the author', () => {
-      authUser.set(sessionUser('octocat'));
-      createStaged();
-      create(true, 'someone-else');
-
-      expect(testid('self-review-note')).toBeNull();
-      expect(testid('dismiss-finding')).not.toBeNull();
-      expect(testid('request-dismissal')).not.toBeNull();
-      expect(testid('validation-controls')).not.toBeNull();
-    });
-
-    it('sends a dismissal request with a reason and shows the pending chip', () => {
-      const dismissalApi = TestBed.inject(
-        DismissalRequestService
-      ) as jasmine.SpyObj<DismissalRequestService>;
-      dismissalApi.create.and.returnValue(of(dismissalRequest()));
-      authUser.set(sessionUser('octocat', 'DEVELOPER'));
-      createStaged({ viewer_role: 'DEVELOPER' });
-      create(false, 'someone-else');
-
-      (testid('request-dismissal') as HTMLButtonElement).click();
-      fixture.detectChanges();
-      expect(testid('dismissal-form')).not.toBeNull();
-      // The reason is mandatory — submit stays disabled while it is empty.
-      expect((testid('submit-dismissal') as HTMLButtonElement).disabled).toBeTrue();
-
-      const reason = testid('dismissal-reason') as HTMLTextAreaElement;
-      reason.value = 'Intentional example code';
-      reason.dispatchEvent(new Event('input'));
-      fixture.detectChanges();
-      (testid('submit-dismissal') as HTMLButtonElement).click();
-      fixture.detectChanges();
-
-      expect(dismissalApi.create).toHaveBeenCalledWith('c-1', 'Intentional example code');
-      expect(testid('dismissal-form')).toBeNull();
-      expect(testid('comment-dismissal-requested')).not.toBeNull();
-      // A member without `review` never sees the resolution buttons.
-      expect(testid('approve-dismissal')).toBeNull();
-      expect(testid('reject-dismissal')).toBeNull();
-    });
-
-    it('lets a reviewer approve a pending request (reload clears the chip)', () => {
-      const dismissalApi = TestBed.inject(
-        DismissalRequestService
-      ) as jasmine.SpyObj<DismissalRequestService>;
-      dismissalApi.list.and.returnValue(of([dismissalRequest()]));
-      authUser.set(sessionUser('octocat'));
-      createStaged();
-      create();
-
-      expect(testid('comment-dismissal-requested')).not.toBeNull();
-      // One pending request per comment — no second "request" button.
-      expect(testid('request-dismissal')).toBeNull();
-
-      dismissalApi.approve.and.returnValue(
-        of(
-          dismissalRequest({
-            status: 'APPROVED',
-            resolved_by: 'u-1',
-            resolved_at: '2026-01-01T00:11:00Z'
-          })
-        )
-      );
-      // The reload refetches the request list — now resolved, so no chip.
-      dismissalApi.list.and.returnValue(of([dismissalRequest({ status: 'APPROVED' })]));
-      (testid('approve-dismissal') as HTMLButtonElement).click();
-      fixture.detectChanges();
-
-      expect(dismissalApi.approve).toHaveBeenCalledWith('dr-1');
-      expect(testid('comment-dismissal-requested')).toBeNull();
-      expect(testid('api-error')).toBeNull();
-    });
-
-    it('rejects a pending request without touching the finding', () => {
-      const dismissalApi = TestBed.inject(
-        DismissalRequestService
-      ) as jasmine.SpyObj<DismissalRequestService>;
-      dismissalApi.list.and.returnValue(of([dismissalRequest()]));
-      dismissalApi.reject.and.returnValue(
-        of(
-          dismissalRequest({
-            status: 'REJECTED',
-            resolved_by: 'u-1',
-            resolved_at: '2026-01-01T00:11:00Z'
-          })
-        )
-      );
-      authUser.set(sessionUser('octocat'));
-      createStaged();
-      create();
-
-      (testid('reject-dismissal') as HTMLButtonElement).click();
-      fixture.detectChanges();
-
-      expect(dismissalApi.reject).toHaveBeenCalledWith('dr-1');
-      expect(testid('api-error')).toBeNull();
-      expect(testid('dismiss-finding')).not.toBeNull(); // finding untouched
-    });
-  });
 
   describe('reviewer validation (plan Step 10)', () => {
     const validationRow = (over: Partial<CommentValidation> = {}): CommentValidation => ({

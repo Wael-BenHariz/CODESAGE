@@ -42,3 +42,31 @@ describe('app routes (/platform consolidated console)', () => {
     expect(legacy?.canActivate).toBeUndefined();
   });
 });
+
+describe('app routes (/organization-repositories — repo-scoped invitations)', () => {
+  const orgRoute = routes.find(route => route.path === 'organization-repositories');
+  const repositoriesRoute = routes.find(route => route.path === 'repositories');
+
+  it('ships the lazy organization-repositories component', () => {
+    expect(orgRoute).toBeDefined();
+    expect(orgRoute?.loadComponent).toBeDefined();
+  });
+
+  it('is guarded for authenticated reads — the same floor as /repositories', () => {
+    // No invented role vocabulary (e.g. ORG_REVIEWER): the route asks for
+    // the read capability only; the data itself is scoped server-side to
+    // the caller's org memberships + explicit grants.
+    expect(orgRoute?.canActivate).toBeDefined();
+    expect(orgRoute?.data?.['capabilities']).toEqual(['read']);
+    expect(orgRoute?.data?.['roles']).toBeUndefined();
+    // Renders inside the app shell (only public screens opt out).
+    expect(orgRoute?.data?.['shell']).toBeUndefined();
+  });
+
+  it('does not weaken the personal /repositories routes', () => {
+    expect(repositoriesRoute?.canActivate).toBeDefined();
+    expect(repositoriesRoute?.data?.['capabilities']).toEqual(['read']);
+    const detail = routes.find(route => route.path === 'repositories/:owner/:repo');
+    expect(detail?.data?.['capabilities']).toEqual(['read']);
+  });
+});

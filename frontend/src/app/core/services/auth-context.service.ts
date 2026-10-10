@@ -8,7 +8,6 @@ import {
   canManageSettings,
   effectiveRole
 } from './org-settings.service';
-import { Workspace } from '../models/user.model';
 
 /**
  * App-wide auth context (plan Step 1): current user, effective role,
@@ -35,15 +34,12 @@ import { Workspace } from '../models/user.model';
  *                   reach REVIEWER (validation endpoint guard).
  * - `org:settings`— effective role must reach ORG_ADMIN in at least one
  *                   org (the guard elevates on any membership row).
- * - `platform`    — PLATFORM_ADMIN only.
- * - Workspace-specific capabilities are checked against the current workspace.
+ * - `platform`    — PLATFORM_ADMIN only (global role, never elevated).
  */
 export type AppCapability = 'read' | 'write' | 'validate' | 'org:settings' | 'platform';
 
 /** localStorage key for the selected org — an id, never a token. */
 const ACTIVE_ORG_KEY = 'codesage_active_org';
-/** localStorage key for the selected workspace — an id, never a token. */
-const ACTIVE_WORKSPACE_KEY = 'codesage_active_workspace';
 
 function normalizeRole(role: string | null | undefined): string {
   const upper = String(role ?? '').toUpperCase();
@@ -75,46 +71,15 @@ export class AuthContextService {
   /** Role as reported by GET /auth/me — null until the profile loads. */
   readonly backendRole = computed<string | null>(() => this.auth.currentUser()?.role ?? null);
 
-  /** Current user's workspaces — null until profile loads. */
-  readonly workspaces = computed<Workspace[] | null>(
-    () => this.auth.currentUser()?.workspaces ?? null
-  );
-
-  /** Currently selected workspace ID — defaults to personal workspace if available. */
-  private readonly _activeWorkspaceId = signal<string | null>(readStoredWorkspace());
-  readonly activeWorkspaceId = this._activeWorkspaceId.asReadonly();
-
-  /** Currently selected workspace — the context for workspace-scoped `can()`. */
-  readonly activeWorkspace = computed<Workspace | null>(() => {
-    const workspaces = this.workspaces();
-    if (!workspaces || workspaces.length === 0) {
-      return null;
-    }
-    return (
-      workspaces.find(ws => ws.id === this._activeWorkspaceId()) ??
-      workspaces.find(ws => ws.isPersonal) ?? // Default to personal workspace
-      workspaces[0]
-    ); // Fallback to first workspace
-  });
-
-  /** Combined effective role: max(global role from JWT, workspace role) */
+  /**
+   * Effective role: max(global role from JWT, active org membership) —
+   * the org-based elevation only; null while nothing elevates above NONE.
+   */
   readonly effectiveRole = computed<string | null>(() => {
     const jwtRole = normalizeRole(this.backendRole());
-    const workspace = this.activeWorkspace();
-    const workspaceRole = workspace?.role ?? null;
-
-    // If no workspace context, fall back to org-based logic for backward compatibility
-    if (!workspace) {
-      const activeOrgRole = this.activeOrg()?.role ?? null;
-      const eff = normalizeRole(effectiveRole(jwtRole, activeOrgRole));
-      return eff === 'NONE' ? null : eff;
-    }
-
-    // Calculate effective role as max(JWT role, workspace role)
-    const jwtRank = this.roleRank(jwtRole);
-    const workspaceRank = this.roleRank(workspaceRole);
-
-    return jwtRank >= workspaceRank ? jwtRole : workspaceRole;
+    const activeOrgRole = this.activeOrg()?.role ?? null;
+    const eff = normalizeRole(effectiveRole(jwtRole, activeOrgRole));
+    return eff === 'NONE' ? null : eff;
   });
 
   /**
@@ -183,23 +148,6 @@ export class AuthContextService {
     }
   }
 
-  /** Get the role rank for comparison (higher number = higher role) */
-  private roleRank(role: string | null): number {
-    switch (role) {
-      case 'PLATFORM_ADMIN':
-        return 4;
-      case 'ORG_ADMIN':
-        return 3;
-      case 'REVIEWER':
-        return 2;
-      case 'DEVELOPER':
-        return 1;
-      case 'NONE':
-      default:
-        return 0;
-    }
-  }
-
   /**
    * Route-level capability check with an explicit role fallback.
    *
@@ -207,9 +155,8 @@ export class AuthContextService {
    * (backend `GET /auth/me` role when the profile has loaded, otherwise
    * the role derived from the JWT) — a cold-start navigation must never
    * bounce to /forbidden just because the profile request has not
-   * answered yet. Routes are not workspace-scoped, so this evaluates the
-   * *global* effective role against the backend's permission floors
-   * (`can()` below keeps the workspace-scoped view for templates).
+   * answered yet. Routes are not resource-scoped, so this evaluates the
+   * *global* effective role against the backend's permission floors.
    * Cosmetic either way — the backend re-authorizes every request.
    */
   canCapability(action: AppCapability, role: string): boolean {
@@ -240,7 +187,7 @@ export class AuthContextService {
       case 'org:settings':
         return this.canOrgSettings(effective);
       case 'platform':
-        // Global-only: never derived from a workspace role.
+        // Global-only: never derived from a membership row.
         return effective === 'PLATFORM_ADMIN';
       default:
         return false;
@@ -263,69 +210,17 @@ export class AuthContextService {
   }
 
   /**
-   * Cosmetic capability check for templates — workspace-scoped first
-   * (its server flags are the per-workspace truth), global role floors
-   * otherwise. See the class docstring for semantics.
+   * Cosmetic capability check for templates — the global role's server
+   * flags/floors. See the class docstring for semantics.
    */
   can(action: AppCapability): boolean {
-    const workspace = this.activeWorkspace();
-    if (workspace) {
-      switch (action) {
-        case 'read':
-          return workspace.capabilities.view;
-        case 'write':
-          return workspace.capabilities.trigger;
-        case 'validate':
-          return workspace.capabilities.review;
-        case 'org:settings':
-          return this.canOrgSettings(this.backendRole() ?? 'NONE');
-        default:
-          // 'platform' (and anything unknown) never comes from a workspace.
-          break;
-      }
-    }
     return this.canCapability(action, this.backendRole() ?? 'NONE');
-  }
-
-  /**
-   * Drop the cached org list and the stored selection — called when the
-   * signed-in account changes (`AdminLoginService.login`) so a platform
-   * admin never sees the orgs/roles of whoever was signed in before.
-   * The next `ensureOrgs()` refetches for the new account.
-   */
-  resetWorkspace(): void {
-    this._activeWorkspaceId.set(null);
-    try {
-      localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
-    } catch {
-      // Storage unavailable — nothing was persisted either.
-    }
-  }
-
-  setActiveWorkspace(workspaceId: string): void {
-    this._activeWorkspaceId.set(workspaceId);
-    try {
-      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
-    } catch {
-      // Storage unavailable (private mode) — the selection just won't persist.
-    }
-
-    // Also update the URL to reflect the workspace context
-    // This would typically be handled by a router guard or navigation service
   }
 }
 
 function readStoredOrg(): string | null {
   try {
     return localStorage.getItem(ACTIVE_ORG_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function readStoredWorkspace(): string | null {
-  try {
-    return localStorage.getItem(ACTIVE_WORKSPACE_KEY);
   } catch {
     return null;
   }

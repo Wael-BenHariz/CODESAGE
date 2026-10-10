@@ -5,9 +5,7 @@ import { NEVER, of, throwError } from 'rxjs';
 
 import { RepositoryListComponent } from './repository-list.component';
 import { AuthService } from '../../../core/services/auth.service';
-import { AuthContextService } from '../../../core/services/auth-context.service';
 import { GithubAppService } from '../../../core/services/github-app.service';
-import { InstallRequestService } from '../../../core/services/install-request.service';
 import { OrgSettingsService } from '../../../core/services/org-settings.service';
 import { RepositoryService } from '../../../core/services/repository.service';
 import { GitHubAppRepo } from '../../../core/models/github-app.model';
@@ -49,7 +47,9 @@ describe('RepositoryListComponent — grid, filters, search, views and connect m
     webhookEnabled: true,
     enabled,
     createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z'
+    updatedAt: '2026-01-01T00:00:00Z',
+    orgId: null,
+    orgName: null
   });
 
   const appRepo = (id: number, name: string, enabled: boolean): GitHubAppRepo => ({
@@ -106,18 +106,6 @@ describe('RepositoryListComponent — grid, filters, search, views and connect m
         },
         { provide: GithubAppService, useValue: github },
         { provide: RepositoryService, useValue: repos },
-        // Install-request flows (§2.5) — no active workspace in these tests
-        // (install CTA stays the direct one for PERSONAL/undefined).
-        { provide: AuthContextService, useValue: { activeWorkspace: signal(null) } },
-        {
-          provide: InstallRequestService,
-          useValue: jasmine.createSpyObj<InstallRequestService>('InstallRequestService', [
-            'list',
-            'create',
-            'approve',
-            'reject'
-          ])
-        },
         // <app-site-header> loads the org switcher through this service.
         {
           provide: OrgSettingsService,
@@ -145,6 +133,13 @@ describe('RepositoryListComponent — grid, filters, search, views and connect m
     expect(component.openCount).toBe(1);
     expect(component.disabledCount).toBe(1);
     expect(el().textContent).toContain('acme/api');
+  });
+
+  it('loads the personal collection only (visibility=personal)', () => {
+    // The /repositories page shows the caller's own GitHub repositories;
+    // organization repositories live under /organization-repositories and
+    // can never leak into this collection (server-side scope).
+    expect(repos.getRepositories).toHaveBeenCalledWith({ visibility: 'personal' });
   });
 
   it('filters the grid to enabled or disabled rows', () => {
