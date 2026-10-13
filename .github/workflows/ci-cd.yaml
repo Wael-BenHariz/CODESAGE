@@ -31,6 +31,7 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   DOCKER_BUILDX_VERSION: '0.12.0'
+  BUILD_DATE: ${{ github.event.head_commit.timestamp || github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   # ============================================
@@ -277,7 +278,16 @@ jobs:
       packages: write
     strategy:
       matrix:
-        service: [frontend, api, worker]
+        include:
+          - service: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+          - service: api
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - service: worker
+            context: ./backend
+            dockerfile: ./backend/Dockerfile.worker
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -306,8 +316,8 @@ jobs:
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.service == 'worker' || matrix.service == 'api' ? 'backend' : matrix.service }}
-          file: ./${{ matrix.service == 'worker' && 'backend/Dockerfile.worker' || matrix.service == 'api' && 'backend/Dockerfile' || matrix.service == 'frontend' && 'frontend/Dockerfile' }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
