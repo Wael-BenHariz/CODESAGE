@@ -1,12 +1,11 @@
 """SQLAlchemy base configuration and common utilities."""
 
 from datetime import datetime, timezone
-from typing import Any
+from uuid import UUID
 
 from sqlalchemy import DateTime, MetaData, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
-
 
 # Naming convention for constraints
 convention = {
@@ -32,8 +31,10 @@ class Base(DeclarativeBase):
     metadata = metadata
 
     # Common columns for all tables
+    # ``UUID(as_uuid=True)`` returns stdlib ``uuid.UUID`` instances, so the
+    # annotation is the stdlib type (the dialect class is only the column type).
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )

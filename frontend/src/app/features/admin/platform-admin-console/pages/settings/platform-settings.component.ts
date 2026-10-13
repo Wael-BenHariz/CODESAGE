@@ -16,7 +16,7 @@ import {
 
 /**
  * Platform Administration → Paramètres (static PFE prototype) —
- * `/platform-admin/settings`.
+ * `/platform/settings`.
  *
  * Three sections (généraux / IA / sécurité) edit local copies of the mock
  * settings. "Enregistrer" only commits to the component's signals and shows

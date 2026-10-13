@@ -14,6 +14,15 @@ export interface Repository {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Organization this repository's installation belongs to — null when the
+   * installation has no org row. Viewer-independent (the backend's
+   * `org_id`/`org_name` on `RepositoryResponse`): the personal vs
+   * organization *split* is decided server-side by the `visibility` query
+   * parameter, never from this field alone.
+   */
+  orgId: string | null;
+  orgName: string | null;
 }
 
 export interface RepositoryStats {

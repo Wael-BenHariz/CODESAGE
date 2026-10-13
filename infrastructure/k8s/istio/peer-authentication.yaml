@@ -1,0 +1,19 @@
+# PeerAuthentication — codesage namespace (Istio minimal profile, plan Phase 1).
+#
+# Mode PERMISSIVE (confirmed decision): ingress-nginx is NOT sidecar-injected,
+# so every path it fronts (frontend, backend API, keycloak, repo-tenant
+# /api/v1/repos) arrives as PLAINTEXT. PERMISSIVE accepts plaintext AND
+# upgrades injected->injected traffic to mTLS automatically — no traffic is
+# broken by the mesh, and pod-to-pod calls inside codesage are still encrypted.
+#
+# Tightening to STRICT later requires injecting ingress-nginx (namespace
+# label + webhook) or an explicit PeerAuthentication for its source —
+# out of scope for this release.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: codesage
+spec:
+  mtls:
+    mode: PERMISSIVE

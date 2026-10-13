@@ -1,10 +1,11 @@
 """Repository model for GitHub repositories."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -41,7 +42,7 @@ class Repository(Base):
 
     # Installation reference
     installation_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("github_installations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -86,7 +87,7 @@ class Repository(Base):
     )
 
     # Webhook Configuration
-    webhook_id: Mapped[Optional[int]] = mapped_column(
+    webhook_id: Mapped[int | None] = mapped_column(
         BigInteger,
         nullable=True,
         comment="GitHub webhook ID for this repository",

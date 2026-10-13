@@ -127,7 +127,9 @@ async def test_disable_fires_on_deselect(client, user, db, monkeypatch):
     assert rec.enables == []
 
 
-async def test_disable_fires_for_repo_absent_from_sync_payload(client, user, db, monkeypatch):
+async def test_disable_fires_for_repo_absent_from_sync_payload(
+    client, user, db, monkeypatch
+):
     """sync=true full-state payload: a watched repo missing from it is
     deselected -> teardown."""
     await _watched(db, user, enabled=True)
@@ -266,8 +268,11 @@ async def _repository(
     return repo
 
 
-def _user_token(user) -> dict[str, str]:
-    return _auth(make_keycloak_token(sub=user.keycloak_id, roles=("DEVELOPER",)))
+def _user_token(user, role: str = "REVIEWER") -> dict[str, str]:
+    """Repo-config endpoints require REVIEWER+ (REPO_CONFIG_ROLES) and repo
+    admin endpoints ORG_ADMIN+ (REPO_ADMIN_ROLES) per target design §2.3 —
+    callers pass the lowest role the endpoint under test allows."""
+    return _auth(make_keycloak_token(sub=user.keycloak_id, roles=(role,)))
 
 
 async def test_grid_enable_fires_repo_tenant(client, user, db, monkeypatch):
@@ -365,7 +370,7 @@ async def test_grid_delete_enabled_repo_fires_disable(client, user, db, monkeypa
     monkeypatch.setattr(repo_tenant, "disable_repo", rec.disable_repo)
 
     resp = await client.delete(
-        f"{API}/repositories/{repo.id}", headers=_user_token(user)
+        f"{API}/repositories/{repo.id}", headers=_user_token(user, role="ORG_ADMIN")
     )
 
     assert resp.status_code == 204

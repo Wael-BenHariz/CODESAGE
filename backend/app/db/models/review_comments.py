@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import (
     ARRAY,
@@ -14,7 +15,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -61,7 +62,7 @@ class ReviewComment(Base):
 
     # Review reference
     review_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("reviews.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -70,7 +71,7 @@ class ReviewComment(Base):
 
     # Pull request reference (denormalized for faster queries)
     pull_request_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("pull_requests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -153,7 +154,7 @@ class ReviewComment(Base):
     )
 
     dismissed_by: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         comment="User who dismissed the comment",

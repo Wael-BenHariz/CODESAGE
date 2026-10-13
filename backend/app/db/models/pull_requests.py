@@ -1,7 +1,7 @@
 """Pull request model."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,8 +11,8 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.repositories import Repository
-    from app.db.models.reviews import Review
     from app.db.models.review_comments import ReviewComment
+    from app.db.models.reviews import Review
 
 
 class PullRequest(Base):
@@ -74,7 +74,7 @@ class PullRequest(Base):
         comment="Pull request title",
     )
 
-    body: Mapped[Optional[str]] = mapped_column(
+    body: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Pull request description body",
@@ -97,7 +97,7 @@ class PullRequest(Base):
         comment="GitHub username of PR author",
     )
 
-    author_avatar_url: Mapped[Optional[str]] = mapped_column(
+    author_avatar_url: Mapped[str | None] = mapped_column(
         String(1024),
         nullable=True,
         comment="Avatar URL of PR author",

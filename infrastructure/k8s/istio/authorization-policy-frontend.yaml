@@ -1,0 +1,19 @@
+# Frontend — deliberately public (no JWT at the mesh).
+#
+# The login/landing/help screens must render BEFORE a token exists, and the
+# SPA's static assets are not API calls. Requiring a requestPrincipal here
+# would lock users out of the login page itself. The backend API — where
+# the actual data lives — is the one enforcing JWT (see
+# authorization-policy-backend.yaml).
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-frontend
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: codesage-frontend
+  action: ALLOW
+  rules:
+    - {} # allow everything for this workload

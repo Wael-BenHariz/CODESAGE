@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import {
   Component,
   computed,
@@ -36,7 +35,7 @@ interface Crumb {
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [RouterLink],
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss'
 })
@@ -141,6 +140,7 @@ export class TopbarComponent implements OnInit {
 
     const labels: Record<string, string> = {
       dashboard: 'Dashboard',
+      'organization-repositories': 'Organization Repositories',
       platform: 'Platform',
       help: 'Help'
     };

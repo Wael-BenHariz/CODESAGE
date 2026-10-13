@@ -18,14 +18,16 @@ from app.schemas.pull_request import (
 from app.schemas.review import ReviewResponse
 from app.security.dependencies import get_current_user
 from app.security.org_access import OrgAccess, require_pull_request_access
-from app.security.roles import ROLE_DEVELOPER, require_developer
+from app.security.roles import ROLE_DEVELOPER
+from app.services.repository_visibility import ensure_repository_visible
 
 router = APIRouter()
 
-# PR-scoped guards (plan §2, flag F3): reads may be satisfied by the
+# PR-scoped guards (flag F3): reads may be satisfied by the
 # PLATFORM_ADMIN membership bypass (F2); the trigger route is a write —
-# NONE first (403) via the guard and via require_developer stacked below,
-# cross-org / unknown id → the same 404 ("Pull request not found").
+# NONE first (403) via the guard; cross-org / unknown id → the same 404
+# ("Pull request not found"). The effective role inside the org is the
+# invitation's org_members role (decisions #12).
 _pr_reader = require_pull_request_access(ROLE_DEVELOPER, write=False)
 _pr_member_write = require_pull_request_access(ROLE_DEVELOPER, write=True)
 
@@ -44,16 +46,25 @@ async def list_pull_requests(
 ):
     """
     List pull requests for a repository.
+
+    Read-scoped like ``GET /repositories`` (repo-scoped invitations): the
+    repository must be inside the caller's visibility — personal,
+    administered org, or explicitly granted. Uniform 404 otherwise, so a
+    known repository UUID cannot bypass the grant restrictions.
     """
     # Verify repository exists
     repo_result = await db.execute(
-        select(Repository).where(Repository.id == repository_id)
+        select(Repository)
+        .options(selectinload(Repository.installation))
+        .where(Repository.id == repository_id)
     )
-    if not repo_result.scalar_one_or_none():
+    repository = repo_result.scalar_one_or_none()
+    if not repository:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found",
         )
+    await ensure_repository_visible(db, current_user, repository)
 
     # Build query
     query = select(PullRequest).where(PullRequest.repository_id == repository_id)
@@ -150,7 +161,7 @@ async def get_pull_request(
 async def trigger_review(
     pull_request_id: str,
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    current_user: User = Depends(require_developer),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
     access: OrgAccess = Depends(_pr_member_write),  # noqa: B008
 ):
     """

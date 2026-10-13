@@ -23,7 +23,7 @@ const PAGE_SIZE = 8;
 
 /**
  * Platform Administration → Utilisateurs (static PFE prototype) —
- * `/platform-admin/users`.
+ * `/platform/users`.
  *
  * Fully local: the table starts from `cloneMockUsers()` and search,
  * filters, pagination, role/organisation edits, status toggles and the

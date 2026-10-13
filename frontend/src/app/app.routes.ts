@@ -1,11 +1,5 @@
 import { Routes } from '@angular/router';
-import {
-  ADMIN_ROLES,
-  ANY_ROLE,
-  PLATFORM_ROLES,
-  RoleGuard,
-  WRITE_ROLES
-} from './core/guards/role.guard';
+import { RoleGuard } from './core/guards/role.guard';
 import { confirmUnsavedSummaryGuard } from './features/pull-requests/pr-detail/pr-detail.guard';
 
 export const routes: Routes = [
@@ -33,7 +27,7 @@ export const routes: Routes = [
     data: { shell: false }
   },
   {
-    // No guard here: this route is GitHub's post-install redirect target and
+    // No guard: this route is GitHub's post-install redirect target and
     // must render even when the session is still being restored (check-sso).
     path: 'github/callback',
     loadComponent: () =>
@@ -65,7 +59,7 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
     canActivate: [RoleGuard],
-    data: { roles: WRITE_ROLES }
+    data: { capabilities: ['write'] }
   },
   {
     path: 'repositories',
@@ -74,7 +68,22 @@ export const routes: Routes = [
         m => m.RepositoryListComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
+  },
+  {
+    // Organization Repositories (repo-scoped invitations): repositories the
+    // caller's organizations granted them (accepted invitations + orgs they
+    // administer). Same guard floor as /repositories — authenticated reads;
+    // the *data* is what the backend scopes (visibility=organization), so
+    // direct URL navigation cannot bypass the grant restrictions and an
+    // ungranted repository never resolves.
+    path: 'organization-repositories',
+    loadComponent: () =>
+      import(
+        './features/repositories/organization-repositories/organization-repositories.component'
+      ).then(m => m.OrganizationRepositoriesComponent),
+    canActivate: [RoleGuard],
+    data: { capabilities: ['read'] }
   },
   {
     path: 'repositories/:owner/:repo',
@@ -83,14 +92,14 @@ export const routes: Routes = [
         m => m.RepositoryDetailComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'repositories/:owner/:repo/pulls',
     loadComponent: () =>
       import('./features/pull-requests/pr-list/pr-list.component').then(m => m.PrListComponent),
     canActivate: [RoleGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'repositories/:owner/:repo/pulls/:number',
@@ -101,14 +110,14 @@ export const routes: Routes = [
     canActivate: [RoleGuard],
     // Plan Step 4: warn before leaving with an unsaved summary edit.
     canDeactivate: [confirmUnsavedSummaryGuard],
-    data: { roles: ANY_ROLE }
+    data: { capabilities: ['read'] }
   },
   {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.component').then(m => m.SettingsComponent),
     canActivate: [RoleGuard],
-    data: { roles: WRITE_ROLES }
+    data: { capabilities: ['write'] }
   },
   {
     // Org + platform settings (Step 5). ADMIN_ROLES on the JWT, or — same
@@ -120,37 +129,34 @@ export const routes: Routes = [
         m => m.OrgSettingsComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: ADMIN_ROLES }
+    data: { capabilities: ['org:settings'] }
   },
   {
-    // Platform admin screen (plan Step 9) — PLATFORM_ADMIN only. Not an
-    // "admin route" for the guard's org-membership elevation (the role
-    // list is not ADMIN_ROLES), so an ORG_ADMIN can never open it; the
-    // backend re-authorizes every /users and /orgs read regardless.
+    // Platform administration — the ONE platform entry point (consolidated
+    // from the former /platform overview and the /platform-admin console).
+    // PLATFORM_ADMIN only (no org-membership elevation); its own sidebar/
+    // topbar layout instead of the app shell (shell: false). The home page
+    // is the real API-backed overview; the console pages are the PFE
+    // prototype screens (local mock data, no API calls anywhere inside).
     path: 'platform',
-    loadComponent: () =>
-      import('./features/admin/platform-admin/platform-admin.component').then(
-        m => m.PlatformAdminComponent
-      ),
-    canActivate: [RoleGuard],
-    data: { roles: PLATFORM_ROLES }
-  },
-  {
-    // Static Platform Administration console (PFE prototype) — its own
-    // sidebar/topbar layout instead of the app shell (shell: false), so
-    // PLATFORM_ADMIN-only navigation stays self-contained. Guarded by
-    // PLATFORM_ROLES like /platform (no org-membership elevation); every
-    // page renders from local mock data — no API calls anywhere inside.
-    path: 'platform-admin',
     loadComponent: () =>
       import('./features/admin/platform-admin-console/platform-admin-console.component').then(
         m => m.PlatformAdminConsoleComponent
       ),
     canActivate: [RoleGuard],
-    data: { roles: PLATFORM_ROLES, shell: false },
+    data: { capabilities: ['platform'], shell: false },
     children: [
       {
+        // Real, API-backed overview (GET /users, GET /orgs) — the console
+        // home. Read-only by design (no cross-user update routes exist).
         path: '',
+        loadComponent: () =>
+          import('./features/admin/platform-admin/platform-admin.component').then(
+            m => m.PlatformAdminComponent
+          )
+      },
+      {
+        path: 'dashboard',
         loadComponent: () =>
           import(
             './features/admin/platform-admin-console/pages/dashboard/platform-dashboard.component'
@@ -192,6 +198,12 @@ export const routes: Routes = [
           ).then(m => m.PlatformQuotasComponent)
       }
     ]
+  },
+  {
+    // Legacy alias — /platform-admin was consolidated into /platform.
+    path: 'platform-admin',
+    redirectTo: 'platform',
+    pathMatch: 'full'
   },
   {
     // Generic 404 (rule 5) — also the wildcard target below, so an unknown

@@ -34,7 +34,12 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import GitHubInstallation, Org, OrgMember, User
+from app.db.models import (
+    GitHubInstallation,
+    Org,
+    OrgMember,
+    User,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +74,10 @@ async def provision_installation_org(
     re-link an existing org by ``(name, account_type)`` whose link was
     nulled by an uninstall (reinstall under a new id — never duplicate)
     → insert a new org.
+
+    This is the "install the App → org is auto-created, installer is its
+    ORG_ADMIN" path (decisions #12, rule 3), shared with the webhook and
+    the signed-state install callback.
 
     Flushes only; the caller commits.
     """
@@ -299,15 +308,17 @@ async def seed_report(db: AsyncSession) -> SeedReport:
     for installation_id, login, account_type in installations:
         org_row = orgs_by_install.get(installation_id)
         linked_logins = linked.get(int(installation_id), [])
-        role = least_privilege_role(len(linked_logins))
+        planned_role = least_privilege_role(len(linked_logins))
         entry = PlannedOrgReport(
             name=login,
             account_type=account_type,
             installation_id=installation_id,
             org_exists=org_row is not None,
         )
-        if role is not None:
-            entry.members = [{"login": lg, "role": role} for lg in linked_logins]
+        if planned_role is not None:
+            entry.members = [
+                {"login": lg, "role": planned_role} for lg in linked_logins
+            ]
         if org_row is not None:
             existing_logins = set(members_by_org.get(str(org_row[0]), []))
             entry.missing_members = [

@@ -43,11 +43,12 @@ describe('PlatformAdminConsoleComponent', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  it('renders the six console navigation entries', () => {
+  it('renders the seven console navigation entries (overview + prototype pages)', () => {
     const labels = Array.from(el().querySelectorAll('.pa-nav-item')).map(
       item => item.textContent?.trim() ?? ''
     );
     expect(labels).toEqual([
+      'Overview',
       'Dashboard',
       'Utilisateurs',
       'Paramètres',

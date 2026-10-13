@@ -1,0 +1,104 @@
+<div class="org-repos-page">
+  <header class="page-header">
+    <div class="header-left">
+      <h1>Organization Repositories</h1>
+      <p class="page-description">
+        Repositories your organizations shared with you — you see a repository here only if an
+        organization administrator invited you to it or granted it to you directly.
+      </p>
+    </div>
+  </header>
+
+  @if (state() === 'loading') {
+    <div class="state-slot" data-testid="org-repos-loading">
+      <app-spinner label="Loading organization repositories..." />
+    </div>
+  } @else if (state() === 'error') {
+    <app-error-state
+      [message]="error() ?? 'Could not load organization repositories.'"
+      retryLabel="Retry"
+      testid="org-repos-error"
+      (retry)="load()"
+    />
+  } @else if (repositories().length === 0) {
+    <app-empty-state
+      title="No organization repositories have been shared with you yet."
+      message="An organization administrator can invite you to specific repositories — they'll appear here once you accept the invitation."
+      testid="org-repos-empty"
+    />
+  } @else {
+    @if (orgs().length > 1) {
+      <div class="org-filter">
+        <label class="org-filter-label" for="org-repos-filter">Organization</label>
+        <select
+          id="org-repos-filter"
+          class="org-filter-select"
+          data-testid="org-repos-filter"
+          [value]="orgFilter()"
+          (change)="onFilterChange($event)"
+        >
+          <option value="all">All organizations ({{ repositories().length }})</option>
+          @for (org of orgs(); track org.id) {
+            <option [value]="org.id">{{ org.name }} ({{ org.count }})</option>
+          }
+        </select>
+      </div>
+    }
+
+    @if (filteredRepos().length === 0) {
+      <app-empty-state
+        title="No repositories match the selected organization"
+        message="Pick another organization to see the repositories it shared with you."
+        testid="org-repos-filter-empty"
+      >
+        <button
+          class="btn btn-ghost"
+          data-testid="org-repos-clear-filter"
+          (click)="setOrgFilter('all')"
+        >
+          Show all organizations
+        </button>
+      </app-empty-state>
+    } @else {
+      <div class="repo-grid" data-testid="org-repos-grid">
+        @for (repo of filteredRepos(); track repo.id) {
+          <div class="repo-card" data-testid="org-repo-card">
+            <div class="repo-header">
+              <a [routerLink]="['/repositories', repo.owner, repo.name]" class="repo-name">
+                {{ repo.fullName }}
+              </a>
+              <span class="status-badge" [class.enabled]="repo.enabled">
+                {{ repo.enabled ? 'enabled' : 'disabled' }}
+              </span>
+            </div>
+            @if (repo.orgName) {
+              <p class="repo-org" data-testid="org-repo-org">
+                Shared by <span class="org-name">{{ repo.orgName }}</span>
+              </p>
+            }
+            <p class="repo-desc">{{ repo.description || 'No description' }}</p>
+            <div class="repo-meta">
+              @if (repo.language) {
+                <span class="lang-badge">{{ repo.language }}</span>
+              }
+              <span class="meta-item">{{ repo.private ? 'Private' : 'Public' }}</span>
+              <span class="meta-item">★ {{ repo.stars }}</span>
+              <span class="meta-item">⑂ {{ repo.forks }}</span>
+            </div>
+            <div class="repo-actions">
+              <a [routerLink]="['/repositories', repo.owner, repo.name]" class="action-link">
+                View details →
+              </a>
+              <a
+                [routerLink]="['/repositories', repo.owner, repo.name, 'pulls']"
+                class="btn btn-ghost"
+              >
+                Pull requests
+              </a>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  }
+</div>

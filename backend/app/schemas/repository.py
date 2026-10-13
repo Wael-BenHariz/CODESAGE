@@ -4,7 +4,6 @@ Request/Response models for repository management.
 """
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -15,7 +14,9 @@ class RepositoryBase(BaseModel):
 
     name: str = Field(..., max_length=255, description="Repository name")
     full_name: str = Field(..., max_length=512, description="Full name (owner/repo)")
-    private: bool = Field(default=False, description="Whether the repository is private")
+    private: bool = Field(
+        default=False, description="Whether the repository is private"
+    )
     default_branch: str = Field(default="main", description="Default branch name")
 
 
@@ -24,14 +25,14 @@ class RepositoryCreate(RepositoryBase):
 
     installation_id: str = Field(..., description="GitHub App installation ID")
     github_repo_id: int = Field(..., description="GitHub repository ID")
-    webhook_id: Optional[int] = Field(None, description="GitHub webhook ID")
+    webhook_id: int | None = Field(None, description="GitHub webhook ID")
 
 
 class RepositoryUpdate(BaseModel):
     """Schema for updating repository information."""
 
-    enabled: Optional[bool] = Field(None, description="Whether CodeSage is enabled")
-    default_branch: Optional[str] = Field(None, description="Default branch name")
+    enabled: bool | None = Field(None, description="Whether CodeSage is enabled")
+    default_branch: str | None = Field(None, description="Default branch name")
 
 
 class RepositorySettings(BaseModel):
@@ -39,8 +40,12 @@ class RepositorySettings(BaseModel):
 
     auto_review: bool = Field(default=True, description="Auto-trigger review on PR")
     review_on_push: bool = Field(default=False, description="Review on push to PR")
-    notify_on_failure: bool = Field(default=True, description="Notify on review failure")
-    max_files_per_review: int = Field(default=50, ge=1, le=200, description="Max files per review")
+    notify_on_failure: bool = Field(
+        default=True, description="Notify on review failure"
+    )
+    max_files_per_review: int = Field(
+        default=50, ge=1, le=200, description="Max files per review"
+    )
 
 
 class RepositoryResponse(BaseModel):
@@ -52,18 +57,31 @@ class RepositoryResponse(BaseModel):
     name: str = Field(..., description="Repository name")
     full_name: str = Field(..., description="Full name (owner/repo)")
     owner: str = Field(default="", description="Repository owner")
-    description: Optional[str] = Field(None, description="Repository description")
+    description: str | None = Field(None, description="Repository description")
     private: bool = Field(..., description="Whether the repository is private")
     default_branch: str = Field(..., description="Default branch name")
-    language: Optional[str] = Field(None, description="Primary language")
+    language: str | None = Field(None, description="Primary language")
     stars: int = Field(default=0, description="Star count")
     forks: int = Field(default=0, description="Fork count")
     open_issues: int = Field(default=0, description="Open issues count")
     webhook_enabled: bool = Field(default=False, description="Webhook status")
-    webhook_id: Optional[int] = Field(None, description="GitHub webhook ID")
+    webhook_id: int | None = Field(None, description="GitHub webhook ID")
     enabled: bool = Field(..., description="Whether CodeSage is enabled")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    org_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Organization this repository's installation belongs to "
+            "(null when the installation has no org row). Viewer-"
+            "independent — the personal/organization split is the "
+            "caller's visibility, not this field."
+        ),
+    )
+    org_name: str | None = Field(
+        default=None,
+        description="Organization name for org_id (null when unattributed)",
+    )
 
     model_config = {"from_attributes": True}
 

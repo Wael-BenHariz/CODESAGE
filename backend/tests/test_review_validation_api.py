@@ -124,7 +124,9 @@ async def test_comment_from_another_review_is_404(client, vstage):
     resp = await client.patch(
         _validate_url(vstage.a.review, foreign),
         json={"verdict": "confirmed"},
-        headers=_auth("kc-dev-a", ("REVIEWER",)),
+        # A real REVIEWER member (the org role, not the JWT, decides —
+        # kc-dev-a's DEVELOPER membership would 403 before the lookup).
+        headers=_auth("kc-reviewer-a"),
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Comment not found"

@@ -1,0 +1,37 @@
+# postgres — allow :5432 from the cluster POD CIDR (10.42.0.0/16).
+#
+# Callers (all inbound, server-side enforcement):
+#   * codesage-backend / codesage-worker  (SQLAlchemy async)
+#   * keycloak                           (KC_DB=jdbc:postgresql://postgres-service...)
+#   * repo-tenant                        (if ever enabled against postgres)
+#   * postgres-exporter                  (Phase 2 Helm chart — NOT injected,
+#     plaintext source; identity-based rules cannot match it, IP-based can)
+#   * alembic / kubectl-run opt-out pods (documented sidecar opt-out ->
+#     plaintext again; these NEED database access for migrations)
+#
+# Why ipBlocks instead of principals/namespaces: a workload-certificate
+# identity only exists for injected peers. Anything plaintext (exporter,
+# opt-out job pods) would be silently denied — the classic way a mesh
+# rollout bricks migrations. Pod-to-pod traffic on k3s keeps the source
+# pod IP (no SNAT), and 10.42.0.0/16 excludes host/NodePort sources, so
+# the exposure is "any pod in this cluster" — exactly the pre-Istio
+# baseline, now with an explicit, reviewable rule.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: postgres-allow-pod-cidr
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            ipBlocks:
+              - "10.42.0.0/16"
+      to:
+        - operation:
+            ports:
+              - "5432"

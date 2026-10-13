@@ -200,3 +200,14 @@ async def test_removed_oauth_endpoints_gone(client, path):
     """GitHub OAuth initiate/refresh are Keycloak's job now → 404."""
     resp = await client.get(f"{API}{path}")
     assert resp.status_code == 404
+
+
+def test_via_github_accepts_both_claim_spellings():
+    """Live realm emits ``githubLogin``; the realm export renamed it to
+    ``github_login`` — identity detection must survive a realm re-import."""
+    from app.security.dependencies import _via_github
+
+    assert _via_github({"githubId": 75458407})
+    assert _via_github({"githubLogin": "octocat"})
+    assert _via_github({"github_login": "octocat"})
+    assert not _via_github({"sub": "abc", "preferred_username": "someone"})

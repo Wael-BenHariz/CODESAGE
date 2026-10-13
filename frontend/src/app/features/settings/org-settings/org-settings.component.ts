@@ -5,6 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuthContextService } from '../../../core/services/auth-context.service';
 import { OrgInvitationsComponent } from '../org-invitations/org-invitations.component';
 import {
   SettingsNavComponent,
@@ -44,7 +45,7 @@ import {
  * explicit `null`. 422 responses render inline next to the offending field.
  * The route guard (ADMIN_ROLES + org-membership elevation) is the gate; the
  * effective role computed here only disables editing — the backend re-checks
- * every request.
+ * every request regardless.
  */
 type Section = 'org' | 'defaults' | 'ceilings';
 type FieldKind = 'number' | 'boolean' | 'multi' | 'enum' | 'text';
@@ -201,6 +202,7 @@ export class OrgSettingsComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly orgSettings = inject(OrgSettingsService);
   private readonly route = inject(ActivatedRoute);
+  private readonly ctx = inject(AuthContextService);
 
   // Template constants.
   readonly SETTING_KEYS = SETTING_KEYS;
@@ -218,7 +220,6 @@ export class OrgSettingsComponent implements OnInit {
   selectedOrgId: string | null = null;
   org: OrgSettings | null = null;
   platform: PlatformSettings | null = null;
-  isPlatformAdmin = false;
 
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
@@ -244,7 +245,6 @@ export class OrgSettingsComponent implements OnInit {
   load(): void {
     this.loading.set(true);
     this.loadError.set(null);
-    this.isPlatformAdmin = this.jwtRole === 'PLATFORM_ADMIN';
 
     this.orgSettings.listOrgs().subscribe({
       next: orgs => {
@@ -253,7 +253,9 @@ export class OrgSettingsComponent implements OnInit {
         if (orgs.length > 0) {
           this.selectOrg(orgs[0].id);
         }
-        if (this.isPlatformAdmin) {
+        // Platform sections load on their own track — a platform admin with
+        // no organization still sees (and can edit) them.
+        if (this.isPlatformAdmin()) {
           this.loadPlatform();
         }
       },
@@ -265,17 +267,20 @@ export class OrgSettingsComponent implements OnInit {
   }
 
   private loadPlatform(): void {
-    this.platformError.set(null);
-    this.orgSettings.getPlatformSettings().subscribe({
-      next: platform => {
-        this.platform = platform;
-        this.initSection('defaults');
-        this.initSection('ceilings');
-      },
-      error: err => {
-        this.platformError.set(errorMessage(err, 'Could not load platform settings.'));
-      }
-    });
+    // Platform settings loading is now handled by the AuthContextService
+    // We'll check if the user has platform capability
+    if (this.ctx.can('platform')) {
+      this.orgSettings.getPlatformSettings().subscribe({
+        next: platform => {
+          this.platform = platform;
+          this.initSection('defaults');
+          this.initSection('ceilings');
+        },
+        error: err => {
+          this.platformError.set(errorMessage(err, 'Could not load platform settings.'));
+        }
+      });
+    }
   }
 
   selectOrg(id: string): void {
@@ -303,18 +308,21 @@ export class OrgSettingsComponent implements OnInit {
 
   // --- template accessors ----------------------------------------------------
 
-  get jwtRole(): string | null {
-    return this.auth.currentUser()?.role ?? null;
-  }
+  /** Whether the current user has platform admin capability */
+  readonly isPlatformAdmin = computed(() => this.ctx.can('platform'));
 
   private get selectedOrgRole(): string | null {
     return this.orgs.find(org => org.id === this.selectedOrgId)?.role ?? null;
   }
 
-  /** max(JWT, org_members.role) for the selected org — plan §2. */
-  get effectiveRoleLabel(): string {
-    return effectiveRole(this.jwtRole, this.selectedOrgRole);
-  }
+  /** Effective role for the selected org - using AuthContextService */
+  readonly effectiveRoleLabel = computed(() => {
+    // For backward compatibility, we still compute this label
+    // but the actual editing permissions are checked via canEdit()
+    const jwtRole = this.auth.currentUser()?.role ?? null;
+    const orgRole = this.selectedOrgRole;
+    return effectiveRole(jwtRole, orgRole);
+  });
 
   sections(): SectionUi[] {
     const list: SectionUi[] = [
@@ -324,7 +332,7 @@ export class OrgSettingsComponent implements OnInit {
         subtitle: 'Applies to every review queued for the selected organization.'
       }
     ];
-    if (this.isPlatformAdmin) {
+    if (this.isPlatformAdmin()) {
       list.push({
         id: 'defaults',
         title: 'Platform defaults',
@@ -375,9 +383,19 @@ export class OrgSettingsComponent implements OnInit {
 
   canEdit(section: Section): boolean {
     if (section === 'org') {
-      return this.org !== null && canManageSettings(this.jwtRole, this.selectedOrgRole);
+      // Editing THIS org's settings: the effective role for the *selected*
+      // org (max(JWT, org_members.role), plan §2) — the component's own
+      // org list is already loaded, so the check is synchronous — plus the
+      // shared context as a fallback (org elevation).
+      const jwt = this.auth.currentUser()?.role ?? null;
+      return (
+        this.org !== null &&
+        (canManageSettings(jwt, this.selectedOrgRole) || this.ctx.can('org:settings'))
+      );
     }
-    return this.isPlatformAdmin && this.platform !== null;
+    // For defaults and ceilings, only platform admins can edit — and only
+    // once the platform payload has actually arrived.
+    return this.isPlatformAdmin() && this.platform !== null;
   }
 
   canSave(section: Section): boolean {
@@ -634,6 +652,8 @@ export class OrgSettingsComponent implements OnInit {
       error: err => this.handleSaveError(section, err)
     });
   }
+
+  // --- saving ----------------------------------------------------------------
 
   /** Only the dirty keys — absent fields are kept by the backend. */
   private buildPatch(form: FormScope): Partial<SettingsOverrides> {

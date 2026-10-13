@@ -16,7 +16,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.db.models import GitHubInstallation, PullRequest, Repository, Review, User, WatchedRepo, WebhookEvent
+from app.db.models import (
+    GitHubInstallation,
+    PullRequest,
+    Repository,
+    Review,
+    User,
+    WatchedRepo,
+    WebhookEvent,
+)
 from app.schemas.webhook import WebhookProcessResult
 from app.services import repo_tenant
 from app.services.github import github_service
@@ -30,11 +38,11 @@ router = APIRouter()
 @router.post("/github")
 async def handle_github_webhook(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
     """
     Handle incoming GitHub webhook events.
-    
+
     Supports:
     - pull_request: Trigger reviews and track PRs
     - installation: Handle app installation events
@@ -42,12 +50,12 @@ async def handle_github_webhook(
     """
     # Get raw body for signature verification
     body = await request.body()
-    
+
     # Get signature and event type
     signature = request.headers.get("X-Hub-Signature-256", "")
     event_type = request.headers.get("X-GitHub-Event", "")
     delivery_id = request.headers.get("X-GitHub-Delivery", "")
-    
+
     # Verify signature
     if not github_service.verify_webhook_signature(body, signature):
         logger.warning(
@@ -59,7 +67,7 @@ async def handle_github_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature",
         )
-    
+
     # Parse payload
     try:
         payload = json.loads(body)
@@ -68,21 +76,25 @@ async def handle_github_webhook(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid JSON payload",
         )
-    
+
     # Handle different event types
     if event_type == "pull_request":
         return await _handle_pull_request_event(payload, delivery_id, db)
-    
+
     elif event_type == "installation":
         return await _handle_installation_event(payload, delivery_id, db)
-    
+
     elif event_type == "installation_repositories":
         return await _handle_installation_repos_event(payload, delivery_id, db)
-    
+
     else:
         # Any event type outside the review workflow (and the GitHub App
         # installation lifecycle handled above) is skipped cleanly.
-        logger.info("Skipping unhandled webhook event type %r (delivery=%r)", event_type, delivery_id)
+        logger.info(
+            "Skipping unhandled webhook event type %r (delivery=%r)",
+            event_type,
+            delivery_id,
+        )
         return {"status": "skipped"}
 
 
@@ -93,14 +105,14 @@ async def _handle_pull_request_event(
 ) -> WebhookProcessResult:
     """
     Handle pull_request webhook events.
-    
+
     Creates/updates PR records and triggers reviews for opened/synchronize actions.
     """
     action = payload.get("action")
     pr_data = payload.get("pull_request", {})
     repo_data = payload.get("repository", {})
     installation = payload.get("installation", {})
-    
+
     if not installation:
         return WebhookProcessResult(
             event_id="",
@@ -108,7 +120,7 @@ async def _handle_pull_request_event(
             action_taken=None,
             error="No installation data in payload",
         )
-    
+
     installation_id = installation.get("id")
     install_record = await _get_installation_record(db, installation_id)
     if not install_record:
@@ -118,7 +130,7 @@ async def _handle_pull_request_event(
         # `installation created` webhook never arrived. Idempotent.
         await provision_installation_org(db, install_record)
         await db.commit()
-    
+
     # Find or create repository record for the real GitHub App installation.
     repo_result = await db.execute(
         select(Repository)
@@ -126,7 +138,7 @@ async def _handle_pull_request_event(
         .where(Repository.github_repo_id == repo_data.get("id"))
     )
     repo = repo_result.scalar_one_or_none()
-    
+
     if not repo:
         # Create new repository record
         repo = Repository(
@@ -147,7 +159,7 @@ async def _handle_pull_request_event(
         repo.private = repo_data.get("private", repo.private)
         repo.default_branch = repo_data.get("default_branch", repo.default_branch)
         await db.commit()
-    
+
     # Create webhook event record
     webhook_event = WebhookEvent(
         repository_id=repo.id,
@@ -164,10 +176,12 @@ async def _handle_pull_request_event(
         # Duplicate delivery (delivery_id is unique): acknowledge without
         # queueing a second review job for the same event.
         await db.rollback()
-        logger.info("Skipping duplicate webhook delivery %r (event=pull_request)", delivery_id)
+        logger.info(
+            "Skipping duplicate webhook delivery %r (event=pull_request)", delivery_id
+        )
         return {"status": "skipped"}
     await db.refresh(webhook_event)
-    
+
     # Process based on action
     if action in ["opened", "synchronize", "reopened"]:
         # Create or update PR record
@@ -177,7 +191,7 @@ async def _handle_pull_request_event(
             .where(PullRequest.github_pr_id == pr_data.get("id"))
         )
         existing_pr = pr_result.scalar_one_or_none()
-        
+
         if existing_pr:
             # Update existing PR
             existing_pr.title = pr_data.get("title", "")
@@ -193,7 +207,7 @@ async def _handle_pull_request_event(
             base = pr_data.get("base", {})
             head = pr_data.get("head", {})
             user = pr_data.get("user", {})
-            
+
             new_pr = PullRequest(
                 repository_id=repo.id,
                 github_pr_id=pr_data.get("id"),
@@ -213,19 +227,23 @@ async def _handle_pull_request_event(
             )
             db.add(new_pr)
             pr_record = new_pr
-        
+
         await db.commit()
         await db.refresh(pr_record)
 
         # Resolve installation owner(s): users whose column matches this
         # installation; the first one watching the repo (enabled) wins.
         owners = (
-            await db.execute(
-                select(User)
-                .where(User.github_installation_id == installation_id)
-                .order_by(User.created_at.asc())
+            (
+                await db.execute(
+                    select(User)
+                    .where(User.github_installation_id == installation_id)
+                    .order_by(User.created_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         watched_repo = None
         for owner in owners:
             watched_repo = await db.scalar(
@@ -259,8 +277,17 @@ async def _handle_pull_request_event(
         # same pull_request id + head sha + action was processed AND a
         # review already exists for this PR (ignored events never queued
         # anything and must not block later accepted deliveries).
+        #
+        # FIX: Also compare the existing review's posting_mode with the
+        # org's current effective posting_mode. If they differ (e.g. org
+        # settings changed from auto to staged), allow a new review so
+        # the user can see the staged workflow in action.
         head_sha = pr_data.get("head", {}).get("sha", "")
         pr_gh_id = pr_data.get("id")
+        # Locals captured before any possible rollback below (a rollback
+        # expires the session's instances; plain attribute reads on an
+        # expired instance would then raise MissingGreenlet in asyncio).
+        full_name = repo.full_name
         duplicate = False
         if head_sha and pr_gh_id:
             prior_event = await db.scalar(
@@ -272,21 +299,73 @@ async def _handle_pull_request_event(
                     WebhookEvent.delivery_id != delivery_id,
                     WebhookEvent.processed.is_(True),
                     WebhookEvent.payload["pull_request"]["id"].astext == str(pr_gh_id),
-                    WebhookEvent.payload["pull_request"]["head"]["sha"].astext == head_sha,
+                    WebhookEvent.payload["pull_request"]["head"]["sha"].astext
+                    == head_sha,
                 )
                 .limit(1)
             )
             if prior_event:
+                # Get the most recent review for this PR
                 existing_review = await db.scalar(
-                    select(Review.id).where(Review.pull_request_id == pr_record.id).limit(1)
+                    select(Review)
+                    .where(Review.pull_request_id == pr_record.id)
+                    .order_by(Review.created_at.desc())
+                    .limit(1)
                 )
-                duplicate = existing_review is not None
+                if existing_review:
+                    # Check if org posting_mode has changed since this review.
+                    # Fail-safe: any resolution error keeps the original
+                    # duplicate behavior (a webhook must never 500 here).
+                    from app.db.models import Org
+                    from app.services.org_settings import resolve_org_settings
+
+                    try:
+                        org_id = await db.scalar(
+                            select(Org.id).where(Org.installation_id == installation_id)
+                        )
+                        current_settings = await resolve_org_settings(db, org_id)
+
+                        # Allow new review if posting_mode changed (auto → staged)
+                        if (
+                            existing_review.posting_mode
+                            == current_settings.posting_mode
+                        ):
+                            duplicate = True  # Same settings → true duplicate, skip
+                        else:
+                            logger.info(
+                                "Allowing new review for %s@%s: posting_mode "
+                                "changed %s → %s",
+                                full_name,
+                                head_sha[:7],
+                                existing_review.posting_mode,
+                                current_settings.posting_mode,
+                            )
+                    except Exception:
+                        logger.warning(
+                            "posting_mode comparison failed for %s@%s; "
+                            "keeping duplicate skip",
+                            full_name,
+                            head_sha[:7],
+                            exc_info=True,
+                        )
+                        # The committed event row survives the rollback, but
+                        # the rollback expired the session's instances —
+                        # re-select the event so its processed flag still
+                        # writes cleanly below.
+                        event_id = webhook_event.id
+                        await db.rollback()
+                        webhook_event = (
+                            await db.execute(
+                                select(WebhookEvent).where(WebhookEvent.id == event_id)
+                            )
+                        ).scalar_one()
+                        duplicate = True
             if duplicate:
                 webhook_event.processed = True
                 await db.commit()
                 logger.info(
                     "Skipping duplicate review for %s@%s (action=%s)",
-                    repo.full_name,
+                    full_name,
                     head_sha[:7],
                     action,
                 )
@@ -337,12 +416,12 @@ async def _handle_pull_request_event(
             .where(PullRequest.github_pr_id == pr_data.get("id"))
         )
         pr = pr_result.scalar_one_or_none()
-        
+
         if pr:
             merged = pr_data.get("merged", False)
             pr.state = "merged" if merged else "closed"
             await db.commit()
-        
+
         webhook_event.processed = True
         await db.commit()
 
@@ -364,21 +443,18 @@ async def _handle_installation_event(
 ) -> dict:
     """
     Handle installation webhook events.
-    
+
     Creates/updates/deletes GitHub App installation records.
     """
     action = payload.get("action")
     installation = payload.get("installation", {})
-    
+
     installation_id = installation.get("id")
     account = installation.get("account", {})
-    
+
     if action in ["created", "suspended", "unsuspended"]:
         # Create or update installation record
         record = await _upsert_installation_record(db, installation)
-
-        for repo_data in payload.get("repositories", []):
-            await _upsert_repository_record(db, record, repo_data)
 
         # Link the installing account's owner immediately: the browser-side
         # install callback may never arrive (GitHub App Setup URL unset or
@@ -395,18 +471,21 @@ async def _handle_installation_event(
         # Org provisioning (Step 3): one org per installation +
         # least-privilege members — runs AFTER the link update above so
         # the member count sees it. Flushes only; the commit below
-        # persists both. A failure here raises → 500 → GitHub redelivers
-        # the event and the upserts above are idempotent.
+        # persists everything. A failure here raises → 500 → GitHub
+        # redelivers the event and every upsert above is idempotent.
         await provision_installation_org(db, record)
 
+        for repo_data in payload.get("repositories", []):
+            await _upsert_repository_record(db, record, repo_data)
+
         await db.commit()
-        
+
         return {
             "status": "success",
             "action": action,
             "installation_id": installation_id,
         }
-    
+
     elif action == "deleted":
         # Delete installation and cascade to repositories; unlink users so
         # /github/status flips back to "not installed".
@@ -417,21 +496,22 @@ async def _handle_installation_event(
         )
         await db.commit()
         result = await db.execute(
-            select(GitHubInstallation)
-            .where(GitHubInstallation.installation_id == installation_id)
+            select(GitHubInstallation).where(
+                GitHubInstallation.installation_id == installation_id
+            )
         )
         record = result.scalar_one_or_none()
-        
+
         if record:
             await db.delete(record)
             await db.commit()
-        
+
         return {
             "status": "success",
             "action": action,
             "installation_id": installation_id,
         }
-    
+
     return {
         "status": "acknowledged",
         "action": action,
@@ -445,28 +525,27 @@ async def _handle_installation_repos_event(
 ) -> dict:
     """
     Handle installation_repositories webhook events.
-    
+
     Updates repository access for an installation.
     """
-    action = payload.get("action")  # added, removed
     installation = payload.get("installation", {})
     repos_added = payload.get("repositories_added", [])
     repos_removed = payload.get("repositories_removed", [])
-    
+
     installation_id = installation.get("id")
-    
+
     install_record = await _get_installation_record(db, installation_id)
-    
+
     if not install_record:
         return {
             "status": "error",
             "message": "Installation not found",
         }
-    
+
     # Add new repositories
     for repo in repos_added:
         await _upsert_repository_record(db, install_record, repo)
-    
+
     # Remove repositories (and turn off the review switch for them)
     removed_ids = [repo.get("id") for repo in repos_removed if repo.get("id")]
     for repo in repos_removed:
@@ -510,7 +589,9 @@ async def _get_installation_record(
     installation_id: int,
 ) -> GitHubInstallation | None:
     result = await db.execute(
-        select(GitHubInstallation).where(GitHubInstallation.installation_id == installation_id)
+        select(GitHubInstallation).where(
+            GitHubInstallation.installation_id == installation_id
+        )
     )
     return result.scalar_one_or_none()
 

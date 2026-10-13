@@ -112,8 +112,14 @@ export class RepositoryListComponent implements OnInit {
     });
   }
 
+  /**
+   * `GET /repositories?visibility=personal` — the caller's own GitHub
+   * account's repositories only (server-side scope; organization
+   * repositories live under /organization-repositories and can never leak
+   * into this collection).
+   */
   private loadRepositories(): void {
-    this.repoApi.getRepositories().subscribe({
+    this.repoApi.getRepositories({ visibility: 'personal' }).subscribe({
       next: repos => {
         this.repositories.set(repos);
         this.isLoading.set(false);

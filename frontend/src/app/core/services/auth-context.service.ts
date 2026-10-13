@@ -34,7 +34,7 @@ import {
  *                   reach REVIEWER (validation endpoint guard).
  * - `org:settings`— effective role must reach ORG_ADMIN in at least one
  *                   org (the guard elevates on any membership row).
- * - `platform`    — PLATFORM_ADMIN only.
+ * - `platform`    — PLATFORM_ADMIN only (global role, never elevated).
  */
 export type AppCapability = 'read' | 'write' | 'validate' | 'org:settings' | 'platform';
 
@@ -70,6 +70,28 @@ export class AuthContextService {
 
   /** Role as reported by GET /auth/me — null until the profile loads. */
   readonly backendRole = computed<string | null>(() => this.auth.currentUser()?.role ?? null);
+
+  /**
+   * Effective role: max(global role from JWT, active org membership) —
+   * the org-based elevation only; null while nothing elevates above NONE.
+   */
+  readonly effectiveRole = computed<string | null>(() => {
+    const jwtRole = normalizeRole(this.backendRole());
+    const activeOrgRole = this.activeOrg()?.role ?? null;
+    const eff = normalizeRole(effectiveRole(jwtRole, activeOrgRole));
+    return eff === 'NONE' ? null : eff;
+  });
+
+  /**
+   * Get the one-release compatibility map for backward compatibility with role guards
+   */
+  compatMap(): Record<string, string> {
+    return {
+      SUPER_ADMIN: 'PLATFORM_ADMIN',
+      GUEST: 'NONE',
+      DEVELOPER: 'DEVELOPER'
+    };
+  }
 
   /**
    * Load the caller's orgs once (shared by the guard's admin elevation and
@@ -126,33 +148,73 @@ export class AuthContextService {
     }
   }
 
-  /** Cosmetic capability check — see the class docstring for semantics. */
-  can(action: AppCapability): boolean {
-    const jwt = normalizeRole(this.backendRole());
-    if (jwt === 'NONE') {
-      // NONE-first: an explicit read-only sentinel outranks everything.
-      return action === 'read';
+  /**
+   * Route-level capability check with an explicit role fallback.
+   *
+   * The guard calls this with the effective role it resolved *itself*
+   * (backend `GET /auth/me` role when the profile has loaded, otherwise
+   * the role derived from the JWT) — a cold-start navigation must never
+   * bounce to /forbidden just because the profile request has not
+   * answered yet. Routes are not resource-scoped, so this evaluates the
+   * *global* effective role against the backend's permission floors.
+   * Cosmetic either way — the backend re-authorizes every request.
+   */
+  canCapability(action: AppCapability, role: string): boolean {
+    const effective = normalizeRole(role);
+    // NONE-first: an explicit read-only sentinel is never elevated by
+    // membership rows — fail closed, mirroring the backend's org-access
+    // rules (NONE + write → 403 no matter what org_members says).
+    if (effective === 'NONE' && action !== 'read') {
+      return false;
     }
-    const activeOrgRole = this.activeOrg()?.role ?? null;
-
     switch (action) {
       case 'read':
         return true;
       case 'write':
-        return true; // jwt is a write role (NONE already returned above)
+        // Mirrors the backend `require_developer` floor (NONE is read-only).
+        return effective !== 'NONE';
       case 'validate': {
-        const eff = normalizeRole(effectiveRole(jwt, activeOrgRole));
-        return eff === 'REVIEWER' || eff === 'ORG_ADMIN' || eff === 'PLATFORM_ADMIN';
+        const reaches = (role: string) =>
+          role === 'REVIEWER' || role === 'ORG_ADMIN' || role === 'PLATFORM_ADMIN';
+        if (reaches(effective)) {
+          return true;
+        }
+        // Membership elevation: effective = max(JWT, active org membership)
+        // (plan §2) — a DEVELOPER who is ORG_ADMIN in the active org validates.
+        const orgRole = this.activeOrg()?.role ?? null;
+        return orgRole != null && reaches(normalizeRole(effectiveRole(effective, orgRole)));
       }
       case 'org:settings':
-        // Admin nav entry mirrors the guard: ANY org membership elevates.
-        return (
-          canManageSettings(jwt, activeOrgRole) ||
-          (this._orgs() ?? []).some(org => canManageSettings(jwt, org.role))
-        );
+        return this.canOrgSettings(effective);
       case 'platform':
-        return normalizeRole(jwt) === 'PLATFORM_ADMIN';
+        // Global-only: never derived from a membership row.
+        return effective === 'PLATFORM_ADMIN';
+      default:
+        return false;
     }
+  }
+
+  /**
+   * Org settings (route `settings/org`): ORG_ADMIN/PLATFORM_ADMIN by role,
+   * or — same effective role per plan §2 — an `org_members` ORG_ADMIN row.
+   * The membership list is only consulted when it has been loaded
+   * (`ensureOrgs`); the guard awaits it on the deny path so a
+   * DEVELOPER-JWT org owner still gets in.
+   */
+  canOrgSettings(effectiveRole: string): boolean {
+    const role = normalizeRole(effectiveRole);
+    if (role === 'ORG_ADMIN' || role === 'PLATFORM_ADMIN') {
+      return true;
+    }
+    return (this._orgs() ?? []).some(org => canManageSettings(role, org.role));
+  }
+
+  /**
+   * Cosmetic capability check for templates — the global role's server
+   * flags/floors. See the class docstring for semantics.
+   */
+  can(action: AppCapability): boolean {
+    return this.canCapability(action, this.backendRole() ?? 'NONE');
   }
 }
 

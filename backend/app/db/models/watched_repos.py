@@ -1,6 +1,5 @@
 """Watched repository model for GitHub App repository selection."""
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, ForeignKey, String, UniqueConstraint

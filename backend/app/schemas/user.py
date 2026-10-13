@@ -61,6 +61,20 @@ class UserResponse(BaseModel):
         return v
 
 
+class MeResponse(UserResponse):
+    """``GET /auth/me`` payload: the user row plus the global capability flags.
+
+    ``capabilities`` mirrors the flags of the *global* realm role (used for
+    platform-level UI gating). Org-specific roles come from ``GET /orgs``
+    (one ``org_members`` role per org — the invitation's role wins there),
+    not from this payload.
+    """
+
+    capabilities: dict[str, bool] = Field(
+        default_factory=dict, description="Flags for the global realm role"
+    )
+
+
 class UserListResponse(BaseModel):
     """Paginated list of users."""
 

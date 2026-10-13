@@ -1,3 +1,23 @@
+/**
+ * Permission flags as `GET /auth/me` reports them (backend
+ * `capability_flags()`) — the frontend renders from these instead of
+ * re-deriving role lists, so a matrix change lands in exactly one place
+ * (the backend).
+ *
+ * The mapper (`core/services/mappers/user.mapper.ts`) converts the
+ * snake_case wire keys (`repo_config` / `repo_admin`) to this camelCase
+ * view.
+ */
+export interface CapabilityFlags {
+  view: boolean;
+  trigger: boolean;
+  request: boolean;
+  review: boolean;
+  repoConfig: boolean;
+  repoAdmin: boolean;
+  platform: boolean;
+}
+
 export interface User {
   id: string;
   login: string;
@@ -12,14 +32,18 @@ export interface User {
    * because legacy cached profiles may not carry it yet.
    */
   role?: string;
+  /**
+   * Permission flags for the *global* realm role (top-level
+   * `capabilities` of `GET /auth/me`). Optional so a cached legacy
+   * profile degrades to role-based fallbacks.
+   */
+  capabilities?: CapabilityFlags;
 }
 
-/**
- * One user as the PLATFORM_ADMIN user routes (`GET /users`,
+/** One user as the PLATFORM_ADMIN user routes (`GET /users`,
  * `GET /users/{user_id}`) present them — camelCase view of
  * `UserResponse` (backend `app/schemas/user.py`), built by
- * `core/services/mappers/user.mapper.ts`.
- */
+ * `core/services/mappers/user.mapper.ts`. */
 export interface PlatformUser {
   id: string;
   keycloakId: string | null;

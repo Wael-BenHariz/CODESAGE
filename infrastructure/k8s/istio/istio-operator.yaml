@@ -1,0 +1,32 @@
+# Istio install parameters — THE file to install from (repeatable):
+#
+#   istioctl install -f infrastructure/k8s/istio/istio-operator.yaml -y
+#
+# (Running it against an existing control plane reconciles in place — that is
+# how the pilot resource trim below was rolled out.)
+#
+# profile=minimal → istiod only: NO ingress/egress gateways, no Kiali, no
+# Prometheus/Grafana addons. ingress-nginx remains the cluster's single
+# router and this repo's monitoring stack (infrastructure/k8s/monitoring/)
+# replaces the Istio addons. Mesh security policy lives next to this file
+# (peer-authentication / request-authentication / authorization-policy).
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: codesage-minimal
+  namespace: istio-system
+spec:
+  profile: minimal
+  values:
+    pilot:
+      # istioctl's default is 500m/2Gi — far more than a single-node dev
+      # mesh needs (steady state ≈ 50-150m). The 4-core node must fit
+      # CodeSage + monitoring + SonarQube with ~300m headroom for rolling
+      # updates; see APPLY_ORDER.md "CPU budget".
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi

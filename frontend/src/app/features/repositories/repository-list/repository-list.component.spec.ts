@@ -47,7 +47,9 @@ describe('RepositoryListComponent — grid, filters, search, views and connect m
     webhookEnabled: true,
     enabled,
     createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z'
+    updatedAt: '2026-01-01T00:00:00Z',
+    orgId: null,
+    orgName: null
   });
 
   const appRepo = (id: number, name: string, enabled: boolean): GitHubAppRepo => ({
@@ -131,6 +133,13 @@ describe('RepositoryListComponent — grid, filters, search, views and connect m
     expect(component.openCount).toBe(1);
     expect(component.disabledCount).toBe(1);
     expect(el().textContent).toContain('acme/api');
+  });
+
+  it('loads the personal collection only (visibility=personal)', () => {
+    // The /repositories page shows the caller's own GitHub repositories;
+    // organization repositories live under /organization-repositories and
+    // can never leak into this collection (server-side scope).
+    expect(repos.getRepositories).toHaveBeenCalledWith({ visibility: 'personal' });
   });
 
   it('filters the grid to enabled or disabled rows', () => {

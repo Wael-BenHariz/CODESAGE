@@ -159,10 +159,16 @@ async def _make_chain(
 
 @pytest_asyncio.fixture
 async def stage(db):
-    """Org A's review (member: dev_a) and org B's review (member: dev_b).
+    """Org A's review (REVIEWER member: dev_a) and org B's review
+    (DEVELOPER member: dev_b).
 
     Plus: a global PLATFORM_ADMIN with *no* membership row, and a
     membership-carrying user whose JWT role is NONE (to prove NONE-first).
+
+    The org role is the *only* in-org ladder input (decisions #12): dev_a
+    must hold the REVIEWER membership for the staged actions (summary /
+    dismiss / post), no matter what the token says — see
+    ``test_jwt_role_does_not_elevate_the_org_membership``.
     """
     a = await _make_chain(
         db, installation_id=_INSTALLATION_A, owner="owner-a", org_name="org-a", number=1
@@ -174,7 +180,7 @@ async def stage(db):
     dev_b = await _make_user(db, "kc-dev-b")
     pa = await _make_user(db, "kc-pa", role="PLATFORM_ADMIN")
     none_user = await _make_user(db, "kc-none")
-    db.add(OrgMember(org_id=a.org.id, user_id=dev_a.id, role="DEVELOPER"))
+    db.add(OrgMember(org_id=a.org.id, user_id=dev_a.id, role="REVIEWER"))
     db.add(OrgMember(org_id=b.org.id, user_id=dev_b.id, role="DEVELOPER"))
     db.add(OrgMember(org_id=a.org.id, user_id=none_user.id, role="DEVELOPER"))
     await db.commit()
@@ -515,8 +521,22 @@ async def test_malformed_ids_are_404_not_500(client, stage):
 # ---------------------------------------------------------------------------
 
 
+async def test_jwt_role_does_not_elevate_the_org_membership(client, stage):
+    """Org role wins inside the org (decisions #12): a DEVELOPER member
+    stays DEVELOPER even when their token says REVIEWER — the JWT only
+    decides the NONE write sentinel and the no-membership PLATFORM_ADMIN
+    bypass, never the in-org ladder (no more ``max(JWT, membership)``)."""
+    headers = _auth("kc-dev-b", ("REVIEWER",))  # dev_b: DEVELOPER in org B
+    resp = await client.patch(
+        f"{_REVIEWS}/{stage.b.review.id}/summary",
+        json={"summary": "JWT says REVIEWER; the org says DEVELOPER."},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+
 async def test_summary_happy_path_round_trips(client, stage):
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     resp = await client.patch(
         f"{_REVIEWS}/{stage.a.review.id}/summary",
         json={"summary": "Edited **summary** for the panel."},
@@ -540,7 +560,7 @@ async def test_summary_over_cap_is_422(client, stage):
     resp = await client.patch(
         f"{_REVIEWS}/{stage.a.review.id}/summary",
         json={"summary": "x" * (EDITED_SUMMARY_MAX_CHARS + 1)},
-        headers=_auth("kc-dev-a"),
+        headers=_auth("kc-dev-a", ("REVIEWER",)),
     )
     assert resp.status_code == 422
 
@@ -554,7 +574,7 @@ async def test_summary_requires_auth(client, stage):
 
 async def test_summary_after_post_is_409(client, stage, monkeypatch):
     _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     resp = await client.post(f"{_REVIEWS}/{stage.a.review.id}/post", headers=headers)
     assert resp.status_code == 200
 
@@ -573,7 +593,7 @@ async def test_summary_after_post_is_409(client, stage, monkeypatch):
 
 
 async def test_dismiss_and_restore_round_trip(client, stage):
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     comment = _comment_of(stage.a.review, severity="error")
 
     resp = await client.patch(
@@ -634,7 +654,7 @@ async def test_dismiss_comment_not_in_review_is_404(client, stage):
     foreign = _comment_of(stage.b.review, severity="error")
     resp = await client.patch(
         f"{_REVIEWS}/{stage.a.review.id}/comments/{foreign.id}/dismiss",
-        headers=_auth("kc-dev-a"),
+        headers=_auth("kc-dev-a", ("REVIEWER",)),
     )
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Comment not found"
@@ -659,7 +679,7 @@ async def test_post_success_marks_review_and_builds_staged_body(
 ):
     """Happy path: posted_at + github_review_id set, body = base + findings."""
     stub = _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     info = _comment_of(stage.a.review, severity="info")
 
     # The panel flow: edit summary, dismiss the noise, post.
@@ -709,7 +729,7 @@ async def test_post_success_marks_review_and_builds_staged_body(
 
 async def test_post_twice_sequential_is_409(client, stage, monkeypatch):
     _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
 
     resp = await client.post(f"{_REVIEWS}/{stage.a.review.id}/post", headers=headers)
     assert resp.status_code == 200
@@ -722,7 +742,7 @@ async def test_post_twice_sequential_is_409(client, stage, monkeypatch):
 async def test_post_concurrent_has_exactly_one_winner(client, stage, monkeypatch):
     """Two simultaneous posts: the FOR UPDATE lock serializes them (409)."""
     stub = _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     url = f"{_REVIEWS}/{stage.a.review.id}/post"
 
     first, second = await asyncio.gather(
@@ -735,7 +755,7 @@ async def test_post_concurrent_has_exactly_one_winner(client, stage, monkeypatch
 
 async def test_post_github_failure_is_retryable_502(client, stage, monkeypatch):
     stub = _patch_github(monkeypatch)
-    headers = _auth("kc-dev-a")
+    headers = _auth("kc-dev-a", ("REVIEWER",))
     stub.error = ReviewPostError(422, "Validation Failed: bad sha")
 
     resp = await client.post(f"{_REVIEWS}/{stage.a.review.id}/post", headers=headers)
@@ -769,7 +789,7 @@ async def test_post_github_network_error_is_502(client, stage, monkeypatch):
     stub.error = httpx.ConnectError("connection refused")
 
     resp = await client.post(
-        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a")
+        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a", ("REVIEWER",))
     )
     assert resp.status_code == 502
     assert "nothing was posted" in resp.json()["detail"]
@@ -783,7 +803,7 @@ async def test_post_auto_mode_is_409(client, stage, db, monkeypatch):
     await db.commit()
 
     resp = await client.post(
-        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a")
+        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a", ("REVIEWER",))
     )
     assert resp.status_code == 409
     assert "not staged" in resp.json()["detail"]
@@ -796,7 +816,7 @@ async def test_post_not_ready_is_409(client, stage, db, monkeypatch):
     await db.commit()
 
     resp = await client.post(
-        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a")
+        f"{_REVIEWS}/{stage.a.review.id}/post", headers=_auth("kc-dev-a", ("REVIEWER",))
     )
     assert resp.status_code == 409
     assert "not ready to post" in resp.json()["detail"]

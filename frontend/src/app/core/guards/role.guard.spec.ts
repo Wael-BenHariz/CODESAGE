@@ -8,58 +8,47 @@ import {
 import { KeycloakService } from 'keycloak-angular';
 import { of, throwError } from 'rxjs';
 
-import {
-  ADMIN_ROLES,
-  ANY_ROLE,
-  RoleGuard,
-  WRITE_ROLES,
-  deriveRole,
-  isAdminRoute,
-  navVisibility
-} from './role.guard';
+import { RoleGuard, deriveRole, navVisibility } from './role.guard';
 import { OrgSettingsService } from '../services/org-settings.service';
 import { AuthService } from '../services/auth.service';
 import { routes } from '../../app.routes';
 
-describe('role lists', () => {
-  it('exposes the four-role vocabulary plus the NONE read sentinel', () => {
-    expect(ANY_ROLE).toEqual(['DEVELOPER', 'REVIEWER', 'ORG_ADMIN', 'PLATFORM_ADMIN', 'NONE']);
-    expect(WRITE_ROLES).toEqual(['DEVELOPER', 'REVIEWER', 'ORG_ADMIN', 'PLATFORM_ADMIN']);
-    expect(ADMIN_ROLES).toEqual(['ORG_ADMIN', 'PLATFORM_ADMIN']);
-  });
+/** Every capability a route may declare (AppCapability). */
+const CAPABILITIES = ['read', 'write', 'validate', 'org:settings', 'platform'] as const;
 
-  it('keeps NONE readable but never writable or admin', () => {
-    expect(ANY_ROLE).toContain('NONE');
-    expect(WRITE_ROLES).not.toContain('NONE');
-    expect(ADMIN_ROLES).not.toContain('NONE');
-  });
-
-  it('assigns role lists to every guarded route', () => {
+describe('route capability declarations', () => {
+  it('assigns capability lists to every guarded route', () => {
     const guarded = routes.filter(route => route.canActivate?.length);
     expect(guarded.length).toBeGreaterThan(0);
     for (const route of guarded) {
-      const roles = route.data?.['roles'] as string[] | undefined;
-      expect(roles).toBeDefined();
-      // Every declared role must exist in the vocabulary the guard derives.
-      expect((roles ?? []).every(role => ANY_ROLE.includes(role))).toBeTrue();
+      const capabilities = route.data?.['capabilities'] as string[] | undefined;
+      expect(capabilities).toBeDefined();
+      // Every declared capability must be one the guard knows how to check.
+      expect((capabilities ?? []).every(cap => CAPABILITIES.includes(cap as never))).toBeTrue();
+      expect((capabilities ?? []).length).toBeGreaterThan(0);
     }
     const byPath = (path: string) => routes.find(route => route.path === path);
-    expect(byPath('dashboard')?.data?.['roles']).toBe(WRITE_ROLES);
-    expect(byPath('settings')?.data?.['roles']).toBe(WRITE_ROLES);
-    expect(byPath('settings/org')?.data?.['roles']).toBe(ADMIN_ROLES);
-    expect(byPath('repositories')?.data?.['roles']).toBe(ANY_ROLE);
-    expect(byPath('repositories/:owner/:repo')?.data?.['roles']).toBe(ANY_ROLE);
-    expect(byPath('repositories/:owner/:repo/pulls')?.data?.['roles']).toBe(ANY_ROLE);
-    expect(byPath('repositories/:owner/:repo/pulls/:number')?.data?.['roles']).toBe(ANY_ROLE);
+    expect(byPath('dashboard')?.data?.['capabilities']).toEqual(['write']);
+    expect(byPath('settings')?.data?.['capabilities']).toEqual(['write']);
+    expect(byPath('settings/org')?.data?.['capabilities']).toEqual(['org:settings']);
+    expect(byPath('platform')?.data?.['capabilities']).toEqual(['platform']);
+    expect(byPath('repositories')?.data?.['capabilities']).toEqual(['read']);
+    expect(byPath('repositories/:owner/:repo')?.data?.['capabilities']).toEqual(['read']);
+    expect(byPath('repositories/:owner/:repo/pulls')?.data?.['capabilities']).toEqual(['read']);
+    expect(byPath('repositories/:owner/:repo/pulls/:number')?.data?.['capabilities']).toEqual([
+      'read'
+    ]);
   });
 
-  it('recognizes exactly the ADMIN_ROLES list as elevation-eligible', () => {
-    expect(isAdminRoute(ADMIN_ROLES)).toBeTrue();
-    expect(isAdminRoute([...ADMIN_ROLES])).toBeTrue();
-    expect(isAdminRoute(WRITE_ROLES)).toBeFalse();
-    expect(isAdminRoute(ANY_ROLE)).toBeFalse();
-    expect(isAdminRoute(['ORG_ADMIN'])).toBeFalse();
-    expect(isAdminRoute([])).toBeFalse();
+  it('keeps platform routes strictly platform-gated (never org-elevated)', () => {
+    const byPath = (path: string) => routes.find(route => route.path === path);
+    // /platform is THE gated platform entry (console layout, own shell, no
+    // org elevation); /platform-admin is only a legacy redirect into it.
+    const platform = byPath('platform');
+    expect(platform?.data?.['capabilities']).toEqual(['platform']);
+    const legacy = byPath('platform-admin');
+    expect(legacy?.redirectTo).toBe('platform');
+    expect(legacy?.canActivate).toBeUndefined();
   });
 });
 
@@ -75,56 +64,45 @@ describe('deriveRole', () => {
     expect(deriveRole(['GUEST', 'SUPER_ADMIN', 'DEVELOPER'])).toBe('PLATFORM_ADMIN');
   });
 
-  it('lets the explicit NONE sentinel (or legacy GUEST) outrank role grants', () => {
-    // Precedence: PLATFORM_ADMIN > NONE > ORG_ADMIN > REVIEWER > DEVELOPER —
-    // an explicit legacy read-only downgrade is honored (fail-closed).
-    expect(deriveRole(['ORG_ADMIN', 'REVIEWER', 'DEVELOPER', 'NONE'])).toBe('NONE');
-    expect(deriveRole(['DEVELOPER', 'GUEST'])).toBe('NONE');
-    expect(deriveRole(['guest'])).toBe('NONE');
-    expect(deriveRole(['GUEST'], true)).toBe('NONE');
-  });
-
-  it('applies the ladder ORG_ADMIN > REVIEWER > DEVELOPER', () => {
+  it('applies the ladder ORG_ADMIN > REVIEWER > DEVELOPER > NONE', () => {
+    // Precedence fix: NONE is the LOWEST rank — an explicit legacy read-only
+    // claim no longer outranks a real role grant (target design §2.2).
     expect(deriveRole(['DEVELOPER', 'REVIEWER', 'ORG_ADMIN'])).toBe('ORG_ADMIN');
     expect(deriveRole(['DEVELOPER', 'REVIEWER'])).toBe('REVIEWER');
     expect(deriveRole(['DEVELOPER'])).toBe('DEVELOPER');
     expect(deriveRole(['DEVELOPER'], true)).toBe('DEVELOPER');
+    expect(deriveRole(['ORG_ADMIN', 'REVIEWER', 'DEVELOPER', 'NONE'])).toBe('ORG_ADMIN');
+    expect(deriveRole(['DEVELOPER', 'GUEST'])).toBe('DEVELOPER');
+    expect(deriveRole(['guest'])).toBe('NONE');
+    expect(deriveRole(['GUEST'], true)).toBe('NONE');
   });
 
-  it('falls back to NONE for anything unrecognized when not GitHub-brokered', () => {
+  it('falls back to NONE for anything unrecognized (non-brokered)', () => {
     // Fail-closed: unknown role names, default realm roles and an empty list
-    // all land on the read-only sentinel when the session did NOT go through
-    // the GitHub broker.
+    // all land on the read-only sentinel for a session WITHOUT GitHub
+    // identity claims (the F1 temporary DEVELOPER fallback was removed —
+    // no recognized claim means no write access).
     expect(deriveRole(['some-other-realm-role'])).toBe('NONE');
     expect(deriveRole(['default-roles-codesage-realm'])).toBe('NONE');
     expect(deriveRole([])).toBe('NONE');
   });
 
-  it('falls back to DEVELOPER for a GitHub-brokered session and warns (F1)', () => {
-    // TEMPORARY (F1): mirrors backend derive_role(via_github=True) — a token
-    // carrying the GitHub identity claims with only default realm roles is a
-    // developer, and every use logs the structured fallback warning.
-    const warn = spyOn(console, 'warn');
-    expect(deriveRole(['default-roles-codesage-realm'], true)).toBe('DEVELOPER');
-    expect(deriveRole([], true)).toBe('DEVELOPER');
-    expect(deriveRole(['some-other-realm-role'], true)).toBe('DEVELOPER');
-    expect(warn).toHaveBeenCalledTimes(3);
-    const message = warn.calls.mostRecent().args[0] as string;
-    expect(message).toContain('role_fallback_broker_developer');
-    expect(message).toContain('subject=unknown');
-    expect(message).toContain('derived=DEVELOPER');
+  it('gives a GitHub-brokered session with no recognized claim ORG_ADMIN (signup default)', () => {
+    // Mirrors the backend: viaGitHub + nothing recognized/legacy claimed
+    // → ORG_ADMIN (the account-creation default for a GitHub-brokered
+    // signup — no explicit realm role is needed to start as ORG_ADMIN).
+    // Any explicit claim outranks the default (GUEST stays NONE).
+    expect(deriveRole([], true)).toBe('ORG_ADMIN');
+    expect(deriveRole(['default-roles-codesage-realm'], true)).toBe('ORG_ADMIN');
+    expect(deriveRole(['some-other-realm-role'], true)).toBe('ORG_ADMIN');
+    expect(deriveRole(['GUEST'], true)).toBe('NONE');
+    expect(deriveRole(['DEVELOPER'], true)).toBe('DEVELOPER');
   });
 
-  it('reports the subject in the fallback warning when one is provided', () => {
+  it('never warns — derivation is pure (the backend logs its own fallback)', () => {
     const warn = spyOn(console, 'warn');
     deriveRole([], true, 'octocat');
-    expect(warn.calls.mostRecent().args[0]).toContain('subject=octocat');
-  });
-
-  it('never warns when an explicit role matched', () => {
-    const warn = spyOn(console, 'warn');
     deriveRole(['DEVELOPER'], true);
-    deriveRole(['GUEST'], true);
     deriveRole(['PLATFORM_ADMIN']);
     expect(warn).not.toHaveBeenCalled();
   });
@@ -218,56 +196,84 @@ describe('RoleGuard', () => {
     expect(result).toEqual(router.parseUrl('/login?returnUrl=/settings'));
   });
 
-  it('activates a role-less route for any authenticated user', async () => {
+  it('activates a capability-less route for any authenticated user', async () => {
     configure(['NONE']);
     expect(await guard.canActivate(route(), state('/repositories'))).toBeTrue();
   });
 
-  it('allows NONE on a read route (ANY_ROLE)', async () => {
+  it('allows NONE on a read route', async () => {
     configure(['NONE']);
-    expect(await guard.canActivate(route({ roles: ANY_ROLE }), state('/repositories'))).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['read'] }), state('/repositories'))
+    ).toBeTrue();
   });
 
   it('allows DEVELOPER on a write-protected route', async () => {
     configure(['DEVELOPER']);
-    expect(await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'))).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'))
+    ).toBeTrue();
   });
 
   it('allows REVIEWER on a write-protected route (require_developer includes it)', async () => {
     configure(['REVIEWER']);
-    expect(await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'))).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'))
+    ).toBeTrue();
   });
 
-  it('allows ORG_ADMIN on write and admin routes', async () => {
+  it('allows ORG_ADMIN on write and org-settings routes', async () => {
     configure(['ORG_ADMIN']);
-    expect(await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'))).toBeTrue();
-    expect(await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings'))).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'))
+    ).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['org:settings'] }), state('/settings'))
+    ).toBeTrue();
   });
 
-  it('allows PLATFORM_ADMIN on write and admin routes', async () => {
+  it('allows PLATFORM_ADMIN on write, org-settings and platform routes', async () => {
     configure(['PLATFORM_ADMIN']);
-    expect(await guard.canActivate(route({ roles: WRITE_ROLES }), state('/settings'))).toBeTrue();
-    expect(await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings'))).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/settings'))
+    ).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['org:settings'] }), state('/settings'))
+    ).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['platform'] }), state('/platform'))
+    ).toBeTrue();
   });
 
   it('allows a legacy SUPER_ADMIN token everywhere (compat → PLATFORM_ADMIN)', async () => {
     configure(['SUPER_ADMIN']);
-    expect(await guard.canActivate(route({ roles: WRITE_ROLES }), state('/settings'))).toBeTrue();
-    expect(await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings'))).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/settings'))
+    ).toBeTrue();
+    expect(
+      await guard.canActivate(route({ capabilities: ['platform'] }), state('/platform'))
+    ).toBeTrue();
   });
 
   it('bounces NONE off a write-protected route to the forbidden page', async () => {
     configure(['NONE']);
-    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
 
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
-  it('bounces a session carrying only legacy GUEST + DEVELOPER (compat → NONE)', async () => {
-    // The compat map turns GUEST into NONE, which outranks DEVELOPER — an
-    // explicit read-only downgrade always wins.
+  it('lets DEVELOPER win over a legacy GUEST claim (compat → NONE, lowest rank)', async () => {
+    // Precedence fix: the compat map turns GUEST into NONE, which is now the
+    // LOWEST rank — a real role grant outranks an explicit read-only claim.
     configure(['GUEST', 'DEVELOPER']);
-    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'))
+    ).toBeTrue();
+  });
+
+  it('bounces a session carrying only legacy GUEST (compat → NONE)', async () => {
+    configure(['GUEST']);
+    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
 
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
@@ -282,45 +288,46 @@ describe('RoleGuard', () => {
     // authenticated-but-roleless state this scenario needs.
     keycloak.isLoggedIn.and.returnValue(true);
 
-    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
 
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
-  it('allows a GitHub-brokered default-roles session on write routes (F1)', async () => {
-    // Same roleless session as above, but the token carries the GitHub
-    // identity claims (githubId/githubLogin): backend derives DEVELOPER, so
-    // the guard must let it through — and warn, mirroring the backend log.
-    const warn = spyOn(console, 'warn');
+  it('gives a GitHub-brokered default-roles session ORG_ADMIN (signup default)', async () => {
+    // The same roleless session as above, but the token carries the GitHub
+    // identity claims: backend derive_role returns ORG_ADMIN (the
+    // account-creation default for GitHub signups) — so the write route
+    // must open, both sides identical.
     configure([], { githubId: 75458407, githubLogin: 'Wael-BenHariz' });
     keycloak.isLoggedIn.and.returnValue(true);
 
-    expect(await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'))).toBeTrue();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.calls.mostRecent().args[0]).toContain('role_fallback_broker_developer');
+    expect(
+      await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'))
+    ).toBeTrue();
   });
 
   it('still bounces a GitHub session explicitly downgraded to GUEST', async () => {
-    // Explicit GUEST role in the token outranks the GitHub fallback.
+    // Explicit GUEST role in the token maps to NONE — claims outrank the
+    // brokered signup default.
     configure(['GUEST'], { githubId: 75458407 });
-    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
 
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
   // --- org-membership elevation (plan §2: effective = max(JWT, org_members)) --
 
-  it('elevates an org_members ORG_ADMIN row onto admin routes', async () => {
+  it('elevates an org_members ORG_ADMIN row onto the org-settings route', async () => {
     // The Q1 seeding shape: DEVELOPER claim, but the org's only linked
-    // user holds ORG_ADMIN in org_members — the backend PUT guard
-    // computes the same effective role, so the page must be reachable.
+    // user holds ORG_ADMIN in org_members — the backend guard computes
+    // the same effective role, so the page must be reachable.
     configure(['DEVELOPER']);
     orgSvc.listOrgs.and.returnValue(
       of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
     );
 
     expect(
-      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+      await guard.canActivate(route({ capabilities: ['org:settings'] }), state('/settings/org'))
     ).toBeTrue();
   });
 
@@ -330,25 +337,31 @@ describe('RoleGuard', () => {
       of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'DEVELOPER' }])
     );
 
-    const result = await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'));
+    const result = await guard.canActivate(
+      route({ capabilities: ['org:settings'] }),
+      state('/settings/org')
+    );
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
-  it('fails closed when the org lookup errors on an admin route', async () => {
+  it('fails closed when the org lookup errors on the org-settings route', async () => {
     configure(['DEVELOPER']);
     orgSvc.listOrgs.and.returnValue(throwError(() => new Error('network down')));
 
-    const result = await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'));
+    const result = await guard.canActivate(
+      route({ capabilities: ['org:settings'] }),
+      state('/settings/org')
+    );
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
-  it('consults memberships only for admin routes (deny path of WRITE_ROLES)', async () => {
+  it('consults memberships only for org:settings (deny path of write)', async () => {
     configure(['NONE']);
     orgSvc.listOrgs.and.returnValue(
       of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
     );
 
-    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
     expect(result).toEqual(router.parseUrl('/forbidden'));
     expect(orgSvc.listOrgs).not.toHaveBeenCalled();
   });
@@ -356,7 +369,7 @@ describe('RoleGuard', () => {
   it('skips the membership lookup when the JWT role already qualifies', async () => {
     configure(['ORG_ADMIN']);
     expect(
-      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+      await guard.canActivate(route({ capabilities: ['org:settings'] }), state('/settings/org'))
     ).toBeTrue();
     expect(orgSvc.listOrgs).not.toHaveBeenCalled();
   });
@@ -370,7 +383,7 @@ describe('RoleGuard', () => {
     configure(['DEVELOPER'], {}, 'ORG_ADMIN');
 
     expect(
-      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+      await guard.canActivate(route({ capabilities: ['org:settings'] }), state('/settings/org'))
     ).toBeTrue();
     expect(orgSvc.listOrgs).not.toHaveBeenCalled();
   });
@@ -380,7 +393,7 @@ describe('RoleGuard', () => {
     // reporting the read-only sentinel must not reach write routes.
     configure(['DEVELOPER'], {}, 'NONE');
 
-    const result = await guard.canActivate(route({ roles: WRITE_ROLES }), state('/dashboard'));
+    const result = await guard.canActivate(route({ capabilities: ['write'] }), state('/dashboard'));
     expect(result).toEqual(router.parseUrl('/forbidden'));
   });
 
@@ -390,7 +403,22 @@ describe('RoleGuard', () => {
     configure(['ORG_ADMIN']);
 
     expect(
-      await guard.canActivate(route({ roles: ADMIN_ROLES }), state('/settings/org'))
+      await guard.canActivate(route({ capabilities: ['org:settings'] }), state('/settings/org'))
     ).toBeTrue();
+  });
+
+  it('never opens the platform route for a non-platform role', async () => {
+    // org:settings elevation must not leak into platform routes.
+    configure(['DEVELOPER']);
+    orgSvc.listOrgs.and.returnValue(
+      of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
+    );
+
+    const result = await guard.canActivate(
+      route({ capabilities: ['platform'] }),
+      state('/platform')
+    );
+    expect(result).toEqual(router.parseUrl('/forbidden'));
+    expect(orgSvc.listOrgs).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,15 @@ metadata:
     app: repo-tenant-service
 spec:
   replicas: 1
+  # Single-node k3s: requests sit at ~91% of allocatable CPU, so a surge
+  # pod (default rounds 25% of 1 replica up to +1) can never schedule
+  # beside the old one. Terminate first, then start — brief downtime on
+  # the dev node, but every release actually rolls out.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: repo-tenant-service

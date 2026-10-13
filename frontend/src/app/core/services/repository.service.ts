@@ -29,6 +29,9 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000';
  * method for the resolution strategy). This replaces the phantom
  * `GET /repositories/{owner}/{repo}` path of Step 0.
  */
+/** Server-side scope of `GET /repositories?visibility=` (repo-scoped invitations). */
+export type RepositoryVisibility = 'all' | 'personal' | 'organization';
+
 @Injectable({ providedIn: 'root' })
 export class RepositoryService {
   private readonly api = inject(ApiService);
@@ -36,14 +39,39 @@ export class RepositoryService {
   /** Session cache: `owner/repo` (lowercased) → repository UUID. */
   private readonly idCache = new Map<string, string>();
 
-  /** `GET /repositories` — paginated envelope, mapped to `Repository[]`. */
-  getRepositories(params?: { page?: number; per_page?: number }): Observable<Repository[]> {
+  /**
+   * `GET /repositories` — paginated envelope, mapped to `Repository[]`.
+   *
+   * `visibility` selects the server-side collection: `'personal'` = the
+   * caller's own GitHub account's installations, `'organization'` =
+   * repositories shared with the caller by their organizations (explicit
+   * invitation grants + administered orgs). The default `'all'` union is
+   * what `resolveId()` and the dashboard use — granted organization
+   * repositories stay resolvable there, ungranted ones 404. Filtering is
+   * enforced by the backend; the frontend never narrows an unfiltered
+   * response client-side.
+   */
+  getRepositories(params?: {
+    page?: number;
+    per_page?: number;
+    visibility?: RepositoryVisibility;
+  }): Observable<Repository[]> {
     // No params → the identical single-argument call as before (default
     // envelope; keeps existing expectations and the URL clean).
     const request = params
       ? this.api.get<RepositoryListDto>('/repositories', params)
       : this.api.get<RepositoryListDto>('/repositories');
     return request.pipe(map(toRepositoryList));
+  }
+
+  /**
+   * `GET /repositories?visibility=organization` — exactly the repositories
+   * granted to the caller through accepted org invitations (plus the ones
+   * of orgs they administer). One call, up to 100 rows, fresh per visit —
+   * no shared cache with the personal collection.
+   */
+  getOrganizationRepositories(): Observable<Repository[]> {
+    return this.getRepositories({ visibility: 'organization', per_page: 100 });
   }
 
   /**

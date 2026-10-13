@@ -1,0 +1,52 @@
+# Namespace-wide AuthorizationPolicies — the floor of the mesh policy
+# (modelled on faas k8s/07-istio/authorization-policy.yaml).
+#
+# Istio semantics: a workload is "locked" only if at least one
+# AuthorizationPolicy selects it; ALLOW rules across ALL selecting policies
+# are UNIONed, and a selected workload with no matching rule is denied.
+# AuthorizationPolicy is enforced on the SERVER side (inbound) only —
+# outbound calls (GitHub, SonarQube, LLM APIs, DNS) are unaffected.
+
+# 1) Deny-by-default: no selector = selects every workload in codesage,
+#    empty rules = matches nothing -> nothing is allowed until a
+#    workload-specific allow-* file below opens it up.
+#    (worker has no inbound listener; it is covered for completeness.)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-nothing
+  namespace: codesage
+spec: {}
+---
+# 2) CORS preflight: OPTIONS requests never carry an Authorization header,
+#    so they must be allowed before the require-JWT rules apply.
+#    (CORS is answered by FastAPI/app code — the mesh only lets them in.)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-cors-preflight
+  namespace: codesage
+spec:
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            methods:
+              - OPTIONS
+---
+# 3) Istio sidecar metrics: Prometheus (monitoring namespace, NOT injected
+#    -> plaintext source) scrapes POD_IP:15090/stats/prometheus from every
+#    injected pod. Without this rule allow-nothing would hide all Envoy/
+#    workload telemetry — the whole point of this release.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-sidecar-metrics
+  namespace: codesage
+spec:
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            ports:
+              - "15090"

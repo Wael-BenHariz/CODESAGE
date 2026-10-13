@@ -1,0 +1,22 @@
+# Semgrep service — deliberately public (allow-all), because it has ZERO
+# authentication of its own (POST /scan, plan-documented gap).
+#
+# Its only callers are in-cluster: codesage-worker and codesage-backend
+# (app/services/semgrep.py). allow-nothing would deny them — the service
+# has no JWT middleware and cannot present a requestPrincipal, so the only
+# honest options were this allow-all or breaking every review. Chosen:
+# allow-all + PeerAuthentication PERMISSIVE keeps it reachable; hardening
+# (an internal token like repo-tenant's X-Service-Token) is tracked in
+# docs/BACKEND_GAPS_FOR_UI.md scope, not here.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-semgrep
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: semgrep-service
+  action: ALLOW
+  rules:
+    - {} # allow everything for this workload — no authn exists to require

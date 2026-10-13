@@ -71,6 +71,11 @@ spec:
                   key: KEYCLOAK_CLIENT_SECRET
             - name: KC_HEALTH_ENABLED
               value: "true"
+            # KC_METRICS_ENABLED activates the micrometer feature → metrics at
+            # /auth/metrics on port 8080 (OpenMetrics text; jvm_*/process_*).
+            # Scraped by the `keycloak` job in prometheus-scrape-secret.yaml.
+            - name: KC_METRICS_ENABLED
+              value: "true"
           readinessProbe:
             # Realm-endpoint readiness: ready only once the realm is served.
             httpGet:

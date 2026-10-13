@@ -1,0 +1,30 @@
+# redis — allow :6379 only to mTLS-identified callers from `codesage`.
+#
+# The ONLY clients are codesage-backend (redis-py) and codesage-worker
+# (BullMQ consumer) — both injected, so the connection is negotiated as
+# mTLS even under PeerAuthentication PERMISSIVE, and the source namespace
+# is provable from the peer certificate
+# (cluster.local/ns/codesage/sa/default).
+#
+# Unlike postgres there is no plaintext caller to accommodate (no exporter,
+# no migration job touches redis), so identity beats CIDR here: pods from
+# other namespaces cannot reach the queue at all.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: redis-allow-codesage
+  namespace: codesage
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces:
+              - "codesage"
+      to:
+        - operation:
+            ports:
+              - "6379"

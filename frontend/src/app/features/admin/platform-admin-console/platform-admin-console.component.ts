@@ -13,7 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { AuthService } from '../../../core/services/auth.service';
 
-type NavItemId = 'dashboard' | 'users' | 'settings' | 'system' | 'logs' | 'quotas';
+type NavItemId = 'overview' | 'dashboard' | 'users' | 'settings' | 'system' | 'logs' | 'quotas';
 
 interface ConsoleNavItem {
   readonly id: NavItemId;
@@ -52,12 +52,13 @@ export class PlatformAdminConsoleComponent {
   readonly navOpen = signal(false);
 
   readonly navItems: readonly ConsoleNavItem[] = [
-    { id: 'dashboard', link: '/platform-admin', label: 'Dashboard', exact: true },
-    { id: 'users', link: '/platform-admin/users', label: 'Utilisateurs', exact: false },
-    { id: 'settings', link: '/platform-admin/settings', label: 'Paramètres', exact: false },
-    { id: 'system', link: '/platform-admin/system', label: 'État du système', exact: false },
-    { id: 'logs', link: '/platform-admin/logs', label: 'Journaux', exact: false },
-    { id: 'quotas', link: '/platform-admin/quotas', label: 'Quotas & Utilisation', exact: false }
+    { id: 'overview', link: '/platform', label: 'Overview', exact: true },
+    { id: 'dashboard', link: '/platform/dashboard', label: 'Dashboard', exact: false },
+    { id: 'users', link: '/platform/users', label: 'Utilisateurs', exact: false },
+    { id: 'settings', link: '/platform/settings', label: 'Paramètres', exact: false },
+    { id: 'system', link: '/platform/system', label: 'État du système', exact: false },
+    { id: 'logs', link: '/platform/logs', label: 'Journaux', exact: false },
+    { id: 'quotas', link: '/platform/quotas', label: 'Quotas & Utilisation', exact: false }
   ];
 
   readonly login = computed(() => this.auth.currentUser()?.login ?? 'Administrateur');

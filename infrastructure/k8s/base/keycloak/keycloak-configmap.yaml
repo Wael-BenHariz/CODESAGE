@@ -30,7 +30,7 @@ data:
           },
           {
             "name": "ORG_ADMIN",
-            "description": "Administers one organization: org settings, invitations, member roles"
+            "description": "Administers one organization: org settings, invitations, member roles (GitHub-signup default; in-org power comes from the org_members role)"
           },
           {
             "name": "REVIEWER",
@@ -56,27 +56,6 @@ data:
           "path": "/platform-admins",
           "realmRoles": [
             "PLATFORM_ADMIN"
-          ]
-        },
-        {
-          "name": "org-admins",
-          "path": "/org-admins",
-          "realmRoles": [
-            "ORG_ADMIN"
-          ]
-        },
-        {
-          "name": "reviewers",
-          "path": "/reviewers",
-          "realmRoles": [
-            "REVIEWER"
-          ]
-        },
-        {
-          "name": "developers",
-          "path": "/developers",
-          "realmRoles": [
-            "DEVELOPER"
           ]
         },
         {
@@ -159,7 +138,7 @@ data:
               "consentRequired": false,
               "config": {
                 "user.attribute": "githubLogin",
-                "claim.name": "githubLogin",
+                "claim.name": "github_login",
                 "id.token.claim": "true",
                 "access.token.claim": "true",
                 "claim.token.type": "accessToken",
@@ -622,7 +601,7 @@ data:
             }
           ],
           "groups": [
-            "/super-admins"
+            "/platform-admins"
           ],
           "firstName": "Code",
           "lastName": "Sage"

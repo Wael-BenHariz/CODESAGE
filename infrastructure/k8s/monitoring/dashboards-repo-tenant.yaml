@@ -1,0 +1,189 @@
+# Authored dashboard — repo-tenant-service (Spring Boot 4 actuator).
+# Source: prometheus-scrape-secret.yaml job `repo-tenant` →
+# GET /actuator/prometheus on repo-tenant-service:8085 (allowed mesh-wide by
+# AuthorizationPolicy allow-repo-tenant).
+#
+# Metric names follow Micrometer's Prometheus registry defaults for Boot 3/4
+# (http_server_requests_seconds_*, jvm_*, process_*, hikaricp_*). Verify
+# against Prometheus after the first scrape — if Boot 4 emits the
+# `spring_http_server_requests_*` variants instead, adjust the exprs here.
+#
+# Datasource wiring: `${datasource}` template var → kube-prometheus-stack
+# default datasource (name Prometheus, uid prometheus).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-repo-tenant
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  repo-tenant.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": false,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+          "id": 1,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "sum(rate(http_server_requests_seconds_count{job=\"repo-tenant\"}[5m])) by (uri)", "legendFormat": "{{method}} {{uri}}", "refId": "A" }
+          ],
+          "title": "HTTP request rate by URI",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 0 },
+          "id": 2,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "sum(rate(http_server_requests_seconds_count{job=\"repo-tenant\",status=~\"5..\"}[5m])) by (uri)", "legendFormat": "{{uri}}", "refId": "A" },
+            { "expr": "sum(rate(http_server_requests_seconds_count{job=\"repo-tenant\",status=~\"4..\"}[5m])) by (uri)", "legendFormat": "{{uri}}", "refId": "B" }
+          ],
+          "title": "HTTP 5xx / 4xx rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "description": "Mean latency per URI (sum rate / count rate). Spring Boot does not publish *_bucket percentile histograms by default (verified against the live /actuator/prometheus output), so p50/p95 would be empty — enable management.metrics.distribution.percentiles-histogram in repo-tenant config if true percentiles are needed.",
+          "fieldConfig": {
+            "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 0 },
+          "id": 3,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "sum(rate(http_server_requests_seconds_sum{job=\"repo-tenant\"}[5m])) by (uri) / sum(rate(http_server_requests_seconds_count{job=\"repo-tenant\"}[5m])) by (uri)", "legendFormat": "avg {{uri}}", "refId": "A" }
+          ],
+          "title": "HTTP mean latency by URI",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 7 },
+          "id": 4,
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "sum(jvm_memory_used_bytes{job=\"repo-tenant\",area=\"heap\"}) by (id)", "legendFormat": "used {{id}}", "refId": "A" },
+            { "expr": "sum(jvm_memory_max_bytes{job=\"repo-tenant\",area=\"heap\"}) by (id)", "legendFormat": "max {{id}}", "refId": "B" }
+          ],
+          "title": "JVM heap",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "percentunit", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 7 },
+          "id": 5,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
+          "targets": [
+            { "expr": "rate(process_cpu_seconds_total{job=\"repo-tenant\"}[5m])", "legendFormat": "process CPU", "refId": "A" }
+          ],
+          "title": "Process CPU",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "short", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 7 },
+          "id": 6,
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "jvm_threads_live_threads{job=\"repo-tenant\"}", "legendFormat": "live", "refId": "A" },
+            { "expr": "jvm_threads_daemon_threads{job=\"repo-tenant\"}", "legendFormat": "daemon", "refId": "B" }
+          ],
+          "title": "JVM threads",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "short", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+          "id": 7,
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "hikaricp_connections_active{job=\"repo-tenant\"}", "legendFormat": "active", "refId": "A" },
+            { "expr": "hikaricp_connections_idle{job=\"repo-tenant\"}", "legendFormat": "idle", "refId": "B" },
+            { "expr": "hikaricp_connections_pending{job=\"repo-tenant\"}", "legendFormat": "pending", "refId": "C" },
+            { "expr": "hikaricp_connections_max{job=\"repo-tenant\"}", "legendFormat": "max", "refId": "D" }
+          ],
+          "title": "HikariCP connection pool",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
+          "id": 8,
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"repo-tenant\"}[5m])) by (action, cause)", "legendFormat": "{{action}} {{cause}}", "refId": "A" },
+            { "expr": "rate(jvm_gc_memory_promoted_bytes_total{job=\"repo-tenant\"}[5m])", "legendFormat": "promoted B/s", "refId": "B" }
+          ],
+          "title": "GC",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "style": "dark",
+      "tags": ["codesage", "spring-boot"],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "CodeSage / repo-tenant-service",
+      "uid": "codesage-repo-tenant",
+      "version": 1,
+      "weekStart": ""
+    }

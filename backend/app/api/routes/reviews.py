@@ -69,21 +69,48 @@ _UNPROCESSABLE_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 # Review-scoped guards (plan §2 capability model, Step 7):
 #   reads            → org member; PLATFORM_ADMIN may bypass membership (F2)
 #   legacy mutations → member (require_developer stacked for parity) with the
-#                      same read-style bypass (§3 retrofit row)
-#   staged mutations → member + effective ≥ DEVELOPER and NO PLATFORM_ADMIN
-#                      bypass (F2 carve-out: summary edit / dismiss / restore /
-#                      post — a platform admin must be an org member to touch
-#                      a customer's PR)
+#                      same read-style bypass (§3 retrofit row): retry, delete,
+#                      resolve
+#   staged mutations → member + effective ≥ REVIEWER (§2.3: summary edit,
+#                      dismiss/restore, post are REVIEWER+) and NO
+#                      PLATFORM_ADMIN bypass (F2 carve-out: summary edit /
+#                      dismiss / restore / post — a platform admin must be an
+#                      org member to touch a customer's PR)
 _review_reader = require_review_access(ROLE_DEVELOPER, write=False)
 _review_member_write = require_review_access(ROLE_DEVELOPER, write=True)
 _review_writer = require_review_access(
-    ROLE_DEVELOPER, write=True, platform_admin_bypass=False
+    ROLE_REVIEWER, write=True, platform_admin_bypass=False
 )
 # Verdict upsert (Step 9): member + effective >= REVIEWER and NO
 # PLATFORM_ADMIN bypass — validate is in the F2 carve-out list too.
 _review_comment_validator = require_review_access(
     ROLE_REVIEWER, write=True, platform_admin_bypass=False
 )
+
+
+# --- Shared business rules (target design §2.5) ------------------------------
+
+
+def _ensure_actionable(review: Review) -> None:
+    """State gate shared by validation, dismissal, restore, edit and post.
+
+    ``status == "ready_to_post" AND posted_at IS NULL`` — once GitHub has
+    the body every finding action is read-only (409). Reviews outside the
+    parked staged state (processing, failed, auto-mode) are not actionable.
+    """
+    if review.posted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review already posted to GitHub; findings are read-only",
+        )
+    if review.status != "ready_to_post":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Review is not actionable (status={review.status!r}); "
+                "only a staged review ready to post accepts finding actions"
+            ),
+        )
 
 
 @router.get("", response_model=ReviewListResponse)
@@ -462,16 +489,13 @@ async def update_review_summary(
     """
     Edit the staged summary (``reviews.edited_summary``, plan Q3).
 
-    Allowed only while ``posted_at IS NULL`` — once GitHub has the body
-    it is read-only (409). Over-cap payloads are rejected 422 by the
-    schema (``EDITED_SUMMARY_MAX_CHARS``).
+    Allowed only while the review is actionable (§2.5: ``ready_to_post``
+    and ``posted_at IS NULL``) — once GitHub has the body it is read-only
+    (409). Over-cap payloads are rejected 422 by the schema
+    (``EDITED_SUMMARY_MAX_CHARS``).
     """
     review = access.review
-    if review.posted_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Review already posted to GitHub; the summary is read-only",
-        )
+    _ensure_actionable(review)
 
     review.edited_summary = payload.summary
     await db.commit()
@@ -527,7 +551,11 @@ async def dismiss_comment(
     """
     Dismiss a finding: it is excluded from the staged ``## Findings``
     body (plan Q3) but stays in the review for auditability.
+
+    Actionable-state gate only (decisions #12: the self-review rule was
+    dropped with the workspace layer).
     """
+    _ensure_actionable(access.review)
     comment = await _set_comment_dismissed(db, access, comment_id, dismissed=True)
     return ReviewCommentResponse.model_validate(comment)
 
@@ -539,7 +567,13 @@ async def restore_comment(
     db: AsyncSession = Depends(get_db),  # noqa: B008
     access: ReviewAccess = Depends(_review_writer),  # noqa: B008
 ):
-    """Undo a dismissal — the finding is back in the staged Findings body."""
+    """Undo a dismissal — the finding is back in the staged Findings body.
+
+    §2.5: same actionable-state gate as dismiss (restore is listed with the
+    state-checked actions); the self-review rule does not apply — un-hiding
+    a finding never benefits the PR author.
+    """
+    _ensure_actionable(access.review)
     comment = await _set_comment_dismissed(db, access, comment_id, dismissed=False)
     return ReviewCommentResponse.model_validate(comment)
 
@@ -577,6 +611,10 @@ async def validate_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found",
         )
+
+    # Actionable-state gate (decisions #12: self-review rule dropped with
+    # the workspace layer).
+    _ensure_actionable(access.review)
 
     now = datetime.now(timezone.utc)
     stmt = (
@@ -673,6 +711,9 @@ async def post_review_now(
                 "wait for the worker to finish"
             ),
         )
+
+    # Posting is gated by the staged state above only (decisions #12: the
+    # pending-dismissal-request block was dropped with the workspace layer).
 
     try:
         github_review_id = await post_review_to_github(db, review)

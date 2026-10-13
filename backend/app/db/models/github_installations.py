@@ -1,10 +1,10 @@
 """GitHub App installation model."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -73,7 +73,7 @@ class GitHubInstallation(Base):
     )
 
     # Permissions granted to the installation
-    permissions: Mapped[Optional[dict]] = mapped_column(
+    permissions: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
         default=dict,

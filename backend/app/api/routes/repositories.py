@@ -5,10 +5,11 @@ Repository management and configuration endpoints.
 
 import logging
 import secrets
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,8 +17,6 @@ from app.db import get_db
 from app.db.models import (
     GitHubInstallation,
     OAuthToken,
-    Org,
-    OrgMember,
     Repository,
     User,
     WatchedRepo,
@@ -30,14 +29,26 @@ from app.schemas.repository import (
     RepositoryUpdate,
 )
 from app.security.dependencies import get_current_user
-from app.security.roles import ROLE_PLATFORM_ADMIN, require_developer
+from app.security.org_access import OrgAccess, require_repository_access
+from app.security.roles import ROLE_ORG_ADMIN, ROLE_REVIEWER, require_developer
 from app.services import repo_tenant
 from app.services.github import github_service
 from app.services.org_provisioning import provision_installation_org
+from app.services.repository_visibility import (
+    ensure_repository_visible,
+    org_attribution,
+    visible_repositories_condition,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Repository-scoped guards (decisions #12): the repo's ORG role is the
+# effective one — repo config (patch/enable/disable) needs REVIEWER+ in
+# the repo's org, delete needs ORG_ADMIN+; unknown/cross-org → 404.
+_repo_config_writer = require_repository_access(ROLE_REVIEWER, write=True)
+_repo_admin_writer = require_repository_access(ROLE_ORG_ADMIN, write=True)
 
 # Legacy install-state map: state -> the github_id that minted it (None for
 # Keycloak-only users with no GitHub identity).
@@ -75,7 +86,7 @@ class GitHubInstallationSyncResponse(BaseModel):
 
 @router.get("/install-url", response_model=GitHubAppInstallUrl)
 async def get_github_app_install_url(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """Return the GitHub App installation URL for repository access."""
 
@@ -93,8 +104,8 @@ async def sync_github_app_installation(
     state: str | None = Query(
         None, description="Optional installation state returned by GitHub"
     ),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_developer),  # noqa: B008
 ):
     """Sync a real GitHub App installation and its accessible repositories."""
 
@@ -124,8 +135,8 @@ async def sync_github_app_installation(
 
 @router.get("/github", response_model=list[GitHubRepoInfo])
 async def list_github_repos(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """
     List repositories accessible through the user's GitHub App installation.
@@ -283,6 +294,7 @@ async def _upsert_repository(
     installation: GitHubInstallation,
     repo_data: dict,
 ) -> Repository:
+    """Insert-or-update a repository row (bound to its installation)."""
     result = await db.execute(
         select(Repository).where(Repository.github_repo_id == repo_data.get("id"))
     )
@@ -417,8 +429,8 @@ async def _set_repository_enabled(
 )
 async def connect_repository(
     github_repo_id: int = Query(..., description="GitHub repository ID"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_developer),  # noqa: B008
 ):
     """
     Connect a GitHub repository to CodeSage.
@@ -474,44 +486,48 @@ async def connect_repository(
 
 @router.get("", response_model=RepositoryListResponse)
 async def list_repositories(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     enabled: bool | None = Query(None, description="Filter by enabled status"),
     search: str | None = Query(None, description="Search by name"),
+    visibility: Literal["all", "personal", "organization"] = Query(
+        "all",
+        description=(
+            "Scope: all = everything the caller may see (personal + "
+            "organization); personal = the caller's own GitHub account's "
+            "installations; organization = repositories shared with the "
+            "caller by their organizations (grants + administered orgs)."
+        ),
+    ),
 ):
     """
-    List all repositories accessible by the current user.
+    List repositories visible to the current user, split by ``visibility``.
+
+    Read scope (repo-scoped invitations, migrations 017/019):
+
+    * personal — installations owned by the caller's GitHub account;
+    * organization — installations of orgs with a live membership where
+      the caller's org-scoped role is ORG_ADMIN or they hold an explicit
+      ``org_member_repos`` grant (accepted invitations only — a
+      pending/revoked/expired invitation writes nothing). A membership
+      without grants never falls back to the whole org; a grant whose
+      membership row is gone is dead. The global realm role (including
+      the GitHub-signup ORG_ADMIN default) never widens this scope.
+
+    The default ``all`` keeps the union the SPA's owner/name resolution
+    and the dashboard rely on: granted repositories stay resolvable
+    (deep links work), ungranted ones are absent (the nil-UUID 404).
+    Rows carry the installation's org attribution (``org_id``/
+    ``org_name``) — viewer-independent, used by the frontend to split
+    collections and scope the invitation repository picker.
     """
-    # Visibility (plan §2 F3): an installation's repositories are listed for
-    # (a) the GitHub account that owns the installation (the installer) and
-    # (b) members of the org seeded from that installation. Without (b) an
-    # org member who did not install the App — e.g. an invited REVIEWER, whose
-    # github_id never matches account_id — sees an empty list, the SPA's
-    # owner/name resolution dead-ends in a nil-UUID 404, and every deep link
-    # shows "not found". PLATFORM_ADMIN bypasses both branches (F2 read),
-    # mirroring GET /reviews.
     query = select(Repository).join(GitHubInstallation)
     count_query = select(func.count(Repository.id)).join(GitHubInstallation)
 
-    if current_user.role != ROLE_PLATFORM_ADMIN:
-        scope_parts = []
-        if current_user.github_id is not None:
-            scope_parts.append(GitHubInstallation.account_id == current_user.github_id)
-        member_installations = (
-            select(GitHubInstallation.id)
-            .join(Org, Org.installation_id == GitHubInstallation.installation_id)
-            .join(
-                OrgMember,
-                and_(
-                    OrgMember.org_id == Org.id,
-                    OrgMember.user_id == current_user.id,
-                ),
-            )
-        )
-        scope_parts.append(GitHubInstallation.id.in_(member_installations))
-        scope = scope_parts[0] if len(scope_parts) == 1 else or_(*scope_parts)
+    scope = visible_repositories_condition(current_user, visibility)
+    if scope is not None:
         query = query.where(scope)
         count_query = count_query.where(scope)
 
@@ -538,16 +554,22 @@ async def list_repositories(
     result = await db.execute(query)
     repos = result.scalars().all()
     watched = await _watched_state_map(db, current_user.id)
+    attribution = await org_attribution(db, repos)
+
+    def _response(r: Repository) -> RepositoryResponse:
+        org_id, org_name = attribution.get(r.id, (None, None))
+        # Badge truth: watched_repos is the review switch; no watched row
+        # means not watching (disabled) even if the legacy flag is True.
+        return RepositoryResponse.model_validate(r).model_copy(
+            update={
+                "enabled": watched.get(r.github_repo_id, False),
+                "org_id": org_id,
+                "org_name": org_name,
+            }
+        )
 
     return RepositoryListResponse(
-        items=[
-            # Badge truth: watched_repos is the review switch; no watched row
-            # means not watching (disabled) even if the legacy flag is True.
-            RepositoryResponse.model_validate(r).model_copy(
-                update={"enabled": watched.get(r.github_repo_id, False)}
-            )
-            for r in repos
-        ],
+        items=[_response(r) for r in repos],
         total=total,
         page=page,
         per_page=per_page,
@@ -558,11 +580,16 @@ async def list_repositories(
 @router.get("/{repository_id}", response_model=RepositoryResponse)
 async def get_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """
     Get repository by ID.
+
+    Read-scoped like ``GET /repositories`` (uniform 404 outside the
+    caller's visibility — personal, administered org, or explicitly
+    granted): the SPA resolves owner/name through the list, then fetches
+    by UUID; both paths must agree, or a known UUID would bypass grants.
     """
     result = await db.execute(
         select(Repository)
@@ -577,20 +604,30 @@ async def get_repository(
             detail="Repository not found",
         )
 
+    await ensure_repository_visible(db, current_user, repo)
+
     watched = await _watched_state_map(db, current_user.id)
+    org_id, org_name = (await org_attribution(db, [repo])).get(repo.id, (None, None))
     return RepositoryResponse.model_validate(repo).model_copy(
-        update={"enabled": watched.get(repo.github_repo_id, False)}
+        update={
+            "enabled": watched.get(repo.github_repo_id, False),
+            "org_id": org_id,
+            "org_name": org_name,
+        }
     )
 
 
 @router.get("/{repository_id}/detail", response_model=RepositoryDetail)
 async def get_repository_detail(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ):
     """
     Get detailed repository information with stats.
+
+    Read-scoped identically to ``GET /repositories/{id}`` (uniform 404
+    outside the caller's visibility).
     """
     result = await db.execute(
         select(Repository)
@@ -608,6 +645,8 @@ async def get_repository_detail(
             detail="Repository not found",
         )
 
+    await ensure_repository_visible(db, current_user, repo)
+
     # Get review stats - join through PullRequest since Review has pull_request_id FK
     from app.db.models import PullRequest, Review
 
@@ -619,6 +658,7 @@ async def get_repository_detail(
     )
 
     watched = await _watched_state_map(db, current_user.id)
+    org_id, org_name = (await org_attribution(db, [repo])).get(repo.id, (None, None))
     return RepositoryDetail(
         id=str(repo.id),
         installation_id=str(repo.installation_id),
@@ -631,6 +671,8 @@ async def get_repository_detail(
         enabled=watched.get(repo.github_repo_id, False),
         created_at=repo.created_at,
         updated_at=repo.updated_at,
+        org_id=org_id,
+        org_name=org_name,
         settings=RepositorySettings(),
         total_prs=len(repo.pull_requests),
         total_reviews=reviews_count.scalar_one() if reviews_count else 0,
@@ -641,8 +683,9 @@ async def get_repository_detail(
 async def update_repository(
     repository_id: str,
     update_data: RepositoryUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    access: OrgAccess = Depends(_repo_config_writer),  # noqa: B008
 ):
     """
     Update repository configuration.
@@ -681,8 +724,9 @@ async def update_repository(
 @router.post("/{repository_id}/enable", response_model=RepositoryResponse)
 async def enable_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    access: OrgAccess = Depends(_repo_config_writer),  # noqa: B008
 ):
     """Grid toggle: enable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, True, db, current_user)
@@ -691,8 +735,9 @@ async def enable_repository(
 @router.post("/{repository_id}/disable", response_model=RepositoryResponse)
 async def disable_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    access: OrgAccess = Depends(_repo_config_writer),  # noqa: B008
 ):
     """Grid toggle: disable reviews (legacy flag + watched_repos in sync)."""
     return await _set_repository_enabled(repository_id, False, db, current_user)
@@ -701,8 +746,9 @@ async def disable_repository(
 @router.delete("/{repository_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_repository(
     repository_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+    access: OrgAccess = Depends(_repo_admin_writer),  # noqa: B008
 ):
     """
     Delete a repository from CodeSage.

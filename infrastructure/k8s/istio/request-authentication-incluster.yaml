@@ -1,0 +1,21 @@
+# RequestAuthentication — in-cluster issuer, namespace-wide.
+#
+# Second issuer accepted by CodeSage (repo-tenant-service's
+# keycloak.allowed-issuers lists both):
+#   iss = http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm
+# Tokens minted server-to-server against the in-cluster endpoint (KEYCLOAK_URL)
+# authenticate for requestPrincipals just like browser tokens.
+#
+# Multiple RequestAuthentication resources in one namespace are UNIONed,
+# so this file and request-authentication-public.yaml coexist; each jwtRule
+# matches only tokens whose iss equals its `issuer` field.
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt-incluster-issuer
+  namespace: codesage
+spec:
+  jwtRules:
+    - issuer: "http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm"
+      jwksUri: "http://keycloak-service.codesage.svc.cluster.local:8080/auth/realms/codesage-realm/protocol/openid-connect/certs"
+      forwardOriginalToken: true

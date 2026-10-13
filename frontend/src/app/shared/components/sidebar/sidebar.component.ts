@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, ViewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, ViewChild } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AuthContextService } from '../../../core/services/auth-context.service';
@@ -23,6 +23,21 @@ import { AuthContextService } from '../../../core/services/auth-context.service'
 })
 export class SidebarComponent {
   readonly ctx = inject(AuthContextService);
+
+  /**
+   * Organization Repositories is meaningful only for members of at least
+   * one organization (`GET /orgs`) — never derived from a global role
+   * alone (a REVIEWER claim without a membership shares nothing, and
+   * memberships are exactly what invitations grant). Cosmetic: the page
+   * and its data re-authorize server-side.
+   */
+  readonly hasOrg = computed(() => (this.ctx.orgs() ?? []).length > 0);
+
+  constructor() {
+    // Fire-and-forget: the org list is memoized, so this never duplicates
+    // a fetch already kicked off by the org-settings guard.
+    void this.ctx.ensureOrgs().catch(() => undefined);
+  }
 
   @ViewChild('asideEl') private asideEl?: ElementRef<HTMLElement>;
 

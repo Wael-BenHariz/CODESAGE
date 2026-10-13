@@ -2,9 +2,10 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
+from uuid import UUID
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -45,7 +46,7 @@ class Review(Base):
 
     # Pull Request reference
     pull_request_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("pull_requests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -54,7 +55,7 @@ class Review(Base):
 
     # User who triggered the review
     user_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
