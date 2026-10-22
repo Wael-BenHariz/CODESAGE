@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   # secret.yaml is gitignored — first deploy only:
   #   cp secret.example.yaml secret.yaml   (fill INTERNAL_SERVICE_TOKEN)
-  - secret.yaml
+  
   - configmap.yaml
   - serviceaccount.yaml
   - rbac.yaml
