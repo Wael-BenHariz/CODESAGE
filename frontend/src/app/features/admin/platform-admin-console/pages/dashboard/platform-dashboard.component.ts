@@ -10,10 +10,12 @@ interface QuickAction {
 }
 
 /**
- * Platform Administration → Dashboard (static PFE prototype) — `/platform`.
+ * Platform Administration → Dashboard (static PFE prototype) —
+ * `/platform/dashboard`.
  *
  * Every figure comes from the local `mock/` modules: no API call, no
- * backend dependency, the page renders with the backend offline.
+ * backend dependency, the page renders with the backend offline. The
+ * console shell labels it as a prototype.
  */
 @Component({
   selector: 'app-platform-dashboard',
@@ -27,13 +29,13 @@ export class PlatformDashboardComponent {
   readonly week = MOCK_REVIEW_WEEK;
 
   /** Static demo date — never `new Date()` (the whole screen is mock data). */
-  readonly demoDate = 'Jeudi 8 octobre 2026';
+  readonly demoDate = 'Thursday, October 8, 2026';
 
   readonly quickActions: readonly QuickAction[] = [
-    { link: '/platform/users', label: 'Gérer les utilisateurs' },
-    { link: '/platform/logs', label: 'Consulter les journaux' },
-    { link: '/platform/system', label: "Voir l'état du système" },
-    { link: '/platform/quotas', label: 'Gérer les quotas' }
+    { link: '/platform/users', label: 'Manage users' },
+    { link: '/platform/logs', label: 'Browse logs' },
+    { link: '/platform/system', label: 'View system status' },
+    { link: '/platform/quotas', label: 'Manage quotas' }
   ];
 
   /** Max of the week series — bar heights are relative to it. */
@@ -42,11 +44,11 @@ export class PlatformDashboardComponent {
   healthLabel(health: ServiceHealth): string {
     switch (health) {
       case 'operational':
-        return 'Opérationnel';
+        return 'Operational';
       case 'warning':
-        return 'Attention';
+        return 'Warning';
       case 'error':
-        return 'Erreur';
+        return 'Error';
     }
   }
 

@@ -870,6 +870,9 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('investigate-finding')).not.toBeNull(); // plan Step 5 trio
       expect(testid('severity-override')).not.toBeNull();
       expect(testid('validation-note')).not.toBeNull();
+      // Finding management is visually separated from reading: the verdict
+      // group carries its own label (plan Step 6).
+      expect(testid('validation-label')?.textContent).toContain('Review verdict');
     });
 
     it('submits a needs_investigation verdict like the other two (plan Step 5)', () => {
@@ -1240,15 +1243,17 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       fixture.detectChanges();
     }
 
-    it('renders three tabs — Overview active, inactive panels hidden but in the DOM', () => {
+    it('renders four tabs — Overview active, inactive panels hidden but in the DOM', () => {
       createDetail([errComment(), infoComment()]);
 
       expect(testid('tab-overview')?.getAttribute('aria-selected')).toBe('true');
       expect(testid('tab-findings')).not.toBeNull();
       expect(testid('tab-scan')).not.toBeNull();
+      expect(testid('tab-history')).not.toBeNull();
       expect(testid('panel-overview')?.hasAttribute('hidden')).toBeFalse();
       expect(testid('panel-findings')?.hasAttribute('hidden')).toBeTrue();
       expect(testid('panel-scan')?.hasAttribute('hidden')).toBeTrue();
+      expect(testid('panel-history')?.hasAttribute('hidden')).toBeTrue();
     });
 
     it('activates a panel on click and keeps inactive content in the DOM', () => {
@@ -1260,6 +1265,34 @@ describe('ReviewPanelComponent — read-only panel states (plan Step 7b)', () =>
       expect(testid('panel-findings')?.hasAttribute('hidden')).toBeFalse();
       // Hidden ≠ destroyed: the summary stays queryable (DOM-contract tests).
       expect(testid('review-summary')).not.toBeNull();
+    });
+
+    it('History tab lists every past run and marks the current one', () => {
+      const past = summary({
+        id: 'rev-old',
+        status: 'failed',
+        error_message: 'diff too large',
+        created_at: '2026-01-01T00:01:00Z'
+      });
+      const current = summary({ id: 'rev-1', status: 'completed' });
+      pullRequests.getPullRequestReviews.and.returnValue(of([current, past]));
+      reviewApi.getReviewDetail.and.returnValue(
+        of(detail({ status: 'completed' }, [errComment()]))
+      );
+      create();
+
+      const rows = el().querySelectorAll('[data-testid="history-row"]');
+      expect(rows.length).toBe(2);
+      expect(rows[0].textContent).toContain('current');
+      expect(rows[0].querySelector('[data-testid="history-current"]')).not.toBeNull();
+      expect(rows[1].textContent).toContain('failed');
+      expect(rows[1].querySelector('[data-testid="history-error"]')?.textContent).toContain(
+        'diff too large'
+      );
+
+      showTab('history');
+      expect(testid('panel-history')?.hasAttribute('hidden')).toBeFalse();
+      expect(testid('history-list')).not.toBeNull();
     });
 
     it('derives the Overview tiles from the loaded comments only', () => {

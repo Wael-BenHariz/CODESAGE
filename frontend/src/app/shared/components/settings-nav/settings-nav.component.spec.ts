@@ -1,16 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { signal, WritableSignal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
 
 import { SettingsNavComponent } from './settings-nav.component';
-import { AuthService } from '../../../core/services/auth.service';
-import { OrgSettingsService, OrgSummary } from '../../../core/services/org-settings.service';
 
-describe('SettingsNavComponent — settings sub-navigation (Step 8)', () => {
+describe('SettingsNavComponent — personal settings sub-navigation (plan Step 4)', () => {
   let fixture: ComponentFixture<SettingsNavComponent>;
-  let auth: WritableSignal<{ role: string } | null>;
-  let listOrgs: jasmine.Spy;
 
   function create(): void {
     fixture = TestBed.createComponent(SettingsNavComponent);
@@ -21,73 +15,50 @@ describe('SettingsNavComponent — settings sub-navigation (Step 8)', () => {
     return (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="${testid}"]`);
   }
 
-  const membership = (role: string): OrgSummary[] => [
-    { id: 'org-1', name: 'acme', account_type: 'Organization', role }
-  ];
-
   beforeEach(() => {
-    auth = signal<{ role: string } | null>(null);
-    listOrgs = jasmine.createSpy('listOrgs').and.returnValue(of([]));
     TestBed.configureTestingModule({
       imports: [SettingsNavComponent],
-      providers: [
-        provideRouter([]),
-        { provide: AuthService, useValue: { currentUser: auth } },
-        { provide: OrgSettingsService, useValue: { listOrgs } }
-      ]
+      providers: [provideRouter([])]
     });
   });
 
-  it('renders the AI entry for everyone and marks it current', () => {
-    auth.set({ role: 'DEVELOPER' });
+  it('renders exactly the three personal destinations', () => {
     create();
     expect(tab('settings-nav')).not.toBeNull();
-    const ai = tab('settings-nav-ai');
-    expect(ai).not.toBeNull();
-    expect(ai?.getAttribute('aria-current')).toBe('page');
-    expect(tab('settings-nav-organization')).toBeNull();
-    expect(tab('settings-nav-members')).toBeNull();
-    expect(tab('settings-nav-platform')).toBeNull();
+    const profile = tab('settings-nav-profile');
+    expect(profile).not.toBeNull();
+    expect(profile?.getAttribute('href')).toBe('/settings/profile');
+    expect(tab('settings-nav-review-preferences')?.getAttribute('href')).toBe(
+      '/settings/review-preferences'
+    );
+    expect(tab('settings-nav-ai')?.getAttribute('href')).toBe('/settings/ai-model');
   });
 
-  it('adds Organization + Members for an admin membership (effective role)', () => {
-    auth.set({ role: 'DEVELOPER' });
-    listOrgs.and.returnValue(of(membership('ORG_ADMIN')));
-    create();
-    const org = tab('settings-nav-organization');
-    expect(org).not.toBeNull();
-    expect(org?.getAttribute('href')).toBe('/settings/org?view=organization');
-    const members = tab('settings-nav-members');
-    expect(members).not.toBeNull();
-    expect(members?.getAttribute('href')).toBe('/settings/org?view=members');
-    expect(tab('settings-nav-platform')).toBeNull();
-  });
-
-  it('opens the org entries from the JWT alone without asking for orgs', () => {
-    auth.set({ role: 'ORG_ADMIN' });
-    create();
-    expect(tab('settings-nav-organization')).not.toBeNull();
-    expect(tab('settings-nav-members')).not.toBeNull();
-    expect(listOrgs).not.toHaveBeenCalled();
-  });
-
-  it('adds the Platform entry only for PLATFORM_ADMIN and can mark it current', () => {
-    auth.set({ role: 'PLATFORM_ADMIN' });
-    create();
-    expect(tab('settings-nav-platform')).not.toBeNull();
-    expect(tab('settings-nav-ai')?.getAttribute('aria-current')).toBe('page');
-
-    fixture.componentRef.setInput('active', 'platform');
-    fixture.detectChanges();
-    expect(tab('settings-nav-platform')?.getAttribute('aria-current')).toBe('page');
+  it('marks the active destination current and only that one', () => {
+    create(); // default input: 'profile'
+    expect(tab('settings-nav-profile')?.getAttribute('aria-current')).toBe('page');
     expect(tab('settings-nav-ai')?.getAttribute('aria-current')).toBeNull();
+    expect(tab('settings-nav-review-preferences')?.getAttribute('aria-current')).toBeNull();
+
+    fixture.componentRef.setInput('active', 'ai');
+    fixture.detectChanges();
+    expect(tab('settings-nav-ai')?.getAttribute('aria-current')).toBe('page');
+    expect(tab('settings-nav-profile')?.getAttribute('aria-current')).toBeNull();
+
+    fixture.componentRef.setInput('active', 'review-preferences');
+    fixture.detectChanges();
+    expect(tab('settings-nav-review-preferences')?.getAttribute('aria-current')).toBe('page');
   });
 
-  it('fails closed when listing orgs errors', () => {
-    auth.set({ role: 'DEVELOPER' });
-    listOrgs.and.returnValue(throwError(() => new Error('nope')));
+  it('never links organization or platform administration', () => {
+    // The personal settings navigation must stay personal: org settings and
+    // the platform console are separate workspaces with their own navs
+    // (plan Step 4 rule: no org/platform links in the personal settings nav).
     create();
-    expect(tab('settings-nav-ai')).not.toBeNull();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Organization');
+    expect(text).not.toContain('Platform');
+    expect(text).not.toContain('Members');
     expect(tab('settings-nav-organization')).toBeNull();
     expect(tab('settings-nav-members')).toBeNull();
     expect(tab('settings-nav-platform')).toBeNull();

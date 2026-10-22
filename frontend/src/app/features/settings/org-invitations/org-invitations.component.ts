@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { Component, OnInit, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiError } from '../../../core/services/api.service';
@@ -67,17 +67,48 @@ export class OrgInvitationsComponent implements OnInit {
   readonly repos = signal<Repository[]>([]);
   readonly reposLoading = signal(false);
   readonly reposError = signal<string | null>(null);
+  /** Set once the picker load was requested — keeps it to ONE request. */
+  readonly reposRequested = signal(false);
   /** The ONE role chosen above applies to every id in here. */
   readonly repositoryIds = signal<string[]>([]);
 
   readonly revokingId = signal<string | null>(null);
   readonly revokeError = signal<string | null>(null);
 
+  constructor() {
+    // `canManage` can flip true only AFTER mount: the org-settings page
+    // derives it from its own settings payload (`canEdit('org')` requires
+    // `org !== null`, fetched via GET /orgs/{id}/settings), which arrives
+    // after this child has already run ngOnInit — a direct visit to
+    // ?view=members deterministically loses that race (live bug: the false
+    // "No repositories connected yet — invitations stay org-only." note on
+    // an org with 35 connected repositories). The ngOnInit check alone
+    // would skip loadRepos() for good, so re-check on every change; the
+    // flag keeps the request at most once.
+    effect(
+      () => {
+        if (this.canManage()) {
+          this.requestRepos();
+        }
+      },
+      // requestRepos() flips the once-flag and loadRepos() writes the
+      // loading/error signals — writes inside an effect need this opt-in.
+      { allowSignalWrites: true }
+    );
+  }
+
   ngOnInit(): void {
     this.load();
-    if (this.canManage()) {
-      this.loadRepos();
+    this.requestRepos();
+  }
+
+  /** Fetch the repo picker exactly once, and only for managers. */
+  private requestRepos(): void {
+    if (!this.canManage() || this.reposRequested()) {
+      return;
     }
+    this.reposRequested.set(true);
+    this.loadRepos();
   }
 
   load(): void {

@@ -33,7 +33,10 @@ would remove the documented workarounds if closed. Screens inventory:
 - **What exists today:** `PATCH /users/me` and `DELETE /users/me` (self only).
   `GET /users` + `GET /users/{id}` are PLATFORM_ADMIN reads; there is no
   cross-user update, role-assign, activate or suspend route.
-- **UI built instead:** read-only user table for PLATFORM_ADMIN.
+- **UI built instead:** read-only user table for PLATFORM_ADMIN. The personal
+  profile screen (`/settings/profile`) *does* use `PATCH /users/me` — for the
+  self-editable `name`/`email` only; identity fields (login, GitHub id,
+  avatar) render read-only with an explanation.
 
 ## 3. Per-org metrics — dashboard
 
@@ -50,15 +53,18 @@ would remove the documented workarounds if closed. Screens inventory:
 
 ## 4. Review-prefs / email-notification toggles (settings page)
 
-- **Wanted by:** existing UI checkboxes on `features/settings` (auto-review,
-  security scans, performance checks, email notifications).
+- **Wanted by:** the personal review-preferences screen
+  (`/settings/review-preferences`: auto-review, security scans, performance
+  checks, email notifications).
 - **What exists today:** nothing — `review_triggers`, `min_severity_to_post`
   etc. are **org** settings (`/orgs/{id}/settings`), and there is no email
   notification preference anywhere.
-- **Shipped (plan Step 8):** the checkboxes render **disabled** with an
-  explicit "Not available yet — …nothing here is saved." label (per section:
-  preferences / email) and their decorative `checked` state was removed;
-  nothing pretends to save.
+- **Shipped (plan Step 8 / role-based UX split):** the controls render
+  **disabled** on their own dedicated screen with an explicit "Not available
+  yet — …nothing here is saved." label (per section: preferences / email) and
+  their decorative `checked` state was removed; the screen additionally points
+  at Organization Settings for the org-wide policy that *is* configurable.
+  Nothing pretends to save.
 
 ## 5. Pull-request lookup by number — `GET /pull-requests/repository/{id}?number=`
 

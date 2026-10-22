@@ -1,0 +1,21 @@
+# Ruff configuration — CodeSage backend.
+#
+# CI installs the *latest* ruff (unpinned), whose default rule set has grown
+# to include I/UP/B/RUF/TRY/PIE — style rules this codebase predates (124
+# violations). Pin an explicit, stable selection so the lint gate behaves
+# deterministically no matter which ruff version CI pulls:
+#
+#   E4/E7/E9/F = pycodestyle "errors" + pyflakes (ruff's long-standing
+#   classic default): real problems only, no style churn next to black.
+target-version = "py311"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# tests/conftest.py must set env vars BEFORE any `app.*` import (documented
+# in AGENTS.md — keep that ordering), so E402 is intentional there.
+# alembic/versions/* are append-only, template-generated migrations; their
+# import placement is not worth churning historical files for.
+"tests/**" = ["E402"]
+"alembic/versions/*" = ["E402"]

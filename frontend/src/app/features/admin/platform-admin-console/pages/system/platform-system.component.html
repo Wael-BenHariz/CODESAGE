@@ -1,9 +1,10 @@
 <div class="pa-page" data-testid="pa-system">
   <header class="pa-page-header">
     <div>
-      <h1 class="pa-page-title">État du système</h1>
+      <h1 class="pa-page-title">System Monitoring</h1>
       <p class="pa-page-subtitle">
-        Vue statique des services, ressources et de la disponibilité de CODESAGE.
+        A static view of services, resources and availability. — prototype data, nothing is
+        measured.
       </p>
     </div>
   </header>
@@ -11,7 +12,7 @@
   <section class="pa-panel" aria-labelledby="pa-services-title">
     <div class="pa-panel-head">
       <h2 class="pa-panel-title" id="pa-services-title">Services</h2>
-      <span class="pa-panel-meta">Aperçu statique</span>
+      <span class="pa-panel-meta">Static snapshot</span>
     </div>
     <div class="pa-health-grid">
       @for (service of services; track service.id) {
@@ -32,8 +33,8 @@
 
   <section class="pa-panel" aria-labelledby="pa-resources-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-resources-title">Ressources</h2>
-      <span class="pa-panel-meta">Valeurs de démonstration</span>
+      <h2 class="pa-panel-title" id="pa-resources-title">Resources</h2>
+      <span class="pa-panel-meta">Demo values</span>
     </div>
     <div class="pa-quota-list">
       @for (resource of resources; track resource.id) {
@@ -64,7 +65,7 @@
 
   <section class="pa-panel" aria-labelledby="pa-uptime-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-uptime-title">Disponibilité</h2>
+      <h2 class="pa-panel-title" id="pa-uptime-title">Availability</h2>
     </div>
     <div class="pa-info-grid">
       <div class="pa-info-box">
@@ -72,7 +73,7 @@
         <span class="pa-info-value" data-testid="pa-uptime">{{ uptime.uptime }}</span>
       </div>
       <div class="pa-info-box">
-        <span class="pa-info-label">Dernier redémarrage</span>
+        <span class="pa-info-label">Last restart</span>
         <span class="pa-info-value" data-testid="pa-last-restart">{{ uptime.lastRestart }}</span>
       </div>
     </div>
@@ -80,8 +81,8 @@
 
   <section class="pa-panel" aria-labelledby="pa-checks-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-checks-title">Dernières vérifications</h2>
-      <span class="pa-panel-meta">Aperçu statique</span>
+      <h2 class="pa-panel-title" id="pa-checks-title">Recent checks</h2>
+      <span class="pa-panel-meta">Static snapshot</span>
     </div>
     <div class="pa-check-list">
       @for (service of services; track service.id) {

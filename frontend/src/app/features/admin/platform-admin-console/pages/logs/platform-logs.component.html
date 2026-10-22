@@ -1,0 +1,196 @@
+<div class="pa-page" data-testid="pa-logs">
+  <header class="pa-page-header">
+    <div>
+      <h1 class="pa-page-title">System Logs</h1>
+      <p class="pa-page-subtitle">Browse platform events and errors. — demo logs, local only.</p>
+    </div>
+  </header>
+
+  <section class="pa-panel" aria-label="Logs">
+    <div class="pa-toolbar">
+      <label class="pa-search">
+        <span class="pa-search-icon" aria-hidden="true">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          >
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5 14 14" />
+          </svg>
+        </span>
+        <span class="pa-sr">Search logs</span>
+        <input
+          type="search"
+          class="input"
+          placeholder="Search logs..."
+          [ngModel]="search()"
+          (ngModelChange)="search.set($event)"
+          data-testid="pa-logs-search"
+        />
+      </label>
+
+      <label class="pa-field">
+        <span class="pa-field-label">Level</span>
+        <select
+          class="input"
+          [ngModel]="levelFilter()"
+          (ngModelChange)="levelFilter.set($event)"
+          data-testid="pa-logs-level-filter"
+        >
+          <option value="">All</option>
+          @for (level of levels; track level) {
+            <option [value]="level">{{ level }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="pa-field">
+        <span class="pa-field-label">Service</span>
+        <select
+          class="input"
+          [ngModel]="serviceFilter()"
+          (ngModelChange)="serviceFilter.set($event)"
+          data-testid="pa-logs-service-filter"
+        >
+          <option value="">All</option>
+          @for (service of services; track service) {
+            <option [value]="service">{{ service }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="pa-field">
+        <span class="pa-field-label">Date</span>
+        <select
+          class="input"
+          [ngModel]="dateFilter()"
+          (ngModelChange)="dateFilter.set($event)"
+          data-testid="pa-logs-date-filter"
+        >
+          <option value="">All</option>
+          @for (date of dates; track date) {
+            <option [value]="date">{{ date }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    @if (filtered().length === 0) {
+      <app-empty-state
+        title="No logs found"
+        message="No entry matches the current search and filters."
+        testid="pa-logs-empty"
+      />
+    } @else {
+      <div class="pa-table-wrap">
+        <table class="pa-table" data-testid="pa-logs-table">
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Time</th>
+              <th scope="col">Level</th>
+              <th scope="col">Service</th>
+              <th scope="col">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (entry of filtered(); track entry.id) {
+              <tr
+                class="pa-log-row"
+                tabindex="0"
+                [attr.data-testid]="'pa-log-row-' + entry.id"
+                (click)="openLog(entry)"
+                (keydown.enter)="openLog(entry)"
+              >
+                <td class="pa-mono-cell">{{ entry.date }}</td>
+                <td class="pa-mono-cell">{{ entry.time }}</td>
+                <td>
+                  <span
+                    class="pa-level-badge"
+                    [class.info]="entry.level === 'INFO'"
+                    [class.warning]="entry.level === 'WARNING'"
+                    [class.error]="entry.level === 'ERROR'"
+                    [class.debug]="entry.level === 'DEBUG'"
+                  >
+                    {{ entry.level }}
+                  </span>
+                </td>
+                <td>{{ entry.service }}</td>
+                <td>{{ entry.message }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="pa-note pa-table-note">
+        {{ filtered().length }} entries — click a row for details.
+      </p>
+    }
+  </section>
+
+  @if (selected(); as entry) {
+    <div
+      class="pa-modal-overlay"
+      tabindex="-1"
+      (click)="onOverlayClick($event)"
+      (keyup.escape)="closeLog()"
+    >
+      <div
+        class="pa-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pa-log-modal-title"
+        data-testid="pa-log-modal"
+      >
+        <div class="pa-modal-header">
+          <h2 class="pa-modal-title" id="pa-log-modal-title">Log details</h2>
+          <button type="button" class="pa-close" aria-label="Close" (click)="closeLog()">×</button>
+        </div>
+        <div class="pa-modal-body">
+          <dl class="pa-deflist">
+            <div class="pa-def-row">
+              <dt>Timestamp</dt>
+              <dd>{{ timestamp(entry) }}</dd>
+            </div>
+            <div class="pa-def-row">
+              <dt>Level</dt>
+              <dd>
+                <span
+                  class="pa-level-badge"
+                  [class.info]="entry.level === 'INFO'"
+                  [class.warning]="entry.level === 'WARNING'"
+                  [class.error]="entry.level === 'ERROR'"
+                  [class.debug]="entry.level === 'DEBUG'"
+                >
+                  {{ entry.level }}
+                </span>
+              </dd>
+            </div>
+            <div class="pa-def-row">
+              <dt>Service</dt>
+              <dd>{{ entry.service }}</dd>
+            </div>
+            <div class="pa-def-row">
+              <dt>Message</dt>
+              <dd>{{ entry.message }}</dd>
+            </div>
+            <div class="pa-def-row">
+              <dt>Request ID</dt>
+              <dd>{{ entry.requestId }}</dd>
+            </div>
+          </dl>
+          <span class="pa-field-label">Details</span>
+          <p class="pa-log-details">{{ entry.details }}</p>
+        </div>
+        <div class="pa-modal-actions">
+          <button type="button" class="btn btn-secondary" (click)="closeLog()">Close</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

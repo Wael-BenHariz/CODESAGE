@@ -8,9 +8,9 @@ import { AuthService } from '../../../core/services/auth.service';
 import { AuthContextService } from '../../../core/services/auth-context.service';
 import { OrgInvitationsComponent } from '../org-invitations/org-invitations.component';
 import {
-  SettingsNavComponent,
-  SettingsNavTab
-} from '../../../shared/components/settings-nav/settings-nav.component';
+  OrgWorkspaceNavComponent,
+  OrgWorkspaceTab
+} from '../../../shared/components/org-workspace-nav/org-workspace-nav.component';
 import {
   AGENT_DOMAINS,
   CeilingPatch,
@@ -32,20 +32,24 @@ import {
 } from '../../../core/services/org-settings.service';
 
 /**
- * Org + platform settings page (Step 5; walkthrough structure Step 8, plan
- * §4.4).
+ * Organization administration workspace (Step 5 / plan §4.4) — route
+ * `/settings/org`, its own area with its own navigation (Overview ·
+ * Settings · Members & invitations, selected by `?view=`).
  *
- * Three sections share one field renderer: `org` (the selected org's
- * overrides — grouped into Scanners / AI agents / Limits / Posting / Model),
- * `defaults` and `ceilings` (PLATFORM_ADMIN only). The shared
- * `app-settings-nav` sits on top; `?view=members` swaps the Organization
- * panel for Members & invitations (role explanations + invitations) without a
- * new route. Save semantics follow the backend contract — only dirty fields
- * are sent (absent = keep) and the per-field "Reset to default" button PUTs an
- * explicit `null`. 422 responses render inline next to the offending field.
- * The route guard (ADMIN_ROLES + org-membership elevation) is the gate; the
- * effective role computed here only disables editing — the backend re-checks
- * every request regardless.
+ * Three panels share one field renderer in the Settings view: `org` (the
+ * selected org's overrides — grouped into Scanners / AI agents / Limits /
+ * Posting / Model), `defaults` and `ceilings` (PLATFORM_ADMIN only). Save
+ * semantics follow the backend contract — only dirty fields are sent
+ * (absent = keep) and the per-field "Reset to default" button PUTs an
+ * explicit `null`. 422 responses render inline next to the offending
+ * field. The route guard (ADMIN_ROLES + org-membership elevation) is the
+ * gate; the effective role computed here only disables editing — the
+ * backend re-checks every request regardless.
+ *
+ * The Overview panel is a summary of the SAME real payloads (`GET /orgs` +
+ * `GET /orgs/{id}/settings`) — no invented statistics, no audit trail (the
+ * backend exposes neither; docs/BACKEND_GAPS_FOR_UI.md). Workspaces are
+ * deliberately absent (the workspace layer was removed in v0.6.0).
  */
 type Section = 'org' | 'defaults' | 'ceilings';
 type FieldKind = 'number' | 'boolean' | 'multi' | 'enum' | 'text';
@@ -194,7 +198,7 @@ function errorMessage(err: unknown, fallback: string): string {
 @Component({
   selector: 'app-org-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, OrgInvitationsComponent, SettingsNavComponent],
+  imports: [CommonModule, FormsModule, OrgInvitationsComponent, OrgWorkspaceNavComponent],
   templateUrl: './org-settings.component.html',
   styleUrl: './org-settings.component.scss'
 })
@@ -226,17 +230,32 @@ export class OrgSettingsComponent implements OnInit {
   readonly platformError = signal<string | null>(null);
 
   /** plan §4.4 — in-page panel picked by /settings/org?view= (no new routes). */
-  readonly view = signal<'organization' | 'members'>('organization');
-  readonly navActive = computed<SettingsNavTab>(() =>
-    this.view() === 'members' ? 'members' : 'organization'
+  readonly view = signal<'overview' | 'organization' | 'members'>('organization');
+  readonly navActive = computed<OrgWorkspaceTab>(() =>
+    this.view() === 'members' ? 'members' : this.view() === 'overview' ? 'overview' : 'organization'
   );
+
+  /** Page title of the active panel — the org name lives in the subtitle. */
+  viewTitle(): string {
+    switch (this.view()) {
+      case 'overview':
+        return 'Organization Overview';
+      case 'members':
+        return 'Members & Invitations';
+      default:
+        return 'Organization Settings';
+    }
+  }
 
   ngOnInit(): void {
     this.load();
     // Sub-navigation: the shared nav links carry ?view= — the same component
     // instance is reused across the query change, so subscribe once.
     this.route.queryParamMap.subscribe(params => {
-      this.view.set(params.get('view') === 'members' ? 'members' : 'organization');
+      const requested = params.get('view');
+      this.view.set(
+        requested === 'members' || requested === 'overview' ? requested : 'organization'
+      );
     });
   }
 
@@ -323,6 +342,48 @@ export class OrgSettingsComponent implements OnInit {
     const orgRole = this.selectedOrgRole;
     return effectiveRole(jwtRole, orgRole);
   });
+
+  /** The selected organization as `GET /orgs` reports it (Overview panel). */
+  selectedOrgSummary(): OrgSummary | null {
+    return this.orgs.find(org => org.id === this.selectedOrgId) ?? null;
+  }
+
+  /**
+   * Overview rows — the *effective* (merged) settings of the selected org,
+   * straight from `GET /orgs/{id}/settings`. Plain-language labels, no
+   * aggregation and no invented metrics (the backend has no statistics
+   * endpoint). Plain method (not computed): the org payloads are plain
+   * fields, and the component re-renders through default change detection.
+   */
+  overviewRows(): { label: string; value: string }[] {
+    const org = this.org;
+    if (!org) {
+      return [];
+    }
+    const effective = org.effective;
+    const onOff = (value: boolean) => (value ? 'on' : 'off');
+    return [
+      {
+        label: 'Posting mode',
+        value:
+          effective.postingMode === 'staged'
+            ? 'staged — reviews wait for approval'
+            : 'auto — reviews post immediately'
+      },
+      { label: 'SonarQube analysis', value: onOff(effective.sonarqubeEnabled) },
+      { label: 'Semgrep analysis', value: onOff(effective.semgrepEnabled) },
+      { label: 'AI agents enabled', value: effective.enabledAgents.join(', ') || 'none' },
+      { label: 'Review triggers', value: effective.reviewTriggers.join(', ') || 'none' },
+      { label: 'Min severity to post', value: effective.minSeverityToPost },
+      { label: 'Diff character cap', value: String(effective.diffCharCap) },
+      { label: 'Max findings per agent', value: String(effective.maxFindingsPerAgent) },
+      { label: 'Max concurrent reviews', value: String(effective.maxConcurrentReviews) },
+      {
+        label: 'Organization AI model',
+        value: effective.aiModel ?? 'inherits the platform default'
+      }
+    ];
+  }
 
   sections(): SectionUi[] {
     const list: SectionUi[] = [

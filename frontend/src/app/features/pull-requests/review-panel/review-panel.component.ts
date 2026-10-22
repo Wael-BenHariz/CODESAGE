@@ -18,6 +18,7 @@ import {
   CommentValidation,
   ReviewComment,
   ReviewDetail,
+  ReviewSummary,
   ScanFinding,
   ScanReport,
   ValidationSeverity,
@@ -230,6 +231,9 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
   readonly isTriggering = signal(false);
   readonly triggerError = signal(false);
 
+  /** Every past run of this PR (`GET /pull-requests/{id}/reviews`, newest first). */
+  readonly runHistory = signal<ReviewSummary[]>([]);
+
   // --- Static-analysis report (plan Step 3) ---------------------------------
   /** The review's scan report; null while loading, absent (404) or failed. */
   readonly scanReport = signal<ScanReport | null>(null);
@@ -255,11 +259,12 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
 
   // --- Walkthrough (plan Step 7 / §4.3) --------------------------------------
   /** Active walkthrough tab; inactive panels are `[hidden]` in the DOM. */
-  readonly activeTab = signal<'overview' | 'findings' | 'scan'>('overview');
+  readonly activeTab = signal<'overview' | 'findings' | 'scan' | 'history'>('overview');
   readonly tabDefs: TabDef[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'findings', label: 'Findings' },
-    { id: 'scan', label: 'Static analysis' }
+    { id: 'scan', label: 'Static analysis' },
+    { id: 'history', label: 'History' }
   ];
 
   /** Plain pipeline progress 0–100 (proposal #14: no step names exist). */
@@ -301,7 +306,10 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
     this.summaryDraft.set('');
     this.pullRequests.getPullRequestReviews(this.prId()).subscribe({
       next: reviews => {
-        const latest = reviews[0]; // the endpoint orders created_at desc
+        // The endpoint orders created_at desc — the full list feeds the
+        // History tab, the first row is the review this panel renders.
+        this.runHistory.set(reviews);
+        const latest = reviews[0];
         if (!latest) {
           this.detail.set(null);
           this.state.set('none');
@@ -469,7 +477,7 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
   // --- Walkthrough tabs + findings toolbar (plan §4.3) -----------------------
 
   setTab(id: string): void {
-    this.activeTab.set(id as 'overview' | 'findings' | 'scan');
+    this.activeTab.set(id as 'overview' | 'findings' | 'scan' | 'history');
   }
 
   onFilterChange(kind: 'severity' | 'tool' | 'category' | 'status' | 'search', event: Event): void {
@@ -914,6 +922,48 @@ export class ReviewPanelComponent implements OnInit, OnDestroy {
     return comment.line_number !== null
       ? `${comment.file_path}:${comment.line_number}`
       : comment.file_path;
+  }
+
+  // --- Run history (plan Step 6 / History tab) --------------------------------
+
+  /**
+   * Whether one history row is the run currently rendered above — the
+   * latest row is always the active one (the panel loads reviews[0]).
+   */
+  isCurrentRun(review: ReviewSummary): boolean {
+    return this.detail()?.id === review.id;
+  }
+
+  /** Posted/attribution state chip text for one history row. */
+  runStateLabel(review: ReviewSummary): string {
+    if (review.posted_at) {
+      return 'posted';
+    }
+    if (review.status === 'ready_to_post') {
+      return 'ready to post';
+    }
+    return review.status;
+  }
+
+  /** "4m 12s" for one past run — null while it ran or timestamps are missing. */
+  runDuration(review: ReviewSummary): string | null {
+    if (!review.started_at || !review.completed_at) {
+      return null;
+    }
+    const ms = Date.parse(review.completed_at) - Date.parse(review.started_at);
+    if (!Number.isFinite(ms) || ms < 0) {
+      return null;
+    }
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      const rest = seconds % 60;
+      return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
+    }
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   }
 
   // --- Reviewer validation (Step 10) ----------------------------------------

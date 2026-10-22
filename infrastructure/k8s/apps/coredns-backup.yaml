@@ -1,0 +1,44 @@
+apiVersion: v1
+data:
+  Corefile: |
+    # File managed by k3s. DO NOT EDIT.
+    # See: https://docs.k3s.io/advanced#coredns-custom-configuration-imports
+    .:53 {
+        errors
+        health
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+          pods insecure
+          fallthrough in-addr.arpa ip6.arpa
+        }
+        hosts /etc/coredns/NodeHosts {
+          ttl 60
+          reload 15s
+          fallthrough
+        }
+        prometheus :9153
+        cache 30
+        loop
+        reload
+        loadbalance
+        import /etc/coredns/custom/*.override
+        forward . /etc/resolv.conf
+    }
+    import /etc/coredns/custom/*.server
+  NodeHosts: |
+    10.171.24.246 archlinux
+kind: ConfigMap
+metadata:
+  annotations:
+    objectset.rio.cattle.io/applied: H4sIAAAAAAAA/4yPMU/DMBCF/4p1XdO0SdomWGJALUgIQQcqJpazfWlNknMUm6Cq6n9HHhADKjCe3rvvvXcC7O0LDd46BgljBgkYDAjyBGs3UG1bAgkTcWdbEh0y7skIdRRN4VOx2Yqn7U7cbu536StPxDORFIcQei9nM+O0T6PNuhnCOYHGsgEJa8e13T9iDwl0FPArDpldwGAd+3g69UY6eArpYF2qMYSWIspGBiQXdffBNEz3YwMSYvq3MmaJeLBsrm+McfwngrGL07UbyLD/l933qONP865o6o8+UBeHt6io/XXUAf0BJChNeVXkV1WVZeWiwHlRrVAts3md16uS6nKRL+Z6WUboj3oXC5w/AwAA//+nUJQR5QEAAA
+    objectset.rio.cattle.io/id: ""
+    objectset.rio.cattle.io/owner-gvk: k3s.cattle.io/v1, Kind=Addon
+    objectset.rio.cattle.io/owner-name: coredns
+    objectset.rio.cattle.io/owner-namespace: kube-system
+  creationTimestamp: "2026-09-25T09:17:55Z"
+  labels:
+    objectset.rio.cattle.io/hash: bce283298811743a0386ab510f2f67ef74240c57
+  name: coredns
+  namespace: kube-system
+  resourceVersion: "39459"
+  uid: 9b54a9a1-8487-47e8-bb7e-7fa0f3c53ddb

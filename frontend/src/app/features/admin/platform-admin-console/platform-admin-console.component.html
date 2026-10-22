@@ -142,7 +142,7 @@
           <path d="M6 3H3.5v10H6M7.5 8H14M11.5 5.5 14 8l-2.5 2.5" />
         </svg>
       </span>
-      <span>Déconnexion</span>
+      <span>Log out</span>
     </button>
   </aside>
 
@@ -184,7 +184,10 @@
       <span class="pa-topbar-title">Platform Administration</span>
 
       <div class="pa-topbar-user">
-        <span class="pa-topbar-role">Administrateur</span>
+        <a routerLink="/dashboard" class="pa-back-link" data-testid="pa-back-to-app">
+          ← Back to app
+        </a>
+        <span class="pa-topbar-role">Administrator</span>
         @if (avatarUrl(); as url) {
           <img class="pa-avatar" [src]="url" [alt]="login()" />
         } @else {
@@ -192,6 +195,16 @@
         }
       </div>
     </header>
+
+    @if (prototypePage()) {
+      <!-- Honest prototype labelling (plan Step 7): every screen except the
+           overview renders local mock data — its controls mutate that local
+           copy only and never change the production system. -->
+      <div class="pa-proto-banner" role="note" data-testid="pa-prototype-banner">
+        <strong>Prototype</strong> — this screen uses local sample data. Nothing you change here
+        affects the production system; the live data lives on the Overview page.
+      </div>
+    }
 
     <main id="pa-main" class="pa-main" tabindex="-1">
       <router-outlet />

@@ -51,7 +51,7 @@ describe('PlatformQuotasComponent (static mock data)', () => {
     expect(
       toast
         .toasts()
-        .some((t: { message: string }) => t.message === 'Les quotas ont été mis à jour.')
+        .some((t: { message: string }) => t.message === 'Quotas updated (prototype — local only).')
     ).toBe(true);
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';

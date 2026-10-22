@@ -22,14 +22,15 @@ interface ModalState {
 const PAGE_SIZE = 8;
 
 /**
- * Platform Administration → Utilisateurs (static PFE prototype) —
+ * Platform Administration → Users (static PFE prototype) —
  * `/platform/users`.
  *
  * Fully local: the table starts from `cloneMockUsers()` and search,
  * filters, pagination, role/organisation edits, status toggles and the
  * "add user" form all mutate that in-memory copy only. Toasts give the
  * feedback a real mutation would — no HTTP request is ever made, and a
- * page refresh resets the data (by design).
+ * page refresh resets the data (by design). The console shell labels the
+ * page as a prototype.
  */
 @Component({
   selector: 'app-platform-users',
@@ -228,7 +229,7 @@ export class PlatformUsersComponent {
       list.map(user => (user.id === state.userId ? { ...user, role: nextRole } : user))
     );
     this.closeModal();
-    this.toast.success('Le rôle a été modifié avec succès.');
+    this.toast.success('Role updated successfully.');
   }
 
   saveOrg(): void {
@@ -241,7 +242,7 @@ export class PlatformUsersComponent {
       list.map(user => (user.id === state.userId ? { ...user, organization: nextOrg } : user))
     );
     this.closeModal();
-    this.toast.success("L'organisation a été modifiée avec succès.");
+    this.toast.success('Organization updated successfully.');
   }
 
   toggleStatus(user: MockPlatformUser): void {
@@ -250,9 +251,7 @@ export class PlatformUsersComponent {
       list.map(row => (row.id === user.id ? { ...row, status: nextStatus } : row))
     );
     this.closeMenu();
-    this.toast.success(
-      nextStatus === 'active' ? "L'utilisateur a été activé." : "L'utilisateur a été désactivé."
-    );
+    this.toast.success(nextStatus === 'active' ? 'User activated.' : 'User deactivated.');
   }
 
   addUser(): void {
@@ -273,7 +272,7 @@ export class PlatformUsersComponent {
       }
     ]);
     this.closeModal();
-    this.toast.success("L'utilisateur a été ajouté avec succès.");
+    this.toast.success('User added successfully.');
     // Show the new record even when filters hide the last page.
     this.resetPage();
   }
@@ -281,7 +280,7 @@ export class PlatformUsersComponent {
   // ─── template helpers ────────────────────────────────────────────────────
 
   statusLabel(status: MockPlatformUser['status']): string {
-    return status === 'active' ? 'Actif' : 'Inactif';
+    return status === 'active' ? 'Active' : 'Inactive';
   }
 
   /** Two-letter avatar fallback ("Ahmed Ben Ali" → "AB"). */

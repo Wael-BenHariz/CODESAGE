@@ -113,11 +113,52 @@ export const routes: Routes = [
     data: { capabilities: ['read'] }
   },
   {
+    // Personal settings family (plan Step 4): three dedicated screens —
+    // Profile, Review Preferences (honest "no backend" panel), AI Model —
+    // behind the same `write` capability as before. `/settings` stays as a
+    // compatibility redirect to the primary personal screen (Profile);
+    // every old link site now targets the specific screen it means.
     path: 'settings',
+    redirectTo: 'settings/profile',
+    pathMatch: 'full'
+  },
+  {
+    path: 'settings/profile',
     loadComponent: () =>
-      import('./features/settings/settings.component').then(m => m.SettingsComponent),
+      import('./features/settings/profile/profile.component').then(m => m.ProfileComponent),
     canActivate: [RoleGuard],
     data: { capabilities: ['write'] }
+  },
+  {
+    path: 'settings/review-preferences',
+    loadComponent: () =>
+      import('./features/settings/review-preferences/review-preferences.component').then(
+        m => m.ReviewPreferencesComponent
+      ),
+    canActivate: [RoleGuard],
+    data: { capabilities: ['write'] }
+  },
+  {
+    path: 'settings/ai-model',
+    loadComponent: () =>
+      import('./features/settings/ai-model/ai-model-settings.component').then(
+        m => m.AiModelSettingsComponent
+      ),
+    canActivate: [RoleGuard],
+    data: { capabilities: ['write'] }
+  },
+  {
+    // Cross-repo review history (reviewer experience): `GET /reviews` is
+    // org-scoped, paginated and status-filterable — the same read floor as
+    // the repositories. The per-row "Open pull request" action resolves the
+    // review's PR and repository through existing endpoints.
+    path: 'reviews',
+    loadComponent: () =>
+      import('./features/reviews/review-list/review-list.component').then(
+        m => m.ReviewListComponent
+      ),
+    canActivate: [RoleGuard],
+    data: { capabilities: ['read'] }
   },
   {
     // Org + platform settings (Step 5). ADMIN_ROLES on the JWT, or — same

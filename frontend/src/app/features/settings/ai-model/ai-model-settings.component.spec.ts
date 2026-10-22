@@ -1,27 +1,19 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { signal } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { KeycloakService } from 'keycloak-angular';
 
-import { AuthService } from '../../core/services/auth.service';
-
-import { SettingsComponent } from './settings.component';
+import { AiModelSettingsComponent } from './ai-model-settings.component';
 import {
   LLMSettings,
   LLMSettingsUpdate,
   LlmSettingsService
-} from '../../core/services/llm-settings.service';
-import { OrgSettingsService } from '../../core/services/org-settings.service';
+} from '../../../core/services/llm-settings.service';
 
-describe('SettingsComponent — AI model settings', () => {
-  let fixture: ComponentFixture<SettingsComponent>;
-  let component: SettingsComponent;
+describe('AiModelSettingsComponent — personal AI model configuration', () => {
+  let fixture: ComponentFixture<AiModelSettingsComponent>;
+  let component: AiModelSettingsComponent;
   let svc: jasmine.SpyObj<LlmSettingsService>;
-  let orgSvc: jasmine.SpyObj<OrgSettingsService>;
-  /** Writable view of the fake session user (role drives the org nav entries). */
-  let authSignal: ReturnType<typeof signal<{ role: string } | null>>;
 
   const savedConfig: LLMSettings = {
     provider: 'groq',
@@ -40,9 +32,6 @@ describe('SettingsComponent — AI model settings', () => {
   };
 
   beforeEach(async () => {
-    localStorage.removeItem('codesage_token');
-    localStorage.removeItem('codesage_user');
-
     svc = jasmine.createSpyObj<LlmSettingsService>('LlmSettingsService', [
       'getLLMSettings',
       'saveLLMSettings',
@@ -62,31 +51,17 @@ describe('SettingsComponent — AI model settings', () => {
       })
     );
 
-    orgSvc = jasmine.createSpyObj<OrgSettingsService>('OrgSettingsService', ['listOrgs']);
-    orgSvc.listOrgs.and.returnValue(of([]));
-
-    authSignal = signal<{ role: string } | null>(null);
-
     await TestBed.configureTestingModule({
-      imports: [SettingsComponent],
+      imports: [AiModelSettingsComponent],
       providers: [
         provideHttpClient(),
-        // app-settings-nav carries routerLink directives → the router.
+        // The settings nav carries routerLink directives → the router.
         provideRouter([]),
-        { provide: LlmSettingsService, useValue: svc },
-        { provide: OrgSettingsService, useValue: orgSvc },
-        // Only currentUser().role is read by the nav's capability check; null
-        // mirrors the real AuthService in tests (no Keycloak session).
-        { provide: AuthService, useValue: { currentUser: authSignal } },
-        // AuthService (injected by the component) depends on KeycloakService.
-        {
-          provide: KeycloakService,
-          useValue: jasmine.createSpyObj<KeycloakService>('KeycloakService', ['isLoggedIn'])
-        }
+        { provide: LlmSettingsService, useValue: svc }
       ]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(SettingsComponent);
+    fixture = TestBed.createComponent(AiModelSettingsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges(); // ngOnInit -> loadSettings (synchronous of())
   });
@@ -215,72 +190,11 @@ describe('SettingsComponent — AI model settings', () => {
 
   it('renders the load-error state with a Retry button when GET fails', () => {
     svc.getLLMSettings.and.returnValue(throwError(() => new Error('boom')));
-    const fresh = TestBed.createComponent(SettingsComponent);
+    const fresh = TestBed.createComponent(AiModelSettingsComponent);
     fresh.detectChanges();
     const text = (fresh.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('boom');
     expect(text).toContain('Retry');
-  });
-
-  it('hides the Organization nav entries when the caller manages no org', () => {
-    expect(orgSvc.listOrgs).toHaveBeenCalled();
-    expect(el().querySelector('[data-testid="settings-nav-ai"]')).not.toBeNull();
-    expect(el().querySelector('[data-testid="settings-nav-organization"]')).toBeNull();
-    expect(el().querySelector('[data-testid="settings-nav-members"]')).toBeNull();
-  });
-
-  it('shows the Organization + Members nav entries for an ORG_ADMIN membership (effective role)', () => {
-    // DEVELOPER claim + ORG_ADMIN membership → effective ORG_ADMIN (plan §2).
-    authSignal.set({ role: 'DEVELOPER' });
-    orgSvc.listOrgs.and.returnValue(
-      of([{ id: 'org-1', name: 'acme', account_type: 'Organization', role: 'ORG_ADMIN' }])
-    );
-    const fresh = TestBed.createComponent(SettingsComponent);
-    fresh.detectChanges();
-    const root = fresh.nativeElement as HTMLElement;
-    const orgLink = root.querySelector('[data-testid="settings-nav-organization"]');
-    expect(orgLink).not.toBeNull();
-    expect(orgLink?.getAttribute('href')).toBe('/settings/org?view=organization');
-    expect(root.querySelector('[data-testid="settings-nav-members"]')).not.toBeNull();
-    expect(root.querySelector('[data-testid="settings-nav-platform"]')).toBeNull();
-  });
-
-  it('stays hidden when listing orgs fails (fail closed)', () => {
-    orgSvc.listOrgs.and.returnValue(throwError(() => new Error('nope')));
-    const fresh = TestBed.createComponent(SettingsComponent);
-    fresh.detectChanges();
-    expect(
-      (fresh.nativeElement as HTMLElement).querySelector(
-        '[data-testid="settings-nav-organization"]'
-      )
-    ).toBeNull();
-  });
-
-  it('keeps backendless preference toggles disabled with a not-available label (plan Step 8)', () => {
-    // Review Preferences + Notifications have no API — they must be visibly
-    // unavailable and must not imply a saved state.
-    const autoReview = el().querySelector('#settings-auto-review') as HTMLInputElement;
-    expect(autoReview.disabled).toBeTrue();
-    expect(autoReview.checked).toBeFalse();
-    expect(
-      (el().querySelector('#settings-security-scans') as HTMLInputElement).disabled
-    ).toBeTrue();
-    expect(
-      (el().querySelector('#settings-review-frequency') as HTMLSelectElement).disabled
-    ).toBeTrue();
-
-    const prefsNote = el().querySelector('[data-testid="prefs-unavailable"]')?.textContent ?? '';
-    expect(prefsNote).toContain('Not available yet');
-    expect(prefsNote).toContain('nothing here is saved');
-
-    const emailToggle = el().querySelector(
-      '.notifications-card input[type="checkbox"]'
-    ) as HTMLInputElement;
-    expect(emailToggle.disabled).toBeTrue();
-    expect(emailToggle.checked).toBeFalse();
-    expect(el().querySelector('[data-testid="notifications-unavailable"]')?.textContent).toContain(
-      'Not available yet'
-    );
   });
 
   it('explains the model precedence in plain text (plan Step 8)', () => {
@@ -290,5 +204,12 @@ describe('SettingsComponent — AI model settings', () => {
     expect(text).toContain('platform default');
     expect(text).toContain('never changes your provider or API key');
     expect(text).toContain('working personal credentials');
+  });
+
+  it('carries only the personal settings navigation — no org or platform links', () => {
+    expect(el().querySelector('[data-testid="settings-nav-profile"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-organization"]')).toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-platform"]')).toBeNull();
+    expect(el().querySelector('[data-testid="org-workspace-nav"]')).toBeNull();
   });
 });

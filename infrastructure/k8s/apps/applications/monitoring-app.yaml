@@ -1,0 +1,25 @@
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-app
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: codesage
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Wael-BenHariz/CODESAGE.git
+    targetRevision: main
+    path: infrastructure/k8s/monitoring
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: codesage
+
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+

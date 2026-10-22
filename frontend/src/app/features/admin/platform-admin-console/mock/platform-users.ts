@@ -18,7 +18,7 @@ export interface MockPlatformUser {
   readonly organization: string;
   readonly role: MockUserRole;
   readonly status: MockUserStatus;
-  /** Free-form demo text ("Aujourd'hui", "Il y a 2 heures", …). */
+  /** Free-form demo text ('Today', "Il y a 2 heures", …). */
   readonly lastActivity: string;
 }
 
@@ -42,7 +42,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company A',
     role: 'Developer',
     status: 'active',
-    lastActivity: "Aujourd'hui"
+    lastActivity: 'Today'
   },
   {
     id: 2,
@@ -51,7 +51,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company A',
     role: 'Reviewer',
     status: 'active',
-    lastActivity: 'Il y a 2 heures'
+    lastActivity: '2 hours ago'
   },
   {
     id: 3,
@@ -60,7 +60,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company B',
     role: 'Organization Admin',
     status: 'active',
-    lastActivity: 'Hier'
+    lastActivity: 'Yesterday'
   },
   {
     id: 4,
@@ -69,7 +69,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company C',
     role: 'Developer',
     status: 'inactive',
-    lastActivity: 'Il y a 8 jours'
+    lastActivity: '8 days ago'
   },
   {
     id: 5,
@@ -78,7 +78,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company B',
     role: 'Reviewer',
     status: 'active',
-    lastActivity: 'Il y a 35 minutes'
+    lastActivity: '35 minutes ago'
   },
   {
     id: 6,
@@ -87,7 +87,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company A',
     role: 'Developer',
     status: 'active',
-    lastActivity: 'Il y a 4 heures'
+    lastActivity: '4 hours ago'
   },
   {
     id: 7,
@@ -96,7 +96,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company C',
     role: 'Platform Admin',
     status: 'active',
-    lastActivity: "Aujourd'hui"
+    lastActivity: 'Today'
   },
   {
     id: 8,
@@ -105,7 +105,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company B',
     role: 'Developer',
     status: 'inactive',
-    lastActivity: 'Il y a 15 jours'
+    lastActivity: '15 days ago'
   },
   {
     id: 9,
@@ -114,7 +114,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company C',
     role: 'Reviewer',
     status: 'active',
-    lastActivity: 'Il y a 1 heure'
+    lastActivity: '1 hour ago'
   },
   {
     id: 10,
@@ -123,7 +123,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company A',
     role: 'Organization Admin',
     status: 'active',
-    lastActivity: 'Hier'
+    lastActivity: 'Yesterday'
   },
   {
     id: 11,
@@ -132,7 +132,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company B',
     role: 'Developer',
     status: 'active',
-    lastActivity: 'Il y a 3 heures'
+    lastActivity: '3 hours ago'
   },
   {
     id: 12,
@@ -141,7 +141,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company C',
     role: 'Developer',
     status: 'active',
-    lastActivity: 'Il y a 6 heures'
+    lastActivity: '6 hours ago'
   },
   {
     id: 13,
@@ -150,7 +150,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company A',
     role: 'Reviewer',
     status: 'inactive',
-    lastActivity: 'Il y a 21 jours'
+    lastActivity: '21 days ago'
   },
   {
     id: 14,
@@ -159,7 +159,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company B',
     role: 'Reviewer',
     status: 'active',
-    lastActivity: "Aujourd'hui"
+    lastActivity: 'Today'
   },
   {
     id: 15,
@@ -168,7 +168,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company C',
     role: 'Organization Admin',
     status: 'active',
-    lastActivity: 'Il y a 5 heures'
+    lastActivity: '5 hours ago'
   },
   {
     id: 16,
@@ -177,7 +177,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company A',
     role: 'Developer',
     status: 'active',
-    lastActivity: 'Hier'
+    lastActivity: 'Yesterday'
   },
   {
     id: 17,
@@ -186,7 +186,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company B',
     role: 'Developer',
     status: 'inactive',
-    lastActivity: 'Il y a 30 jours'
+    lastActivity: '30 days ago'
   },
   {
     id: 18,
@@ -195,7 +195,7 @@ export const MOCK_PLATFORM_USERS: readonly MockPlatformUser[] = [
     organization: 'Company C',
     role: 'Developer',
     status: 'active',
-    lastActivity: 'Il y a 45 minutes'
+    lastActivity: '45 minutes ago'
   }
 ];
 

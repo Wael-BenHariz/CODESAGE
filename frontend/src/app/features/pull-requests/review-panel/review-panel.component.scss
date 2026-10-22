@@ -568,6 +568,16 @@
       padding-top: 8px;
       border-top: 1px dashed var(--surface-2);
 
+      .validation-label {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-3);
+        // Label spans the whole row so the buttons below read as one group.
+        flex-basis: 100%;
+      }
+
       .sev-select,
       .note-input {
         background: var(--surface-sunken);
@@ -801,6 +811,91 @@
     font-size: 11px;
     color: var(--text-3);
     padding: 4px 2px;
+  }
+
+  // --- History tab (plan Step 6): every past run of this PR -------------------
+
+  .history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .history-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 8px 10px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+
+    &.current {
+      border-color: var(--accent);
+    }
+  }
+
+  .history-state {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 1px 6px;
+
+    &.done {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    &.failed {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+  }
+
+  .history-date {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .history-duration {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  .history-current-chip {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 1px 6px;
+  }
+
+  .history-error {
+    flex-basis: 100%;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--danger);
+    word-break: break-word;
+  }
+
+  .history-note {
+    margin: 10px 0 0;
+    font-size: 11px;
+    color: var(--text-3);
   }
 
   // --- Step 7: walkthrough tabs, progress, toolbar, tables (plan §4.3) -------

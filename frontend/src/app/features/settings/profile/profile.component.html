@@ -1,0 +1,133 @@
+<div class="settings-page">
+  <header class="page-header">
+    <h1>Profile</h1>
+    <p class="page-subtitle">
+      Your personal information. Identity fields come from GitHub and cannot be edited here.
+    </p>
+  </header>
+
+  <app-settings-nav active="profile" />
+
+  <div class="settings-sections">
+    @if (user(); as u) {
+      <section class="settings-section" data-testid="profile-identity">
+        <h2>Identity</h2>
+        <div class="card profile-card">
+          <div class="profile-avatar">
+            @if (u.avatarUrl) {
+              <img [src]="u.avatarUrl" [alt]="u.login" />
+            } @else {
+              <span class="avatar-fallback" aria-hidden="true">{{
+                u.login.slice(0, 2).toUpperCase()
+              }}</span>
+            }
+          </div>
+          <div class="profile-info">
+            <div class="field">
+              <label for="profile-login">Username</label>
+              <input id="profile-login" type="text" [value]="u.login" disabled />
+              <span class="field-hint">Managed by your GitHub account.</span>
+            </div>
+            <div class="field">
+              <label for="profile-joined">Member since</label>
+              <input
+                id="profile-joined"
+                type="text"
+                [value]="u.createdAt ? (u.createdAt | date: 'mediumDate') : ''"
+                disabled
+              />
+              <span class="field-hint">Read-only.</span>
+            </div>
+          </div>
+        </div>
+        <p class="section-note">
+          Your username and avatar are synchronized from your GitHub identity — CodeSage has no
+          route to change them.
+        </p>
+      </section>
+
+      <section class="settings-section" data-testid="profile-editable">
+        <h2>Editable details</h2>
+        <div class="card edit-card">
+          <div class="field">
+            <label for="profile-name">Display name</label>
+            <input
+              id="profile-name"
+              type="text"
+              [value]="nameDraft()"
+              (input)="onNameInput($event)"
+              placeholder="Your name"
+              [disabled]="saving()"
+            />
+            <span class="field-hint"
+              >Shown instead of your login where CodeSage displays names.</span
+            >
+          </div>
+          <div class="field">
+            <label for="profile-email">Email</label>
+            <input
+              id="profile-email"
+              type="email"
+              [value]="emailDraft()"
+              (input)="onEmailInput($event)"
+              placeholder="you@example.com"
+              [disabled]="saving()"
+            />
+            <span class="field-hint">Optional — leave empty to remove it.</span>
+          </div>
+
+          @if (saveError(); as err) {
+            <div class="llm-status error" role="alert" data-testid="profile-save-error">
+              {{ err }}
+            </div>
+          }
+          @if (saved()) {
+            <div class="llm-status success" role="status" data-testid="profile-saved">
+              Profile saved.
+            </div>
+          }
+
+          <div class="llm-actions">
+            <button
+              class="btn btn-primary"
+              type="button"
+              [disabled]="!canSave()"
+              (click)="save()"
+              data-testid="profile-save"
+            >
+              {{ saving() ? 'Saving…' : 'Save changes' }}
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              [disabled]="!dirty() || saving()"
+              (click)="reset()"
+              data-testid="profile-reset"
+            >
+              Discard changes
+            </button>
+          </div>
+          <p class="section-note">
+            Saving calls <code>PATCH /users/me</code> — name and email are the only profile fields
+            CodeSage persists.
+          </p>
+        </div>
+      </section>
+
+      <section class="settings-section danger-zone" data-testid="profile-danger-zone">
+        <h2>Account</h2>
+        <div class="card">
+          <div class="danger-item">
+            <div>
+              <strong>Log out</strong>
+              <p>Log out from your account on this device.</p>
+            </div>
+            <button class="btn btn-danger" type="button" (click)="logout()">Log Out</button>
+          </div>
+        </div>
+      </section>
+    } @else {
+      <p class="state-note" data-testid="profile-loading">Loading your profile…</p>
+    }
+  </div>
+</div>

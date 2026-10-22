@@ -1,12 +1,12 @@
 <div class="pa-page" data-testid="pa-dashboard">
   <header class="pa-page-header">
     <div>
-      <h1 class="pa-page-title">Bonjour, Administrateur</h1>
-      <p class="pa-page-subtitle">Vue globale de la plateforme CODESAGE · {{ demoDate }}</p>
+      <h1 class="pa-page-title">Hello, Administrator</h1>
+      <p class="pa-page-subtitle">CODESAGE platform overview · {{ demoDate }}</p>
     </div>
   </header>
 
-  <section class="pa-stat-grid" aria-label="Statistiques globales">
+  <section class="pa-stat-grid" aria-label="Platform statistics">
     @for (stat of stats; track stat.id) {
       <article class="pa-stat-card" [attr.data-testid]="'pa-stat-' + stat.id">
         <span class="pa-stat-label">{{ stat.label }}</span>
@@ -26,8 +26,8 @@
 
   <section class="pa-panel" aria-labelledby="pa-health-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-health-title">État du système</h2>
-      <span class="pa-panel-meta">Aperçu statique</span>
+      <h2 class="pa-panel-title" id="pa-health-title">System status</h2>
+      <span class="pa-panel-meta">Static snapshot</span>
     </div>
     <div class="pa-health-grid">
       @for (service of services; track service.id) {
@@ -48,10 +48,10 @@
 
   <section class="pa-panel" aria-labelledby="pa-chart-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-chart-title">Utilisation des revues</h2>
-      <span class="pa-panel-meta">7 derniers jours (démo)</span>
+      <h2 class="pa-panel-title" id="pa-chart-title">Review usage</h2>
+      <span class="pa-panel-meta">Last 7 days (demo)</span>
     </div>
-    <div class="pa-chart" role="img" aria-label="Utilisation des revues du lundi au dimanche">
+    <div class="pa-chart" role="img" aria-label="Review usage from Monday to Sunday">
       @for (point of week; track point.day) {
         <div class="pa-chart-col">
           <span class="pa-chart-value">{{ point.value }}</span>
@@ -64,7 +64,7 @@
 
   <section class="pa-panel" aria-labelledby="pa-actions-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-actions-title">Actions rapides</h2>
+      <h2 class="pa-panel-title" id="pa-actions-title">Quick actions</h2>
     </div>
     <div class="pa-quick-actions">
       @for (action of quickActions; track action.link) {

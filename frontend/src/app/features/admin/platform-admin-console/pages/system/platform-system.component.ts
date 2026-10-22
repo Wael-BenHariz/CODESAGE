@@ -8,7 +8,7 @@ import {
 } from '../../mock/system-status';
 
 /**
- * Platform Administration → État du système (static PFE prototype) —
+ * Platform Administration → System Monitoring (static PFE prototype) —
  * `/platform/system`.
  *
  * Static service states, resource levels, uptime figures and "last check"
@@ -27,11 +27,11 @@ export class PlatformSystemComponent {
   healthLabel(health: ServiceHealth): string {
     switch (health) {
       case 'operational':
-        return 'Opérationnel';
+        return 'Operational';
       case 'warning':
-        return 'Attention';
+        return 'Warning';
       case 'error':
-        return 'Erreur';
+        return 'Error';
     }
   }
 }

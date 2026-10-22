@@ -1,22 +1,22 @@
 <div class="pa-page" data-testid="pa-settings">
   <header class="pa-page-header">
     <div>
-      <h1 class="pa-page-title">Paramètres de la plateforme</h1>
+      <h1 class="pa-page-title">Platform Global Settings</h1>
       <p class="pa-page-subtitle">
-        Configurez les paramètres généraux, IA et de sécurité. — démonstration statique, rien n'est
-        enregistré côté serveur.
+        Configure general, AI and security settings. — static prototype: nothing is saved
+        server-side.
       </p>
     </div>
   </header>
 
   <section class="pa-panel" aria-labelledby="pa-general-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-general-title">Paramètres généraux</h2>
+      <h2 class="pa-panel-title" id="pa-general-title">General settings</h2>
     </div>
     <div class="pa-form">
       <div class="pa-form-grid">
         <label class="pa-form-row">
-          <span class="pa-field-label">Nom de la plateforme</span>
+          <span class="pa-field-label">Platform name</span>
           <input
             type="text"
             class="input"
@@ -26,7 +26,7 @@
           />
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">URL de l'application</span>
+          <span class="pa-field-label">Application URL</span>
           <input
             type="url"
             class="input"
@@ -36,7 +36,7 @@
           />
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">Langue par défaut</span>
+          <span class="pa-field-label">Default language</span>
           <select
             class="input"
             [ngModel]="general().defaultLanguage"
@@ -49,7 +49,7 @@
           </select>
         </label>
         <div class="pa-form-row">
-          <span class="pa-field-label">Mode maintenance</span>
+          <span class="pa-field-label">Maintenance mode</span>
           <button
             type="button"
             class="pa-toggle"
@@ -73,7 +73,7 @@
           (click)="saveGeneral()"
           data-testid="pa-settings-save-general"
         >
-          Enregistrer
+          Save
         </button>
       </div>
     </div>
@@ -81,13 +81,13 @@
 
   <section class="pa-panel" aria-labelledby="pa-ai-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-ai-title">Paramètres IA</h2>
-      <span class="pa-panel-meta">Valeurs de démonstration — aucun fournisseur contacté</span>
+      <h2 class="pa-panel-title" id="pa-ai-title">AI settings</h2>
+      <span class="pa-panel-meta">Demo values — no provider contacted</span>
     </div>
     <div class="pa-form">
       <div class="pa-form-grid">
         <label class="pa-form-row">
-          <span class="pa-field-label">Provider par défaut</span>
+          <span class="pa-field-label">Default provider</span>
           <select
             class="input"
             [ngModel]="ai().provider"
@@ -100,7 +100,7 @@
           </select>
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">Modèle par défaut</span>
+          <span class="pa-field-label">Default model</span>
           <select
             class="input"
             [ngModel]="ai().model"
@@ -113,7 +113,7 @@
           </select>
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">Nombre maximum de requêtes simultanées</span>
+          <span class="pa-field-label">Max concurrent requests</span>
           <input
             type="number"
             min="1"
@@ -124,7 +124,7 @@
           />
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">Timeout des revues</span>
+          <span class="pa-field-label">Review timeout</span>
           <span class="pa-input-suffix">
             <input
               type="number"
@@ -134,7 +134,7 @@
               (ngModelChange)="setAiNumber('reviewTimeoutSeconds', $event)"
               data-testid="pa-settings-timeout"
             />
-            <span class="pa-suffix">secondes</span>
+            <span class="pa-suffix">seconds</span>
           </span>
         </label>
       </div>
@@ -145,7 +145,7 @@
           (click)="saveAi()"
           data-testid="pa-settings-save-ai"
         >
-          Enregistrer
+          Save
         </button>
       </div>
     </div>
@@ -153,12 +153,12 @@
 
   <section class="pa-panel" aria-labelledby="pa-security-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-security-title">Sécurité</h2>
+      <h2 class="pa-panel-title" id="pa-security-title">Security</h2>
     </div>
     <div class="pa-form">
       <div class="pa-form-grid">
         <label class="pa-form-row">
-          <span class="pa-field-label">Durée maximale d'une session</span>
+          <span class="pa-field-label">Max session duration</span>
           <span class="pa-input-suffix">
             <input
               type="number"
@@ -172,7 +172,7 @@
           </span>
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">Nombre maximum de tentatives de connexion</span>
+          <span class="pa-field-label">Max login attempts</span>
           <input
             type="number"
             min="1"
@@ -183,7 +183,7 @@
           />
         </label>
         <label class="pa-form-row">
-          <span class="pa-field-label">Expiration des invitations</span>
+          <span class="pa-field-label">Invitation expiry</span>
           <span class="pa-input-suffix">
             <input
               type="number"
@@ -193,11 +193,11 @@
               (ngModelChange)="setSecurityNumber('invitationExpiryDays', $event)"
               data-testid="pa-settings-invitation"
             />
-            <span class="pa-suffix">jours</span>
+            <span class="pa-suffix">days</span>
           </span>
         </label>
         <div class="pa-form-row">
-          <span class="pa-field-label">Authentification renforcée</span>
+          <span class="pa-field-label">Enforced authentication</span>
           <button
             type="button"
             class="pa-toggle"
@@ -221,7 +221,7 @@
           (click)="saveSecurity()"
           data-testid="pa-settings-save-security"
         >
-          Enregistrer
+          Save
         </button>
       </div>
     </div>

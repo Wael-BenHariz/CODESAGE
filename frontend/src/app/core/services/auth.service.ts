@@ -161,8 +161,22 @@ export class AuthService {
     );
   }
 
-  updateProfile(updates: Partial<User>): Observable<User> {
-    return this.http.patch<UserResponseDto>(`${environment.apiUrl}/users/me`, updates).pipe(
+  /**
+   * `PATCH /users/me` — the fields the backend really persists
+   * (`UserUpdate`: email / name / avatar_url, snake_case on the wire).
+   * The caller passes the camelCase view; only known fields are mapped —
+   * anything else would be silently dropped by the backend schema, so it is
+   * never sent at all.
+   */
+  updateProfile(updates: { email?: string; name?: string }): Observable<User> {
+    const body: Record<string, string> = {};
+    if (updates.email !== undefined) {
+      body['email'] = updates.email;
+    }
+    if (updates.name !== undefined) {
+      body['name'] = updates.name;
+    }
+    return this.http.patch<UserResponseDto>(`${environment.apiUrl}/users/me`, body).pipe(
       map(toUser),
       tap(user => {
         this._currentUser.set(user);

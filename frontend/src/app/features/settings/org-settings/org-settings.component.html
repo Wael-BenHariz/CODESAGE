@@ -1,13 +1,19 @@
 <div class="settings-page">
   <header class="page-header">
-    <h1>Organization Settings</h1>
+    <h1>{{ viewTitle() }}</h1>
     <p class="page-subtitle">
-      Per-organization review behavior, capped by platform-wide ceilings. The backend re-checks your
-      effective role on every save.
+      @if (selectedOrgSummary(); as org) {
+        Managing <strong>{{ org.name }}</strong> ({{ org.account_type }}) — organization-wide
+        policy, capped by platform ceilings. The backend re-checks your effective role on every
+        save.
+      } @else {
+        Organization-wide review behavior, capped by platform ceilings. The backend re-checks your
+        effective role on every save.
+      }
     </p>
   </header>
 
-  <app-settings-nav [active]="navActive()" />
+  <app-org-workspace-nav [active]="navActive()" />
 
   @if (loading()) {
     <p class="state-note">Loading settings…</p>
@@ -17,7 +23,78 @@
       <button class="btn btn-secondary" type="button" (click)="load()">Retry</button>
     </div>
   } @else {
-    @if (view() === 'organization') {
+    <!-- Organization context (shared by every view): which org the actions
+         below apply to + the caller's effective role there. -->
+    @if (orgs.length > 0) {
+      <div class="org-picker">
+        <div class="field">
+          <label for="org-settings-picker">Organization</label>
+          <select
+            id="org-settings-picker"
+            [ngModel]="selectedOrgId"
+            (ngModelChange)="selectOrg($event)"
+          >
+            @for (org of orgs; track org.id) {
+              <option [value]="org.id">{{ org.name }} ({{ org.account_type }})</option>
+            }
+          </select>
+        </div>
+        <span class="role-badge" data-testid="effective-role">
+          Effective role: {{ effectiveRoleLabel() }}
+        </span>
+      </div>
+    }
+
+    @if (view() === 'overview') {
+      <!-- ── Overview: real payloads only (GET /orgs + GET /orgs/{id}/settings).
+           No statistics or audit-log endpoints exist — nothing is invented. ── -->
+      @if (orgs.length === 0) {
+        <div class="card">
+          <p class="state-note">
+            No organization is linked to your account. Install the CodeSage GitHub App on a
+            repository first.
+          </p>
+        </div>
+      } @else if (!sectionReady('org')) {
+        @if (orgForm.error; as errMsg) {
+          <div class="banner error" role="alert" data-testid="overview-error">
+            <span>{{ errMsg }}</span>
+            <button class="btn btn-secondary" type="button" (click)="load()">Retry</button>
+          </div>
+        } @else {
+          <p class="state-note" data-testid="overview-loading">Loading organization overview…</p>
+        }
+      } @else {
+        <section class="settings-section" data-testid="overview-view">
+          <div class="card overview-card">
+            <h2>Effective review policy</h2>
+            <p class="section-subtitle">
+              The merged settings every review of this organization runs with — overrides fall back
+              to the platform defaults.
+            </p>
+            <dl class="overview-list">
+              @for (row of overviewRows(); track row.label) {
+                <div class="overview-row">
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              }
+            </dl>
+          </div>
+
+          @if (isPlatformAdmin()) {
+            <div class="banner info" role="note">
+              You are a platform administrator: the platform defaults and numeric ceilings live in
+              the Settings panel of this workspace.
+            </div>
+          } @else if (!canEdit('org')) {
+            <div class="banner info" role="note" data-testid="read-only-banner">
+              Read-only — changing organization settings requires the ORG_ADMIN effective role.
+            </div>
+          }
+        </section>
+      }
+    } @else if (view() === 'organization') {
       @if (isPlatformAdmin() && platformError(); as platformErrMsg) {
         <div class="banner error" role="alert">
           <span>{{ platformErrMsg }}</span>
@@ -31,41 +108,19 @@
           <p class="section-subtitle">{{ sec.subtitle }}</p>
 
           <div class="card">
-            @if (sec.id === 'org') {
-              @if (orgs.length === 0) {
-                <p class="state-note">
-                  No organization is linked to your account. Install the CodeSage GitHub App on a
-                  repository first.
-                </p>
-              } @else {
-                <div class="org-picker">
-                  <div class="field">
-                    <label for="org-settings-picker">Organization</label>
-                    <select
-                      id="org-settings-picker"
-                      [ngModel]="selectedOrgId"
-                      (ngModelChange)="selectOrg($event)"
-                    >
-                      @for (org of orgs; track org.id) {
-                        <option [value]="org.id">{{ org.name }} ({{ org.account_type }})</option>
-                      }
-                    </select>
-                  </div>
-                  <span class="role-badge" data-testid="effective-role">
-                    Effective role: {{ effectiveRoleLabel() }}
-                  </span>
-                </div>
-
-                @if (sectionReady('org') && !canEdit('org')) {
-                  <div class="banner info" role="note" data-testid="read-only-banner">
-                    Read-only — changing organization settings requires the ORG_ADMIN effective
-                    role.
-                  </div>
-                }
-              }
+            @if (sec.id === 'org' && orgs.length === 0) {
+              <p class="state-note">
+                No organization is linked to your account. Install the CodeSage GitHub App on a
+                repository first.
+              </p>
             }
 
             @if (sectionReady(sec.id)) {
+              @if (sec.id === 'org' && !canEdit('org')) {
+                <div class="banner info" role="note" data-testid="read-only-banner">
+                  Read-only — changing organization settings requires the ORG_ADMIN effective role.
+                </div>
+              }
               @for (group of groupsFor(sec.id); track group.id) {
                 <div class="field-group" [attr.data-testid]="'group-' + group.id">
                   @if (group.title) {
@@ -216,8 +271,9 @@
         </section>
       }
     } @else {
+      <!-- ── Members & invitations ── -->
       <section class="settings-section" data-testid="members-view">
-        <h2>Members &amp; invitations</h2>
+        <h2>Members & invitations</h2>
         <p class="section-subtitle">
           Invite teammates as DEVELOPER or REVIEWER — existing roles are never downgraded by an
           invitation.
@@ -253,6 +309,15 @@
             Invitations can grant <strong>Developer</strong> or <strong>Reviewer</strong> only (the
             API rejects any other role).
           </p>
+        </div>
+
+        <!-- Honest limitation: the backend exposes no org member-list route
+             (docs/BACKEND_GAPS_FOR_UI.md) — the invitations below are the
+             live record; nothing about current members is invented. -->
+        <div class="banner info" role="note" data-testid="members-list-unavailable">
+          A full organization member list is not available yet — the API exposes invitations only.
+          Accepted invitations appear here with their status; membership changes are recorded by the
+          invitation itself.
         </div>
 
         @if (selectedOrgId; as currentOrgId) {

@@ -29,9 +29,15 @@ describe('route capability declarations', () => {
     }
     const byPath = (path: string) => routes.find(route => route.path === path);
     expect(byPath('dashboard')?.data?.['capabilities']).toEqual(['write']);
-    expect(byPath('settings')?.data?.['capabilities']).toEqual(['write']);
+    // The legacy /settings route became a compatibility redirect — the three
+    // personal screens carry the write floor it used to have.
+    expect(byPath('settings')?.redirectTo).toBe('settings/profile');
+    expect(byPath('settings/profile')?.data?.['capabilities']).toEqual(['write']);
+    expect(byPath('settings/review-preferences')?.data?.['capabilities']).toEqual(['write']);
+    expect(byPath('settings/ai-model')?.data?.['capabilities']).toEqual(['write']);
     expect(byPath('settings/org')?.data?.['capabilities']).toEqual(['org:settings']);
     expect(byPath('platform')?.data?.['capabilities']).toEqual(['platform']);
+    expect(byPath('reviews')?.data?.['capabilities']).toEqual(['read']);
     expect(byPath('repositories')?.data?.['capabilities']).toEqual(['read']);
     expect(byPath('repositories/:owner/:repo')?.data?.['capabilities']).toEqual(['read']);
     expect(byPath('repositories/:owner/:repo/pulls')?.data?.['capabilities']).toEqual(['read']);

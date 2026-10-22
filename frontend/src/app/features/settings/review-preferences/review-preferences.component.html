@@ -1,0 +1,75 @@
+<div class="settings-page">
+  <header class="page-header">
+    <h1>Review Preferences</h1>
+    <p class="page-subtitle">
+      Personal options for how reviews run for you. These are separate from your organization's
+      review policy.
+    </p>
+  </header>
+
+  <app-settings-nav active="review-preferences" />
+
+  <div class="settings-sections">
+    <section class="settings-section" data-testid="review-preferences-section">
+      <h2>Review behavior</h2>
+      <div class="card preferences-card">
+        <!-- Gap 4 (docs/BACKEND_GAPS_FOR_UI.md): no backend exists for these
+             preferences — rendered disabled with an explicit label, and they
+             must never pretend to save. -->
+        <p class="unavailable-note" data-testid="prefs-unavailable">
+          Not available yet — these preferences have no backend and nothing here is saved.
+        </p>
+        <div class="preference-item">
+          <label for="settings-auto-review">Auto-review on PR open</label>
+          <input id="settings-auto-review" type="checkbox" disabled />
+        </div>
+        <div class="preference-item">
+          <label for="settings-review-frequency">Review frequency</label>
+          <select id="settings-review-frequency" disabled>
+            <option value="immediate">Immediate</option>
+            <option value="hourly">Hourly</option>
+            <option value="daily">Daily</option>
+          </select>
+        </div>
+        <div class="preference-item">
+          <label for="settings-security-scans">Include security scans</label>
+          <input id="settings-security-scans" type="checkbox" disabled />
+        </div>
+        <div class="preference-item">
+          <label for="settings-performance-checks">Include performance checks</label>
+          <input id="settings-performance-checks" type="checkbox" disabled />
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" data-testid="notifications-section">
+      <h2>Notifications</h2>
+      <div class="card notifications-card">
+        <!-- No email-notification backend exists either (gap 4). -->
+        <p class="unavailable-note" data-testid="notifications-unavailable">
+          Not available yet — email notifications have no backend and nothing here is saved.
+        </p>
+        <div class="notification-item">
+          <span>Email notifications for new reviews</span>
+          <input type="checkbox" disabled />
+        </div>
+        <div class="notification-item">
+          <span>Email notifications for comments</span>
+          <input type="checkbox" disabled />
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" data-testid="org-policy-pointer">
+      <h2>Where review behavior IS configured</h2>
+      <div class="card pointer-card">
+        <p class="pointer-text">
+          Scanners, enabled AI agents, review triggers, posting mode and limits are
+          <strong>organization-wide policy</strong>, capped by platform ceilings. If you administer
+          an organization, manage them in Organization Settings — never here.
+        </p>
+        <a routerLink="/settings/org" class="btn btn-secondary">Open Organization Settings</a>
+      </div>
+    </section>
+  </div>
+</div>

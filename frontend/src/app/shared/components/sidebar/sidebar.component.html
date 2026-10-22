@@ -14,6 +14,9 @@
   </a>
 
   <nav class="nav" aria-label="Main navigation">
+    <!-- ── Main ── -->
+    <span class="nav-group-label">Main</span>
+
     @if (can('write')) {
       <a
         routerLink="/dashboard"
@@ -93,113 +96,184 @@
       </a>
     }
 
-    @if (can('write') || can('org:settings') || can('platform')) {
-      <div class="nav-group">
-        <span class="nav-group-label">Settings</span>
+    <a routerLink="/reviews" routerLinkActive="active" class="nav-item" data-testid="nav-reviews">
+      <svg
+        class="nav-icon"
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path
+          d="M3 2.5h10A1.5 1.5 0 0 1 14.5 4v6A1.5 1.5 0 0 1 13 11.5H8l-3.5 2.5v-2.5H3A1.5 1.5 0 0 1 1.5 10V4A1.5 1.5 0 0 1 3 2.5z"
+        />
+        <path d="M4.5 5.5h7M4.5 8h4.5" />
+      </svg>
+      <span>Reviews</span>
+    </a>
 
-        @if (can('write')) {
-          <a
-            routerLink="/settings"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: true }"
-            class="nav-item"
-            data-testid="nav-settings"
-          >
-            <svg
-              class="nav-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M8 1.5l1.6 3.7 3.9.4-2.9 2.6.9 3.8L8 10.1l-3.5 1.9.9-3.8-2.9-2.6 3.9-.4z" />
-            </svg>
-            <span>AI model</span>
-          </a>
-        }
+    <!-- ── Personal workspace ── -->
+    @if (can('write')) {
+      <span class="nav-group-label">Personal</span>
 
-        @if (can('org:settings')) {
-          <a
-            routerLink="/settings/org"
-            routerLinkActive="active"
-            class="nav-item"
-            data-testid="nav-org-settings"
-          >
-            <svg
-              class="nav-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              aria-hidden="true"
-            >
-              <rect x="3" y="2.5" width="10" height="11" rx="1" />
-              <path d="M6 5.5h1.5M8.5 5.5H10M6 8h1.5M8.5 8H10M6 10.5h1.5M8.5 10.5H10" />
-            </svg>
-            <span>Organization</span>
-          </a>
-        }
+      <a
+        routerLink="/settings/profile"
+        routerLinkActive="active"
+        class="nav-item"
+        data-testid="nav-profile"
+      >
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="8" cy="5.5" r="2.5" />
+          <path d="M3 13.5c.7-2.3 2.6-3.6 5-3.6s4.3 1.3 5 3.6" />
+        </svg>
+        <span>Profile</span>
+      </a>
 
-        @if (can('platform')) {
-          <a
-            routerLink="/platform"
-            routerLinkActive="active"
-            class="nav-item"
-            data-testid="nav-platform"
-          >
-            <svg
-              class="nav-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M2 4.5h12M2 8h12M2 11.5h12" />
-              <circle cx="5.5" cy="4.5" r="1.6" />
-              <circle cx="10.5" cy="8" r="1.6" />
-              <circle cx="6.5" cy="11.5" r="1.6" />
-            </svg>
-            <span>Platform</span>
-          </a>
+      <a
+        routerLink="/settings/review-preferences"
+        routerLinkActive="active"
+        class="nav-item"
+        data-testid="nav-review-preferences"
+      >
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M8 1.5l1.6 3.7 3.9.4-2.9 2.6.9 3.8L8 10.1l-3.5 1.9.9-3.8-2.9-2.6 3.9-.4z" />
+        </svg>
+        <span>Review Preferences</span>
+      </a>
 
-          <!-- Static Platform Administration console (PFE prototype) —
-               its own layout; /platform stays the read-only API view. -->
-          <a
-            routerLink="/platform-admin"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: true }"
-            class="nav-item"
-            data-testid="nav-platform-admin"
-          >
-            <svg
-              class="nav-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
-              <path d="M5.5 6.5h5M5.5 9.5h3" />
-            </svg>
-            <span>Platform Administration</span>
-          </a>
-        }
-      </div>
+      <a
+        routerLink="/settings/ai-model"
+        routerLinkActive="active"
+        class="nav-item"
+        data-testid="nav-settings"
+      >
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M2 4.5h12M2 8h12M2 11.5h12" />
+          <circle cx="5.5" cy="4.5" r="1.6" />
+          <circle cx="10.5" cy="8" r="1.6" />
+          <circle cx="6.5" cy="11.5" r="1.6" />
+        </svg>
+        <span>AI Model</span>
+      </a>
+    }
+
+    <!-- ── Organization workspace ── -->
+    @if (can('org:settings')) {
+      <span class="nav-group-label">Organization</span>
+
+      <a
+        routerLink="/settings/org"
+        [queryParams]="{ view: 'organization' }"
+        class="nav-item"
+        [class.active]="orgView() === 'organization'"
+        data-testid="nav-org-settings"
+      >
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          aria-hidden="true"
+        >
+          <rect x="3" y="2.5" width="10" height="11" rx="1" />
+          <path d="M6 5.5h1.5M8.5 5.5H10M6 8h1.5M8.5 8H10M6 10.5h1.5M8.5 10.5H10" />
+        </svg>
+        <span>Organization Settings</span>
+      </a>
+
+      <a
+        routerLink="/settings/org"
+        [queryParams]="{ view: 'members' }"
+        class="nav-item"
+        [class.active]="orgView() === 'members'"
+        data-testid="nav-org-members"
+      >
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="6" cy="5.5" r="2.2" />
+          <path d="M2 13c.6-2 2.2-3.2 4-3.2S9.4 11 10 13" />
+          <path d="M10.5 3.6a2.2 2.2 0 0 1 0 4.3M11.5 10.2c1.3.5 2.1 1.5 2.5 2.8" />
+        </svg>
+        <span>Members & Invitations</span>
+      </a>
+    }
+
+    <!-- ── Platform administration ── -->
+    @if (can('platform')) {
+      <span class="nav-group-label">Platform administration</span>
+
+      <a
+        routerLink="/platform"
+        routerLinkActive="active"
+        class="nav-item"
+        data-testid="nav-platform"
+      >
+        <svg
+          class="nav-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M2 4.5h12M2 8h12M2 11.5h12" />
+          <circle cx="5.5" cy="4.5" r="1.6" />
+          <circle cx="10.5" cy="8" r="1.6" />
+          <circle cx="6.5" cy="11.5" r="1.6" />
+        </svg>
+        <span>Platform Console</span>
+      </a>
     }
   </nav>
 </aside>

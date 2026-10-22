@@ -11,11 +11,11 @@ import {
 } from '../../mock/usage-data';
 
 /**
- * Platform Administration → Quotas & Utilisation (static PFE prototype) —
+ * Platform Administration → Quotas & Configuration (static PFE prototype) —
  * `/platform/quotas`.
  *
  * Usage figures are fixed mock data; the quota editor mutates a local copy
- * of `MOCK_ORG_QUOTAS` in memory (visible in the "Quotas par organisation"
+ * of `MOCK_ORG_QUOTAS` in memory (visible in the "Quotas by organization"
  * table) and confirms with a toast. Nothing is persisted server-side.
  */
 @Component({
@@ -96,7 +96,7 @@ export class PlatformQuotasComponent {
       )
     );
     this.closeQuotaModal();
-    this.toast.success('Les quotas ont été mis à jour.');
+    this.toast.success('Quotas updated (prototype — local only).');
   }
 
   private applyOrgDraft(quota: MockOrgQuota): void {

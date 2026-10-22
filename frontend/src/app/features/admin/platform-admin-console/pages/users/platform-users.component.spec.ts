@@ -72,9 +72,7 @@ describe('PlatformUsersComponent (static mock data)', () => {
 
     expect(component.users()[0].role).toBe('Reviewer');
     expect(
-      toast
-        .toasts()
-        .some((t: { message: string }) => t.message === 'Le rôle a été modifié avec succès.')
+      toast.toasts().some((t: { message: string }) => t.message === 'Role updated successfully.')
     ).toBe(true);
     expect(component.modal()).toBeNull();
   });
@@ -86,11 +84,9 @@ describe('PlatformUsersComponent (static mock data)', () => {
     component.toggleStatus(target);
     fixture.detectChanges();
     expect(component.users()[0].status).toBe('inactive');
-    expect(
-      toast
-        .toasts()
-        .some((t: { message: string }) => t.message === "L'utilisateur a été désactivé.")
-    ).toBe(true);
+    expect(toast.toasts().some((t: { message: string }) => t.message === 'User deactivated.')).toBe(
+      true
+    );
   });
 
   it('adds a user to the local table without any backend call', () => {
@@ -103,9 +99,7 @@ describe('PlatformUsersComponent (static mock data)', () => {
     expect(component.users().length).toBe(19);
     expect(component.users().some(u => u.name === 'Test Person')).toBe(true);
     expect(
-      toast
-        .toasts()
-        .some((t: { message: string }) => t.message === "L'utilisateur a été ajouté avec succès.")
+      toast.toasts().some((t: { message: string }) => t.message === 'User added successfully.')
     ).toBe(true);
   });
 

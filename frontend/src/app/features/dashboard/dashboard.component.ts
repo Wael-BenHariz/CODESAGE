@@ -256,7 +256,7 @@ export class DashboardComponent implements OnInit {
           : this.llmUsingDefault()
             ? 'No personal key yet — the platform default model is used.'
             : 'Add an API key for your preferred provider.',
-        link: '/settings',
+        link: '/settings/ai-model',
         action: 'Open',
         done: hasKey
       });

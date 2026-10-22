@@ -1,7 +1,7 @@
 """Webhook event model for GitHub webhook delivery tracking."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID

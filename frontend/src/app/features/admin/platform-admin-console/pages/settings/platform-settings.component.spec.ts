@@ -22,9 +22,9 @@ describe('PlatformSettingsComponent (static mock data)', () => {
 
   it('renders the three settings sections with demo defaults', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Paramètres généraux');
-    expect(text).toContain('Paramètres IA');
-    expect(text).toContain('Sécurité');
+    expect(text).toContain('General settings');
+    expect(text).toContain('AI settings');
+    expect(text).toContain('Security');
     expect(component.general().platformName).toBe('CODESAGE');
     expect(component.ai().provider).toBe('Gemini');
     expect(component.security().sessionDurationMinutes).toBe(60);
@@ -49,7 +49,7 @@ describe('PlatformSettingsComponent (static mock data)', () => {
     expect(
       toast
         .toasts()
-        .some((t: { message: string }) => t.message === 'Les paramètres ont été enregistrés.')
+        .some((t: { message: string }) => t.message === 'Settings saved (prototype — local only).')
     ).toBe(true);
   });
 });

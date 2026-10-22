@@ -1,0 +1,157 @@
+<div class="reviews-page">
+  <header class="page-header">
+    <h1>Reviews</h1>
+    <p class="page-subtitle">
+      Review history across every repository you can see — newest first. Open a review to manage its
+      findings on the pull request page.
+    </p>
+  </header>
+
+  @if (state() === 'loading') {
+    <div class="state-slot" data-testid="reviews-loading">
+      <app-spinner label="Loading reviews…" />
+    </div>
+  } @else if (state() === 'error') {
+    <app-error-state
+      testid="reviews-error"
+      [message]="error() ?? 'Could not load reviews.'"
+      retryLabel="Try again"
+      (retry)="load()"
+    />
+  } @else if (reviews().length === 0) {
+    <app-empty-state
+      testid="reviews-empty"
+      title="No reviews found"
+      [message]="
+        statusFilter()
+          ? 'No reviews match this status filter.'
+          : 'Reviews appear here once a pull request has been reviewed.'
+      "
+    >
+      <a routerLink="/repositories" class="btn btn-secondary">Browse repositories</a>
+    </app-empty-state>
+  } @else {
+    <div class="toolbar" data-testid="reviews-toolbar">
+      <label class="tb-field">
+        <span class="tb-label">Status</span>
+        <select
+          class="input"
+          data-testid="reviews-status-filter"
+          [value]="statusFilter()"
+          (change)="onFilterChange($event)"
+        >
+          @for (filter of statusFilters; track filter.value) {
+            <option [value]="filter.value">{{ filter.label }}</option>
+          }
+        </select>
+      </label>
+      <span class="tb-meta" data-testid="reviews-count">{{ total() }} total</span>
+    </div>
+
+    <ul class="review-list" data-testid="review-history-list">
+      @for (review of reviews(); track review.id) {
+        <li class="review-item" [attr.data-testid]="'review-row-' + review.id">
+          <button
+            type="button"
+            class="review-main"
+            [attr.aria-expanded]="isExpanded(review.id)"
+            (click)="toggle(review.id)"
+            [attr.data-testid]="'review-toggle-' + review.id"
+          >
+            <span
+              class="review-status"
+              [class.failed]="review.status === 'failed'"
+              [class.done]="review.status === 'completed' || review.status === 'ready_to_post'"
+            >
+              {{ review.status }}
+            </span>
+            @if (sevLevel(review.overall_severity); as level) {
+              <app-severity-badge [severity]="level" />
+            } @else {
+              <span class="sev-none">no severity</span>
+            }
+            @if (isAwaitingPost(review)) {
+              <span class="await-chip" data-testid="awaiting-post-chip">awaiting post</span>
+            }
+            @if (review.posted_at) {
+              <span class="posted-chip" data-testid="posted-chip">posted</span>
+            }
+            <span
+              class="review-time"
+              [attr.datetime]="review.created_at"
+              [title]="review.created_at"
+            >
+              {{ review.created_at | date: 'medium' }}
+            </span>
+          </button>
+
+          <div class="review-actions">
+            @if (openErrorId() === review.id) {
+              <span class="open-error" role="alert" data-testid="review-open-error">
+                Couldn't open the pull request.
+              </span>
+            }
+            <button
+              type="button"
+              class="btn btn-secondary btn-small"
+              [disabled]="openingId() === review.id"
+              (click)="openPullRequest(review)"
+              [attr.data-testid]="'review-open-' + review.id"
+            >
+              {{ openingId() === review.id ? 'Opening…' : 'Open pull request' }}
+            </button>
+          </div>
+
+          @if (isExpanded(review.id)) {
+            <div class="review-detail" [attr.data-testid]="'review-expanded-' + review.id">
+              @if (review.summary) {
+                <p class="review-summary">{{ review.summary }}</p>
+              }
+              @if (review.error_message) {
+                <p class="review-error" role="note">{{ review.error_message }}</p>
+              }
+              <dl class="review-meta">
+                <div class="meta-row">
+                  <dt>Posting mode</dt>
+                  <dd>{{ review.posting_mode }}</dd>
+                </div>
+                <div class="meta-row">
+                  <dt>Started</dt>
+                  <dd>{{ review.started_at | date: 'medium' }}</dd>
+                </div>
+                @if (review.completed_at) {
+                  <div class="meta-row">
+                    <dt>Completed</dt>
+                    <dd>{{ review.completed_at | date: 'medium' }}</dd>
+                  </div>
+                }
+              </dl>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+
+    <div class="pager" data-testid="reviews-pager">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        [disabled]="page() <= 1"
+        (click)="prevPage()"
+        data-testid="reviews-prev"
+      >
+        Previous
+      </button>
+      <span class="pager-status">Page {{ page() }} of {{ pages() }}</span>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        [disabled]="page() >= pages()"
+        (click)="nextPage()"
+        data-testid="reviews-next"
+      >
+        Next
+      </button>
+    </div>
+  }
+</div>

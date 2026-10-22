@@ -157,6 +157,29 @@ describe('OrgInvitationsComponent — invite form, list, revoke (plan Step 12)',
     expect(q('invite-repos-count')?.textContent).toContain('0 of 2 selected');
   });
 
+  it('loads the picker when canManage flips true after mount (late parent payload)', async () => {
+    // Reproduces the org-settings race: the child mounts while the parent's
+    // settings payload is still in flight → canManage=false at ngOnInit —
+    // the old ngOnInit-only check then skipped loadRepos() for good, leaving
+    // the false "No repositories connected yet" note on a populated org.
+    repositoryService.getRepositories.calls.reset();
+
+    const host = TestBed.createComponent(OrgInvitationsComponent);
+    host.componentRef.setInput('orgId', 'org-1');
+    host.componentRef.setInput('canManage', false);
+    host.detectChanges();
+    expect(repositoryService.getRepositories).not.toHaveBeenCalled();
+
+    host.componentRef.setInput('canManage', true); // parent's org payload arrived
+    host.detectChanges();
+    await host.whenStable(); // flush the effect
+
+    expect(repositoryService.getRepositories).toHaveBeenCalledTimes(1); // exactly once
+    const node = host.nativeElement as HTMLElement;
+    expect(node.querySelector('[data-testid="invite-repos"]')).not.toBeNull();
+    expect(node.querySelector('[data-testid="invite-repos-empty"]')).toBeNull();
+  });
+
   it('offers only the selected organization’s repositories in the picker', () => {
     // The backend 400s repository ids that do not belong to the org's
     // installation — the picker must not offer them in the first place

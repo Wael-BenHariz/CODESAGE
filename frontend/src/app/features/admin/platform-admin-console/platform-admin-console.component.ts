@@ -19,21 +19,25 @@ interface ConsoleNavItem {
   readonly id: NavItemId;
   readonly link: string;
   readonly label: string;
-  /** The dashboard link is the section root — exact match only. */
+  /** The overview link is the section root — exact match only. */
   readonly exact: boolean;
 }
 
 /**
- * Platform Administration console shell (static PFE prototype) — route
- * `/platform-admin`.
+ * Platform Administration console shell — route `/platform`.
  *
  * Renders its own sidebar + topbar instead of the app shell: the route
  * opts out with `data: { shell: false }` (the global chrome would show
- * navigation this console does not use) while `RoleGuard` + `PLATFORM_ROLES`
- * on the parent route keep it platform-admin-only, exactly like `/platform`.
+ * navigation this console does not use) while `RoleGuard` + the `platform`
+ * capability on the parent route keep it platform-admin-only.
  *
- * Everything behind it is local mock data — no service in this feature ever
- * performs an HTTP request, so the console works with the backend offline.
+ * Two kinds of pages live here, labelled differently on purpose:
+ * - **Overview** (`/platform`) — the real, API-backed read-only view
+ *   (`GET /users`, `GET /orgs`);
+ * - everything else — the static **PFE prototype** screens (local mock
+ *   data; no service in this feature ever performs an HTTP request). The
+ *   shell shows them an honest "prototype" banner: their controls mutate
+ *   local state only and never change the production system.
  *
  * Mobile ≤768 px: the sidebar becomes a drawer driven by the topbar toggle;
  * Escape or the backdrop closes it, and navigation closes it too (the
@@ -51,23 +55,26 @@ export class PlatformAdminConsoleComponent {
 
   readonly navOpen = signal(false);
 
+  /** True on the six mock pages (everything except the real overview). */
+  readonly prototypePage = signal(false);
+
   readonly navItems: readonly ConsoleNavItem[] = [
     { id: 'overview', link: '/platform', label: 'Overview', exact: true },
     { id: 'dashboard', link: '/platform/dashboard', label: 'Dashboard', exact: false },
-    { id: 'users', link: '/platform/users', label: 'Utilisateurs', exact: false },
-    { id: 'settings', link: '/platform/settings', label: 'Paramètres', exact: false },
-    { id: 'system', link: '/platform/system', label: 'État du système', exact: false },
-    { id: 'logs', link: '/platform/logs', label: 'Journaux', exact: false },
-    { id: 'quotas', link: '/platform/quotas', label: 'Quotas & Utilisation', exact: false }
+    { id: 'users', link: '/platform/users', label: 'Users', exact: false },
+    { id: 'settings', link: '/platform/settings', label: 'Global Settings', exact: false },
+    { id: 'system', link: '/platform/system', label: 'System Monitoring', exact: false },
+    { id: 'logs', link: '/platform/logs', label: 'System Logs', exact: false },
+    { id: 'quotas', link: '/platform/quotas', label: 'Quotas & Configuration', exact: false }
   ];
 
-  readonly login = computed(() => this.auth.currentUser()?.login ?? 'Administrateur');
+  readonly login = computed(() => this.auth.currentUser()?.login ?? 'Administrator');
 
   readonly avatarUrl = computed(() => this.auth.currentUser()?.avatarUrl || null);
 
   /** Initials fallback when the session carries no avatar image. */
   readonly initials = computed(() => {
-    const login = this.auth.currentUser()?.login ?? 'AD';
+    const login = this.auth.currentUser()?.login ?? 'PA';
     return login.slice(0, 2).toUpperCase();
   });
 
@@ -75,13 +82,18 @@ export class PlatformAdminConsoleComponent {
   @ViewChild('menuButton') private menuBtn?: ElementRef<HTMLButtonElement>;
 
   constructor() {
-    // Close the mobile drawer after any navigation (like the app shell).
+    // Close the mobile drawer after any navigation (like the app shell) and
+    // recompute which page kind is active (real overview vs prototype).
     this.router.events
       .pipe(
         filter((e): e is NavigationEnd => e instanceof NavigationEnd),
         takeUntilDestroyed()
       )
-      .subscribe(() => this.navOpen.set(false));
+      .subscribe(event => {
+        this.navOpen.set(false);
+        const path = event.urlAfterRedirects.split('?')[0];
+        this.prototypePage.set(path !== '/platform');
+      });
   }
 
   toggleNav(): void {

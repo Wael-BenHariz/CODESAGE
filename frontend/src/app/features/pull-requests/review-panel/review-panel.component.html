@@ -543,6 +543,14 @@
                         }
                         @if (canValidate()) {
                           <div class="validation-controls" data-testid="validation-controls">
+                            <!-- Finding-management actions are visually and
+                                 semantically separate from reading: the
+                                 verdict group is labelled, so a reviewer
+                                 knows these buttons record THEIR judgement
+                                 (backend: effective role >= REVIEWER). -->
+                            <span class="validation-label" data-testid="validation-label">
+                              Review verdict
+                            </span>
                             <button
                               class="btn-mini"
                               data-testid="confirm-finding"
@@ -737,6 +745,61 @@
               </ul>
             </div>
           }
+          <!-- ── History: every past run of this PR (reviewer workflow) ── -->
+          <div
+            class="tab-panel"
+            role="tabpanel"
+            id="panel-history"
+            aria-labelledby="tab-history"
+            [hidden]="activeTab() !== 'history'"
+            data-testid="panel-history"
+          >
+            @if (runHistory().length === 0) {
+              <div class="panel-empty" data-testid="history-empty">
+                <p>No review has run for this pull request yet.</p>
+              </div>
+            } @else {
+              <ul class="history-list" data-testid="history-list">
+                @for (run of runHistory(); track run.id) {
+                  <li
+                    class="history-row"
+                    [class.current]="isCurrentRun(run)"
+                    data-testid="history-row"
+                  >
+                    <span
+                      class="history-state"
+                      [class.failed]="run.status === 'failed'"
+                      [class.done]="run.status === 'completed' || run.status === 'ready_to_post'"
+                    >
+                      {{ runStateLabel(run) }}
+                    </span>
+                    <span class="history-date" [attr.datetime]="run.created_at">
+                      {{ run.created_at | date: 'medium' }}
+                    </span>
+                    @if (runDuration(run); as duration) {
+                      <span class="history-duration" data-testid="history-duration">
+                        {{ duration }}
+                      </span>
+                    }
+                    @if (isCurrentRun(run)) {
+                      <span class="history-current-chip" data-testid="history-current">
+                        current
+                      </span>
+                    }
+                    @if (run.status === 'failed' && run.error_message) {
+                      <p class="history-error" data-testid="history-error">
+                        {{ run.error_message }}
+                      </p>
+                    }
+                  </li>
+                }
+              </ul>
+              <p class="history-note">
+                Newest first — the current run is the one rendered in the Overview, Findings and
+                Static analysis tabs.
+              </p>
+            }
+          </div>
         </div>
       </div>
     }

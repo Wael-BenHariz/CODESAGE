@@ -1,9 +1,10 @@
 /**
  * STATIC MOCK DATA — Platform Administration console (PFE prototype).
  *
- * Initial values for the Paramètres screens. Saving a section only commits
- * the form state to the component's local signals and shows a toast — no
- * setting here is ever persisted, and no LLM provider is contacted.
+ * Initial values for the Global Settings screens. Saving a section only
+ * commits the form state to the component's local signals and shows a
+ * toast — no setting here is ever persisted, and no LLM provider is
+ * contacted.
  */
 
 export interface MockGeneralSettings {
@@ -31,7 +32,7 @@ export const MOCK_GENERAL_SETTINGS: MockGeneralSettings = {
   platformName: 'CODESAGE',
   appUrl: 'https://codesage.example.com',
   maintenanceMode: false,
-  defaultLanguage: 'Français'
+  defaultLanguage: 'English'
 };
 
 export const MOCK_AI_SETTINGS: MockAiSettings = {
@@ -48,7 +49,7 @@ export const MOCK_SECURITY_SETTINGS: MockSecuritySettings = {
   enforcedAuth: true
 };
 
-export const MOCK_LANGUAGE_OPTIONS: readonly string[] = ['Français', 'English', 'Deutsch'];
+export const MOCK_LANGUAGE_OPTIONS: readonly string[] = ['English', 'Français', 'Deutsch'];
 
 export const MOCK_AI_PROVIDER_OPTIONS: readonly string[] = [
   'Gemini',
