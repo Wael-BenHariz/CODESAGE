@@ -21,33 +21,33 @@ export interface MockStatCard {
 export const MOCK_PLATFORM_STATS: readonly MockStatCard[] = [
   {
     id: 'users',
-    label: 'Utilisateurs',
+    label: 'Users',
     value: '248',
-    caption: 'Utilisateurs',
+    caption: 'Registered users',
     trend: '↑ 8.2%',
     direction: 'up'
   },
   {
     id: 'reviews',
-    label: 'Revues',
-    value: '1 284',
-    caption: 'Revues réalisées',
+    label: 'Reviews',
+    value: '1,284',
+    caption: 'Reviews completed',
     trend: '↑ 12.4%',
     direction: 'up'
   },
   {
     id: 'tokens',
-    label: 'Tokens LLM',
+    label: 'LLM Tokens',
     value: '2.8M',
-    caption: 'Tokens utilisés',
+    caption: 'Tokens used',
     trend: '↑ 8.7%',
     direction: 'up'
   },
   {
     id: 'storage',
-    label: 'Stockage',
+    label: 'Storage',
     value: '18.4 GB',
-    caption: 'Stockage utilisé',
+    caption: 'Storage used',
     trend: '↓ 2.1%',
     direction: 'down'
   }
@@ -58,7 +58,7 @@ export interface MockWeekPoint {
   readonly value: number;
 }
 
-/** Weekly "Utilisation des revues" bars (static). */
+/** Weekly "Review usage" bars (static). */
 export const MOCK_REVIEW_WEEK: readonly MockWeekPoint[] = [
   { day: 'Mon', value: 148 },
   { day: 'Tue', value: 176 },
@@ -75,12 +75,12 @@ export interface MockUsageTotal {
   readonly value: string;
 }
 
-/** Global usage cards on Quotas & Utilisation. */
+/** Global usage cards on Quotas & Configuration. */
 export const MOCK_USAGE_TOTALS: readonly MockUsageTotal[] = [
-  { id: 'reviews', label: 'Revues', value: '1 284' },
-  { id: 'tokens', label: 'Tokens LLM', value: '2.8M' },
-  { id: 'storage', label: 'Stockage', value: '18.4 GB' },
-  { id: 'requests', label: 'Requêtes', value: '12 482' }
+  { id: 'reviews', label: 'Reviews', value: '1,284' },
+  { id: 'tokens', label: 'LLM Tokens', value: '2.8M' },
+  { id: 'storage', label: 'Storage', value: '18.4 GB' },
+  { id: 'requests', label: 'Requests', value: '12,482' }
 ];
 
 export interface MockQuotaBar {
@@ -90,9 +90,9 @@ export interface MockQuotaBar {
 }
 
 export const MOCK_QUOTA_BARS: readonly MockQuotaBar[] = [
-  { id: 'llm', label: 'Quota LLM', percent: 78 },
-  { id: 'storage', label: 'Quota stockage', percent: 54 },
-  { id: 'reviews', label: 'Quota revues', percent: 61 }
+  { id: 'llm', label: 'LLM quota', percent: 78 },
+  { id: 'storage', label: 'Storage quota', percent: 54 },
+  { id: 'reviews', label: 'Reviews quota', percent: 61 }
 ];
 
 export interface MockOrgUsage {

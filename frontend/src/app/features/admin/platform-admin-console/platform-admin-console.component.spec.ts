@@ -50,11 +50,11 @@ describe('PlatformAdminConsoleComponent', () => {
     expect(labels).toEqual([
       'Overview',
       'Dashboard',
-      'Utilisateurs',
-      'Paramètres',
-      'État du système',
-      'Journaux',
-      'Quotas & Utilisation'
+      'Users',
+      'Global Settings',
+      'System Monitoring',
+      'System Logs',
+      'Quotas & Configuration'
     ]);
   });
 
@@ -62,8 +62,14 @@ describe('PlatformAdminConsoleComponent', () => {
     expect(el().querySelector('.pa-topbar-title')?.textContent).toContain(
       'Platform Administration'
     );
-    expect(el().textContent).toContain('Administrateur');
+    expect(el().textContent).toContain('Administrator');
     expect(el().querySelector('.pa-avatar-fallback')?.textContent).toContain('NO');
+  });
+
+  it('links back into the main app from the shell-less console', () => {
+    const back = el().querySelector<HTMLAnchorElement>('[data-testid="pa-back-to-app"]');
+    expect(back).not.toBeNull();
+    expect(back?.getAttribute('href')).toBe('/dashboard');
   });
 
   it('routes the logout entry through AuthService', () => {
@@ -83,5 +89,20 @@ describe('PlatformAdminConsoleComponent', () => {
     fixture.detectChanges();
     expect(el().querySelector('.pa-sidebar')?.classList.contains('open')).toBe(false);
     expect(el().querySelector('.pa-backdrop')).toBeNull();
+  });
+
+  it('labels the mock pages as a prototype and keeps the overview banner-free', () => {
+    // Before any navigation the signal defaults to the prototype branch
+    // only when the URL says so; the overview must never carry the banner.
+    fixture.componentRef.instance.prototypePage.set(false);
+    fixture.detectChanges();
+    expect(el().querySelector('[data-testid="pa-prototype-banner"]')).toBeNull();
+
+    fixture.componentRef.instance.prototypePage.set(true);
+    fixture.detectChanges();
+    const banner = el().querySelector('[data-testid="pa-prototype-banner"]');
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain('Prototype');
+    expect(banner?.textContent).toContain('local sample data');
   });
 });

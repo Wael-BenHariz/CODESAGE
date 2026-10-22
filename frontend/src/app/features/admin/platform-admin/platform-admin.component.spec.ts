@@ -188,11 +188,13 @@ describe('PlatformAdminComponent — /users + orgs (plan Step 9)', () => {
     expect(component.orgsState()).toBe('ready');
   });
 
-  it('shows the settings sub-nav with Platform marked current (plan Step 8)', () => {
+  it('renders no settings sub-nav — the console sidebar is the only navigation here', () => {
     create();
-    expect(q('[data-testid="settings-nav"]')).not.toBeNull();
-    expect(q('[data-testid="settings-nav-ai"]')).not.toBeNull();
-    expect(q('[data-testid="settings-nav-platform"]')?.getAttribute('aria-current')).toBe('page');
-    expect(q('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')).toBeNull();
+    // The mixed personal/org/platform settings-nav was removed from the
+    // platform overview: platform administration is its own workspace and
+    // the console shell already provides its navigation.
+    expect(q('[data-testid="settings-nav"]')).toBeNull();
+    expect(q('[data-testid="settings-nav-platform"]')).toBeNull();
+    expect(q('[data-testid="org-workspace-nav"]')).toBeNull();
   });
 });

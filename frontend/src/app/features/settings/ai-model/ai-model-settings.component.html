@@ -1,75 +1,17 @@
 <div class="settings-page">
   <header class="page-header">
-    <h1>Settings</h1>
+    <h1>AI Model</h1>
+    <p class="page-subtitle">
+      Your personal model credentials for AI reviews — separate from your organization's model
+      policy and the platform default.
+    </p>
   </header>
 
   <app-settings-nav active="ai" />
 
   <div class="settings-sections">
-    <section class="settings-section">
-      <h2>Profile</h2>
-      <div class="card profile-card">
-        @if (user(); as u) {
-          <div class="profile-avatar">
-            <img [src]="u.avatarUrl" [alt]="u.login" />
-          </div>
-          <div class="profile-info">
-            <div class="field">
-              <label for="settings-username">Username</label>
-              <input id="settings-username" type="text" [value]="u.login" disabled />
-            </div>
-            <div class="field">
-              <label for="settings-email">Email</label>
-              <input id="settings-email" type="email" [value]="u.email" disabled />
-            </div>
-            <div class="field">
-              <label for="settings-name">Name</label>
-              <input
-                id="settings-name"
-                type="text"
-                [value]="u.name || ''"
-                placeholder="Your name"
-              />
-            </div>
-          </div>
-        }
-      </div>
-    </section>
-
-    <section class="settings-section">
-      <h2>Review Preferences</h2>
-      <div class="card preferences-card">
-        <!-- Plan Step 8 / gap 4: no backend exists for these preferences —
-             they are rendered disabled with an explicit label and must
-             never pretend to save. -->
-        <p class="unavailable-note" data-testid="prefs-unavailable">
-          Not available yet — these preferences have no backend and nothing here is saved.
-        </p>
-        <div class="preference-item">
-          <label for="settings-auto-review">Auto-review on PR open</label>
-          <input id="settings-auto-review" type="checkbox" disabled />
-        </div>
-        <div class="preference-item">
-          <label for="settings-review-frequency">Review frequency</label>
-          <select id="settings-review-frequency" disabled>
-            <option value="immediate">Immediate</option>
-            <option value="hourly">Hourly</option>
-            <option value="daily">Daily</option>
-          </select>
-        </div>
-        <div class="preference-item">
-          <label for="settings-security-scans">Include security scans</label>
-          <input id="settings-security-scans" type="checkbox" disabled />
-        </div>
-        <div class="preference-item">
-          <label for="settings-performance-checks">Include performance checks</label>
-          <input id="settings-performance-checks" type="checkbox" disabled />
-        </div>
-      </div>
-    </section>
-
-    <section class="settings-section">
-      <h2>AI Model Settings</h2>
+    <section class="settings-section" data-testid="ai-model-section">
+      <h2>Personal AI credentials</h2>
       <div class="card llm-card">
         @if (loading()) {
           <p class="llm-loading">Loading settings...</p>
@@ -188,37 +130,6 @@
             </button>
           </div>
         }
-      </div>
-    </section>
-
-    <section class="settings-section">
-      <h2>Notifications</h2>
-      <div class="card notifications-card">
-        <!-- Plan Step 8 / gap 4: no email-notification backend exists. -->
-        <p class="unavailable-note" data-testid="notifications-unavailable">
-          Not available yet — email notifications have no backend and nothing here is saved.
-        </p>
-        <div class="notification-item">
-          <span>Email notifications for new reviews</span>
-          <input type="checkbox" disabled />
-        </div>
-        <div class="notification-item">
-          <span>Email notifications for comments</span>
-          <input type="checkbox" disabled />
-        </div>
-      </div>
-    </section>
-
-    <section class="settings-section danger-zone">
-      <h2>Danger Zone</h2>
-      <div class="card danger-card">
-        <div class="danger-item">
-          <div>
-            <strong>Log out</strong>
-            <p>Log out from your account on this device.</p>
-          </div>
-          <button class="btn btn-danger" (click)="logout()">Log Out</button>
-        </div>
       </div>
     </section>
   </div>

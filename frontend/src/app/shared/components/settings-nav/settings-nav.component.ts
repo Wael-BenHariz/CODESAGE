@@ -1,23 +1,21 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { AuthService } from '../../../core/services/auth.service';
-import { OrgSettingsService, canManageSettings } from '../../../core/services/org-settings.service';
-
-/** Destination within the settings family (plan §4.4). */
-export type SettingsNavTab = 'ai' | 'organization' | 'members' | 'platform';
+/** Destination within the personal settings family (plan Step 4). */
+export type SettingsNavTab = 'profile' | 'review-preferences' | 'ai';
 
 /**
- * Settings sub-navigation shared by /settings, /settings/org and /platform
- * (plan §4.4): **AI model · Organization · Members & invitations · Platform**
- * — deliberately no new routes; `/settings/org?view=members` picks the panel.
+ * Personal settings sub-navigation (plan Step 4): **Profile · Review
+ * preferences · AI model** — the three personal screens share it. It is
+ * deliberately free of organization and platform administration links:
+ * those are separate workspaces with their own navigation (Organization
+ * Settings carries its own workspace nav; the platform console has its own
+ * sidebar), so this nav never mixes scopes.
  *
- * These are *links*, not ARIA tabs: two of the four destinations are separate
- * guarded routes, so `aria-current="page"` marks the active entry. Visibility
- * mirrors the route guards (`ADMIN_ROLES` / `PLATFORM_ROLES`): an entry the
- * caller could never open is omitted instead of rendering a dead end — the
- * same cosmetic-capability rule as the sidebar, and the backend re-checks
- * every request regardless.
+ * These are *links*, not ARIA tabs: the destinations are separate guarded
+ * routes, so `aria-current="page"` marks the active entry. All three routes
+ * sit behind the same `write` capability as the settings family itself, so
+ * no per-entry visibility logic is needed here.
  */
 @Component({
   selector: 'app-settings-nav',
@@ -25,49 +23,34 @@ export type SettingsNavTab = 'ai' | 'organization' | 'members' | 'platform';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   template: `
-    <nav class="settings-nav" aria-label="Settings sections" data-testid="settings-nav">
+    <nav class="settings-nav" aria-label="Personal settings sections" data-testid="settings-nav">
       <a
         class="nav-tab"
-        routerLink="/settings"
+        routerLink="/settings/profile"
+        data-testid="settings-nav-profile"
+        [class.active]="active() === 'profile'"
+        [attr.aria-current]="active() === 'profile' ? 'page' : null"
+      >
+        Profile
+      </a>
+      <a
+        class="nav-tab"
+        routerLink="/settings/review-preferences"
+        data-testid="settings-nav-review-preferences"
+        [class.active]="active() === 'review-preferences'"
+        [attr.aria-current]="active() === 'review-preferences' ? 'page' : null"
+      >
+        Review preferences
+      </a>
+      <a
+        class="nav-tab"
+        routerLink="/settings/ai-model"
         data-testid="settings-nav-ai"
         [class.active]="active() === 'ai'"
         [attr.aria-current]="active() === 'ai' ? 'page' : null"
       >
         AI model
       </a>
-      @if (canOrg()) {
-        <a
-          class="nav-tab"
-          routerLink="/settings/org"
-          [queryParams]="{ view: 'organization' }"
-          data-testid="settings-nav-organization"
-          [class.active]="active() === 'organization'"
-          [attr.aria-current]="active() === 'organization' ? 'page' : null"
-        >
-          Organization
-        </a>
-        <a
-          class="nav-tab"
-          routerLink="/settings/org"
-          [queryParams]="{ view: 'members' }"
-          data-testid="settings-nav-members"
-          [class.active]="active() === 'members'"
-          [attr.aria-current]="active() === 'members' ? 'page' : null"
-        >
-          Members &amp; invitations
-        </a>
-      }
-      @if (canPlatform()) {
-        <a
-          class="nav-tab"
-          routerLink="/platform"
-          data-testid="settings-nav-platform"
-          [class.active]="active() === 'platform'"
-          [attr.aria-current]="active() === 'platform' ? 'page' : null"
-        >
-          Platform
-        </a>
-      }
     </nav>
   `,
   styles: [
@@ -104,39 +87,7 @@ export type SettingsNavTab = 'ai' | 'organization' | 'members' | 'platform';
     `
   ]
 })
-export class SettingsNavComponent implements OnInit {
-  private readonly auth = inject(AuthService);
-  private readonly orgsApi = inject(OrgSettingsService);
-
-  /** Which destination the host screen is on. */
-  readonly active = input<SettingsNavTab>('ai');
-
-  /** Org entries — JWT ≥ ORG_ADMIN or an admin membership (fail-closed). */
-  readonly canOrg = signal(false);
-  /** Platform entry — PLATFORM_ADMIN only. */
-  readonly canPlatform = signal(false);
-
-  ngOnInit(): void {
-    this.recompute();
-  }
-
-  /**
-   * Mirrors `AuthContextService.can('org:settings')` semantics but against a
-   * fresh `listOrgs()` call, so each host screen decides from live data
-   * instead of a cached org list. Fail-closed: an error keeps the entries
-   * hidden.
-   */
-  private recompute(): void {
-    const jwt = this.auth.currentUser()?.role ?? null;
-    this.canPlatform.set(String(jwt ?? '').toUpperCase() === 'PLATFORM_ADMIN');
-    if (canManageSettings(jwt, null)) {
-      // The JWT alone already reaches ORG_ADMIN (same as ADMIN_ROLES).
-      this.canOrg.set(true);
-      return;
-    }
-    this.orgsApi.listOrgs().subscribe({
-      next: orgs => this.canOrg.set(orgs.some(org => canManageSettings(jwt, org.role))),
-      error: () => this.canOrg.set(false)
-    });
-  }
+export class SettingsNavComponent {
+  /** Which personal settings screen the host is on. */
+  readonly active = input<SettingsNavTab>('profile');
 }

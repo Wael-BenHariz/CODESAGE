@@ -1,18 +1,18 @@
 <div class="pa-page" data-testid="pa-users">
   <header class="pa-page-header">
     <div>
-      <h1 class="pa-page-title">Gestion des utilisateurs</h1>
+      <h1 class="pa-page-title">User Management</h1>
       <p class="pa-page-subtitle">
-        Gérez les utilisateurs, leurs rôles et leurs organisations. — démonstration statique, les
-        données restent locales.
+        Manage users, their roles and their organizations. — static prototype: the data stays local
+        and never reaches a server.
       </p>
     </div>
     <button type="button" class="btn btn-primary" (click)="openAdd()" data-testid="pa-users-add">
-      + Ajouter un utilisateur
+      + Add user
     </button>
   </header>
 
-  <section class="pa-panel" aria-label="Liste des utilisateurs">
+  <section class="pa-panel" aria-label="User list">
     <div class="pa-toolbar">
       <label class="pa-search">
         <span class="pa-search-icon" aria-hidden="true">
@@ -29,11 +29,11 @@
             <path d="M10.5 10.5 14 14" />
           </svg>
         </span>
-        <span class="pa-sr">Rechercher un utilisateur</span>
+        <span class="pa-sr">Search users</span>
         <input
           type="search"
           class="input"
-          placeholder="Rechercher un utilisateur..."
+          placeholder="Search users..."
           [ngModel]="search()"
           (ngModelChange)="setSearch($event)"
           data-testid="pa-users-search"
@@ -41,14 +41,14 @@
       </label>
 
       <label class="pa-field">
-        <span class="pa-field-label">Rôle</span>
+        <span class="pa-field-label">Role</span>
         <select
           class="input"
           [ngModel]="roleFilter()"
           (ngModelChange)="setRoleFilter($event)"
           data-testid="pa-users-role-filter"
         >
-          <option value="">Tous</option>
+          <option value="">All</option>
           @for (role of roles; track role) {
             <option [value]="role">{{ role }}</option>
           }
@@ -56,14 +56,14 @@
       </label>
 
       <label class="pa-field">
-        <span class="pa-field-label">Organisation</span>
+        <span class="pa-field-label">Organization</span>
         <select
           class="input"
           [ngModel]="orgFilter()"
           (ngModelChange)="setOrgFilter($event)"
           data-testid="pa-users-org-filter"
         >
-          <option value="">Toutes</option>
+          <option value="">All</option>
           @for (org of organizations; track org) {
             <option [value]="org">{{ org }}</option>
           }
@@ -71,24 +71,24 @@
       </label>
 
       <label class="pa-field">
-        <span class="pa-field-label">Statut</span>
+        <span class="pa-field-label">Status</span>
         <select
           class="input"
           [ngModel]="statusFilter()"
           (ngModelChange)="setStatusFilter($event)"
           data-testid="pa-users-status-filter"
         >
-          <option value="">Tous</option>
-          <option value="active">Actif</option>
-          <option value="inactive">Inactif</option>
+          <option value="">All</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
         </select>
       </label>
     </div>
 
     @if (filtered().length === 0) {
       <app-empty-state
-        title="Aucun utilisateur trouvé"
-        message="Aucun résultat pour la recherche et les filtres sélectionnés."
+        title="No users found"
+        message="Nothing matches the current search and filters."
         testid="pa-users-empty"
       />
     } @else {
@@ -96,12 +96,12 @@
         <table class="pa-table" data-testid="pa-users-table">
           <thead>
             <tr>
-              <th scope="col">Utilisateur</th>
+              <th scope="col">User</th>
               <th scope="col">Email</th>
-              <th scope="col">Organisation</th>
-              <th scope="col">Rôle</th>
-              <th scope="col">Statut</th>
-              <th scope="col">Dernière activité</th>
+              <th scope="col">Organization</th>
+              <th scope="col">Role</th>
+              <th scope="col">Status</th>
+              <th scope="col">Last activity</th>
               <th scope="col"><span class="pa-sr">Actions</span></th>
             </tr>
           </thead>
@@ -136,7 +136,7 @@
                       class="pa-menu-btn"
                       aria-haspopup="true"
                       [attr.aria-expanded]="openMenuId() === user.id"
-                      [attr.aria-label]="'Actions pour ' + user.name"
+                      [attr.aria-label]="'Actions for ' + user.name"
                       [attr.data-testid]="'pa-user-menu-' + user.id"
                       (click)="toggleMenu(user.id)"
                     >
@@ -160,7 +160,7 @@
                           (click)="openProfile(user)"
                           data-testid="pa-user-action-profile"
                         >
-                          Voir le profil
+                          View profile
                         </button>
                         <button
                           type="button"
@@ -168,7 +168,7 @@
                           (click)="openRoleEdit(user)"
                           data-testid="pa-user-action-role"
                         >
-                          Modifier le rôle
+                          Change role
                         </button>
                         <button
                           type="button"
@@ -176,7 +176,7 @@
                           (click)="openOrgEdit(user)"
                           data-testid="pa-user-action-org"
                         >
-                          Changer l'organisation
+                          Change organization
                         </button>
                         <button
                           type="button"
@@ -185,7 +185,7 @@
                           (click)="toggleStatus(user)"
                           data-testid="pa-user-action-status"
                         >
-                          {{ user.status === 'active' ? 'Désactiver' : 'Activer' }}
+                          {{ user.status === 'active' ? 'Deactivate' : 'Activate' }}
                         </button>
                       </div>
                     }
@@ -205,10 +205,10 @@
           (click)="prevPage()"
           data-testid="pa-users-prev"
         >
-          Précédent
+          Previous
         </button>
         <span class="pa-pagination-status">
-          Page {{ currentPage() }} sur {{ pageCount() }} · {{ filtered().length }} utilisateurs
+          Page {{ currentPage() }} sur {{ pageCount() }} · {{ filtered().length }} users
         </span>
         <button
           type="button"
@@ -217,7 +217,7 @@
           (click)="nextPage()"
           data-testid="pa-users-next"
         >
-          Suivant
+          Next
         </button>
       </div>
     }
@@ -241,15 +241,15 @@
               data-testid="pa-user-profile-modal"
             >
               <div class="pa-modal-header">
-                <h2 class="pa-modal-title" id="pa-modal-title">Utilisateur</h2>
-                <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                <h2 class="pa-modal-title" id="pa-modal-title">User</h2>
+                <button type="button" class="pa-close" aria-label="Close" (click)="closeModal()">
                   ×
                 </button>
               </div>
               <div class="pa-modal-body">
                 <dl class="pa-deflist">
                   <div class="pa-def-row">
-                    <dt>Nom</dt>
+                    <dt>Name</dt>
                     <dd>{{ user.name }}</dd>
                   </div>
                   <div class="pa-def-row">
@@ -257,26 +257,26 @@
                     <dd>{{ user.email }}</dd>
                   </div>
                   <div class="pa-def-row">
-                    <dt>Organisation</dt>
+                    <dt>Organization</dt>
                     <dd>{{ user.organization }}</dd>
                   </div>
                   <div class="pa-def-row">
-                    <dt>Rôle</dt>
+                    <dt>Role</dt>
                     <dd>{{ user.role }}</dd>
                   </div>
                   <div class="pa-def-row">
-                    <dt>Statut</dt>
+                    <dt>Status</dt>
                     <dd>{{ statusLabel(user.status) }}</dd>
                   </div>
                   <div class="pa-def-row">
-                    <dt>Dernière activité</dt>
+                    <dt>Last activity</dt>
                     <dd>{{ user.lastActivity }}</dd>
                   </div>
                 </dl>
               </div>
               <div class="pa-modal-actions">
                 <button type="button" class="btn btn-secondary" (click)="closeModal()">
-                  Fermer
+                  Close
                 </button>
               </div>
             </div>
@@ -292,23 +292,23 @@
               data-testid="pa-user-role-modal"
             >
               <div class="pa-modal-header">
-                <h2 class="pa-modal-title" id="pa-modal-title">Modifier le rôle</h2>
-                <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                <h2 class="pa-modal-title" id="pa-modal-title">Change role</h2>
+                <button type="button" class="pa-close" aria-label="Close" (click)="closeModal()">
                   ×
                 </button>
               </div>
               <div class="pa-modal-body">
                 <div class="pa-form">
                   <div class="pa-form-row">
-                    <span class="pa-field-label">Utilisateur</span>
+                    <span class="pa-field-label">User</span>
                     <span>{{ user.name }}</span>
                   </div>
                   <div class="pa-form-row">
-                    <span class="pa-field-label">Rôle actuel</span>
+                    <span class="pa-field-label">Current role</span>
                     <span>{{ user.role }}</span>
                   </div>
                   <label class="pa-form-row">
-                    <span class="pa-field-label">Nouveau rôle</span>
+                    <span class="pa-field-label">New role</span>
                     <select
                       class="input"
                       [ngModel]="roleDraft()"
@@ -324,7 +324,7 @@
               </div>
               <div class="pa-modal-actions">
                 <button type="button" class="btn btn-secondary" (click)="closeModal()">
-                  Annuler
+                  Cancel
                 </button>
                 <button
                   type="button"
@@ -333,7 +333,7 @@
                   (click)="saveRole()"
                   data-testid="pa-user-role-save"
                 >
-                  Enregistrer
+                  Save
                 </button>
               </div>
             </div>
@@ -349,23 +349,23 @@
               data-testid="pa-user-org-modal"
             >
               <div class="pa-modal-header">
-                <h2 class="pa-modal-title" id="pa-modal-title">Changer l'organisation</h2>
-                <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+                <h2 class="pa-modal-title" id="pa-modal-title">Change organization</h2>
+                <button type="button" class="pa-close" aria-label="Close" (click)="closeModal()">
                   ×
                 </button>
               </div>
               <div class="pa-modal-body">
                 <div class="pa-form">
                   <div class="pa-form-row">
-                    <span class="pa-field-label">Utilisateur</span>
+                    <span class="pa-field-label">User</span>
                     <span>{{ user.name }}</span>
                   </div>
                   <div class="pa-form-row">
-                    <span class="pa-field-label">Organisation actuelle</span>
+                    <span class="pa-field-label">Current organization</span>
                     <span>{{ user.organization }}</span>
                   </div>
                   <label class="pa-form-row">
-                    <span class="pa-field-label">Nouvelle organisation</span>
+                    <span class="pa-field-label">New organization</span>
                     <select
                       class="input"
                       [ngModel]="orgDraft()"
@@ -381,7 +381,7 @@
               </div>
               <div class="pa-modal-actions">
                 <button type="button" class="btn btn-secondary" (click)="closeModal()">
-                  Annuler
+                  Cancel
                 </button>
                 <button
                   type="button"
@@ -390,7 +390,7 @@
                   (click)="saveOrg()"
                   data-testid="pa-user-org-save"
                 >
-                  Enregistrer
+                  Save
                 </button>
               </div>
             </div>
@@ -405,19 +405,19 @@
             data-testid="pa-user-add-modal"
           >
             <div class="pa-modal-header">
-              <h2 class="pa-modal-title" id="pa-modal-title">Ajouter un utilisateur</h2>
-              <button type="button" class="pa-close" aria-label="Fermer" (click)="closeModal()">
+              <h2 class="pa-modal-title" id="pa-modal-title">Add user</h2>
+              <button type="button" class="pa-close" aria-label="Close" (click)="closeModal()">
                 ×
               </button>
             </div>
             <div class="pa-modal-body">
               <div class="pa-form">
                 <label class="pa-form-row">
-                  <span class="pa-field-label">Nom</span>
+                  <span class="pa-field-label">Name</span>
                   <input
                     type="text"
                     class="input"
-                    placeholder="Nom complet"
+                    placeholder="Full name"
                     [ngModel]="addDraft().name"
                     (ngModelChange)="setAddField('name', $event)"
                     data-testid="pa-user-add-name"
@@ -428,14 +428,14 @@
                   <input
                     type="email"
                     class="input"
-                    placeholder="nom@example.com"
+                    placeholder="name@example.com"
                     [ngModel]="addDraft().email"
                     (ngModelChange)="setAddField('email', $event)"
                     data-testid="pa-user-add-email"
                   />
                 </label>
                 <label class="pa-form-row">
-                  <span class="pa-field-label">Organisation</span>
+                  <span class="pa-field-label">Organization</span>
                   <select
                     class="input"
                     [ngModel]="addDraft().organization"
@@ -448,7 +448,7 @@
                   </select>
                 </label>
                 <label class="pa-form-row">
-                  <span class="pa-field-label">Rôle</span>
+                  <span class="pa-field-label">Role</span>
                   <select
                     class="input"
                     [ngModel]="addDraft().role"
@@ -463,9 +463,7 @@
               </div>
             </div>
             <div class="pa-modal-actions">
-              <button type="button" class="btn btn-secondary" (click)="closeModal()">
-                Annuler
-              </button>
+              <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancel</button>
               <button
                 type="button"
                 class="btn btn-primary"
@@ -473,7 +471,7 @@
                 (click)="addUser()"
                 data-testid="pa-user-add-submit"
               >
-                Ajouter
+                Add
               </button>
             </div>
           </div>

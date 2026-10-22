@@ -8,7 +8,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { OrgSettingsService, OrgSummary } from '../../../core/services/org-settings.service';
 import { User } from '../../../core/models/user.model';
 
-describe('SidebarComponent', () => {
+describe('SidebarComponent — grouped role-aware navigation', () => {
   let fixture: ComponentFixture<SidebarComponent>;
   let auth: {
     currentUser: WritableSignal<User | null>;
@@ -42,7 +42,7 @@ describe('SidebarComponent', () => {
     fixture.detectChanges();
     // The sidebar kicks off the org-list fetch fire-and-forget (memoized by
     // AuthContextService) — wait for its promise, then re-render so the
-    // org-gated entry reflects the stub.
+    // org-gated entries reflect the stub.
     await fixture.whenStable();
     fixture.detectChanges();
   }
@@ -53,6 +53,12 @@ describe('SidebarComponent', () => {
 
   function linkTexts(): string[] {
     return Array.from(el().querySelectorAll('.nav-item')).map(a => (a.textContent ?? '').trim());
+  }
+
+  function groupLabels(): string[] {
+    return Array.from(el().querySelectorAll('.nav-group-label')).map(
+      label => label.textContent?.trim() ?? ''
+    );
   }
 
   beforeEach(() => {
@@ -75,41 +81,76 @@ describe('SidebarComponent', () => {
 
   afterEach(() => localStorage.removeItem('codesage_active_org'));
 
-  it('shows read-only navigation to a NONE-role user', async () => {
+  it('shows read-only Main navigation to a NONE-role user', async () => {
     await render(user('NONE'));
 
-    expect(linkTexts()).toEqual(['Repositories']);
+    // Reads only: Repositories + Reviews. No Dashboard (write), no Personal
+    // group, no organization or platform entries.
+    expect(linkTexts()).toEqual(['Repositories', 'Reviews']);
     expect(el().querySelector('[data-testid="nav-org-settings"]')).toBeNull();
     expect(el().querySelector('[data-testid="nav-dashboard"]')).toBeNull();
-    expect(el().querySelector('[data-testid="nav-settings"]')).toBeNull();
+    expect(el().querySelector('[data-testid="nav-profile"]')).toBeNull();
+    expect(groupLabels()).toEqual(['Main']);
   });
 
-  it('shows Dashboard and AI model to a write role', async () => {
+  it('groups Main + Personal for a DEVELOPER', async () => {
     await render(user('DEVELOPER'));
 
-    const links = linkTexts();
-    expect(links).toContain('Dashboard');
-    expect(links).toContain('Repositories');
-    expect(links).toContain('AI model');
-    expect(links).not.toContain('Organization');
-    expect(links).not.toContain('Platform');
+    expect(linkTexts()).toEqual([
+      'Dashboard',
+      'Repositories',
+      'Reviews',
+      'Profile',
+      'Review Preferences',
+      'AI Model'
+    ]);
+    expect(groupLabels()).toEqual(['Main', 'Personal']);
+    // The personal entries point at the three dedicated screens.
+    expect(
+      el().querySelector<HTMLAnchorElement>('[data-testid="nav-profile"]')?.getAttribute('href')
+    ).toBe('/settings/profile');
+    expect(
+      el()
+        .querySelector<HTMLAnchorElement>('[data-testid="nav-review-preferences"]')
+        ?.getAttribute('href')
+    ).toBe('/settings/review-preferences');
+    expect(
+      el().querySelector<HTMLAnchorElement>('[data-testid="nav-settings"]')?.getAttribute('href')
+    ).toBe('/settings/ai-model');
+    expect(
+      el().querySelector<HTMLAnchorElement>('[data-testid="nav-reviews"]')?.getAttribute('href')
+    ).toBe('/reviews');
   });
 
-  it('adds the Organization entry for an ORG_ADMIN', async () => {
+  it('adds the Organization group for an ORG_ADMIN', async () => {
     await render(user('ORG_ADMIN'));
 
     expect(el().querySelector('[data-testid="nav-org-settings"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="nav-org-members"]')).not.toBeNull();
+    expect(groupLabels()).toEqual(['Main', 'Personal', 'Organization']);
+    expect(
+      el().querySelector<HTMLAnchorElement>('[data-testid="nav-org-members"]')?.getAttribute('href')
+    ).toContain('view=members');
   });
 
-  it('adds the Platform entry only for a PLATFORM_ADMIN', async () => {
+  it('adds the Platform administration group only for a PLATFORM_ADMIN', async () => {
     await render(user('PLATFORM_ADMIN'));
     expect(el().querySelector('[data-testid="nav-platform"]')).not.toBeNull();
+    expect(groupLabels()).toEqual(['Main', 'Personal', 'Organization', 'Platform administration']);
 
     await render(user('ORG_ADMIN'));
     expect(el().querySelector('[data-testid="nav-platform"]')).toBeNull();
 
     await render(user('DEVELOPER'));
     expect(el().querySelector('[data-testid="nav-platform"]')).toBeNull();
+  });
+
+  it('keeps exactly one platform link (the old /platform-admin alias link is gone)', async () => {
+    await render(user('PLATFORM_ADMIN'));
+    expect(el().querySelector('[data-testid="nav-platform-admin"]')).toBeNull();
+    expect(
+      el().querySelector<HTMLAnchorElement>('[data-testid="nav-platform"]')?.getAttribute('href')
+    ).toBe('/platform');
   });
 
   it('points the brand at the right home per role', async () => {
@@ -142,7 +183,10 @@ describe('SidebarComponent', () => {
       'Dashboard',
       'Repositories',
       'Organization Repositories',
-      'AI model'
+      'Reviews',
+      'Profile',
+      'Review Preferences',
+      'AI Model'
     ]);
   });
 

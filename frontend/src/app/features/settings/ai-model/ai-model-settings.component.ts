@@ -1,13 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AuthService } from '../../core/services/auth.service';
+
 import {
   LLMSettings,
   LLMSettingsUpdate,
   LlmSettingsService
-} from '../../core/services/llm-settings.service';
-import { SettingsNavComponent } from '../../shared/components/settings-nav/settings-nav.component';
+} from '../../../core/services/llm-settings.service';
+import { SettingsNavComponent } from '../../../shared/components/settings-nav/settings-nav.component';
 
 type LLMProvider = 'groq' | 'openai' | 'anthropic' | 'gemini' | 'ollama';
 
@@ -46,18 +45,25 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+/**
+ * Personal AI model settings (plan Step 4) — route `/settings/ai-model`.
+ *
+ * The one personal screen that talks to the LLM settings API
+ * (`GET/PUT/DELETE /settings/llm`, `POST /settings/llm/test`): pick a
+ * provider, configure model + API key (never echoed back), optional base
+ * URL for local providers, save, test against the SAVED configuration and
+ * reset to the platform default. No profile forms and no organization or
+ * platform controls live here.
+ */
 @Component({
-  selector: 'app-settings',
+  selector: 'app-ai-model-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, SettingsNavComponent],
-  templateUrl: './settings.component.html',
-  styleUrl: './settings.component.scss'
+  imports: [FormsModule, SettingsNavComponent],
+  templateUrl: './ai-model-settings.component.html',
+  styleUrl: './ai-model-settings.component.scss'
 })
-export class SettingsComponent implements OnInit {
-  private readonly auth = inject(AuthService);
+export class AiModelSettingsComponent implements OnInit {
   private readonly llm = inject(LlmSettingsService);
-
-  user = this.auth.currentUser;
 
   readonly providers = PROVIDERS;
 
@@ -80,8 +86,6 @@ export class SettingsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadSettings();
-    // The org/platform entries of the shared sub-nav (plan §4.4) decide their
-    // own visibility inside SettingsNavComponent — this screen only hosts it.
   }
 
   get hasSavedKey(): boolean {
@@ -214,9 +218,5 @@ export class SettingsComponent implements OnInit {
         this.saveError.set(errorMessage(err, 'Could not reset settings.'));
       }
     });
-  }
-
-  logout(): void {
-    this.auth.logout();
   }
 }

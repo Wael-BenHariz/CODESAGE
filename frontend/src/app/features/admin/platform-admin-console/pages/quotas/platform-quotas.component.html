@@ -3,8 +3,8 @@
     <div>
       <h1 class="pa-page-title">Quotas &amp; Utilisation</h1>
       <p class="pa-page-subtitle">
-        Suivez la consommation de la plateforme et ajustez les quotas par organisation. —
-        démonstration statique, les quotas restent locaux.
+        Track platform usage and adjust per-organization quotas. — static prototype: quota changes
+        stay local.
       </p>
     </div>
     <button
@@ -13,11 +13,11 @@
       (click)="openQuotaModal()"
       data-testid="pa-quotas-edit"
     >
-      Modifier les quotas
+      Edit quotas
     </button>
   </header>
 
-  <section class="pa-stat-grid" aria-label="Utilisation globale">
+  <section class="pa-stat-grid" aria-label="Global usage">
     @for (total of totals; track total.id) {
       <article class="pa-stat-card" [attr.data-testid]="'pa-usage-' + total.id">
         <span class="pa-stat-label">{{ total.label }}</span>
@@ -28,8 +28,8 @@
 
   <section class="pa-panel" aria-labelledby="pa-quota-bars-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-quota-bars-title">Consommation des quotas</h2>
-      <span class="pa-panel-meta">Période en cours (démo)</span>
+      <h2 class="pa-panel-title" id="pa-quota-bars-title">Quota consumption</h2>
+      <span class="pa-panel-meta">Current period (demo)</span>
     </div>
     <div class="pa-quota-list">
       @for (bar of quotaBars; track bar.id) {
@@ -60,17 +60,17 @@
 
   <section class="pa-panel" aria-labelledby="pa-org-usage-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-org-usage-title">Utilisation par organisation</h2>
+      <h2 class="pa-panel-title" id="pa-org-usage-title">Usage by organization</h2>
     </div>
     <div class="pa-table-wrap">
       <table class="pa-table" data-testid="pa-org-usage-table">
         <thead>
           <tr>
-            <th scope="col">Organisation</th>
-            <th scope="col">Revues</th>
+            <th scope="col">Organization</th>
+            <th scope="col">Reviews</th>
             <th scope="col">Tokens</th>
-            <th scope="col">Stockage</th>
-            <th scope="col">Utilisation</th>
+            <th scope="col">Storage</th>
+            <th scope="col">Utilization</th>
           </tr>
         </thead>
         <tbody>
@@ -92,17 +92,17 @@
 
   <section class="pa-panel" aria-labelledby="pa-org-quotas-title">
     <div class="pa-panel-head">
-      <h2 class="pa-panel-title" id="pa-org-quotas-title">Quotas par organisation</h2>
-      <span class="pa-panel-meta">Modifiable localement</span>
+      <h2 class="pa-panel-title" id="pa-org-quotas-title">Quotas by organization</h2>
+      <span class="pa-panel-meta">Editable locally (prototype only)</span>
     </div>
     <div class="pa-table-wrap">
       <table class="pa-table" data-testid="pa-org-quotas-table">
         <thead>
           <tr>
-            <th scope="col">Organisation</th>
-            <th scope="col">Quota de revues</th>
-            <th scope="col">Quota LLM</th>
-            <th scope="col">Quota stockage</th>
+            <th scope="col">Organization</th>
+            <th scope="col">Reviews quota</th>
+            <th scope="col">LLM quota</th>
+            <th scope="col">Storage quota</th>
           </tr>
         </thead>
         <tbody>
@@ -134,15 +134,15 @@
         data-testid="pa-quota-modal"
       >
         <div class="pa-modal-header">
-          <h2 class="pa-modal-title" id="pa-quota-modal-title">Modifier les quotas</h2>
-          <button type="button" class="pa-close" aria-label="Fermer" (click)="closeQuotaModal()">
+          <h2 class="pa-modal-title" id="pa-quota-modal-title">Edit quotas</h2>
+          <button type="button" class="pa-close" aria-label="Close" (click)="closeQuotaModal()">
             ×
           </button>
         </div>
         <div class="pa-modal-body">
           <div class="pa-form">
             <label class="pa-form-row">
-              <span class="pa-field-label">Organisation</span>
+              <span class="pa-field-label">Organization</span>
               <select
                 class="input"
                 [ngModel]="orgDraft()"
@@ -155,7 +155,7 @@
               </select>
             </label>
             <label class="pa-form-row">
-              <span class="pa-field-label">Quota de revues</span>
+              <span class="pa-field-label">Reviews quota</span>
               <input
                 type="number"
                 min="0"
@@ -166,7 +166,7 @@
               />
             </label>
             <label class="pa-form-row">
-              <span class="pa-field-label">Quota LLM</span>
+              <span class="pa-field-label">LLM quota</span>
               <input
                 type="number"
                 min="0"
@@ -177,7 +177,7 @@
               />
             </label>
             <label class="pa-form-row">
-              <span class="pa-field-label">Quota stockage</span>
+              <span class="pa-field-label">Storage quota</span>
               <input
                 type="text"
                 class="input"
@@ -191,7 +191,7 @@
         </div>
         <div class="pa-modal-actions">
           <button type="button" class="btn btn-secondary" (click)="closeQuotaModal()">
-            Annuler
+            Cancel
           </button>
           <button
             type="button"
@@ -199,7 +199,7 @@
             (click)="saveQuotas()"
             data-testid="pa-quota-save"
           >
-            Enregistrer
+            Save
           </button>
         </div>
       </div>

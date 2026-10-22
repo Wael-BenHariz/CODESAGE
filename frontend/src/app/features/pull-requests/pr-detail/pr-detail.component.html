@@ -136,10 +136,21 @@
       />
 
       <div class="card diff-section">
-        <h3>Changes</h3>
+        <h3>Changed files</h3>
+        <!-- Honest unavailability (plan Step 6): no diff viewer is
+             integrated and no diff endpoint exists — the placeholder points
+             at GitHub instead of pretending a diff is coming. -->
         <div class="diff-placeholder">
-          <p>Diff view will be displayed here when Monaco Editor is integrated.</p>
-          <p>Each file with changes will be shown with syntax highlighting.</p>
+          <p>
+            The in-app diff viewer is not available yet — CodeSage does not load file diffs through
+            the API today.
+          </p>
+          <p>
+            Review the full changes on
+            <a [href]="githubPrUrl(pr) + '/files'" target="_blank" rel="noopener noreferrer">
+              GitHub</a
+            >; every finding below already carries its own snippet and location.
+          </p>
         </div>
       </div>
 

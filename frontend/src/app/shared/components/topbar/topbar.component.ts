@@ -110,7 +110,10 @@ export class TopbarComponent implements OnInit {
    * the route table; unknown segments render verbatim, never invented).
    */
   private buildCrumbs(url: string): Crumb[] {
-    const path = decodeURIComponent(url.split('?')[0]);
+    // `path` drops the query; `query` keeps it for the org-workspace views.
+    const [rawPath, rawQuery = ''] = url.split('?');
+    const path = decodeURIComponent(rawPath);
+    const query = decodeURIComponent(rawQuery);
     const segs = path.split('/').filter(Boolean);
     if (segs.length === 0) return [];
 
@@ -131,16 +134,30 @@ export class TopbarComponent implements OnInit {
     }
 
     if (segs[0] === 'settings') {
-      const crumbs: Crumb[] = [{ label: 'Settings', link: ['/settings'] }];
+      // Personal settings family + the org workspace (plan Step 4/5).
       if (segs[1] === 'org') {
-        crumbs.push({ label: 'Organization', link: ['/settings', 'org'] });
+        const orgLink = ['/settings', 'org'];
+        const view = query.includes('view=members')
+          ? 'Members & invitations'
+          : query.includes('view=overview')
+            ? 'Overview'
+            : 'Settings';
+        return [{ label: 'Organization', link: orgLink }, { label: view }];
       }
+      const settingsLabels: Record<string, string> = {
+        profile: 'Profile',
+        'review-preferences': 'Review Preferences',
+        'ai-model': 'AI Model'
+      };
+      const label = settingsLabels[segs[1]] ?? 'Settings';
+      const crumbs: Crumb[] = [{ label: 'Settings', link: ['/settings', 'profile'] }, { label }];
       return crumbs;
     }
 
     const labels: Record<string, string> = {
       dashboard: 'Dashboard',
       'organization-repositories': 'Organization Repositories',
+      reviews: 'Reviews',
       platform: 'Platform',
       help: 'Help'
     };

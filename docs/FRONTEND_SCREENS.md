@@ -29,10 +29,14 @@ Role lists live in `frontend/src/app/core/guards/role.guard.ts`; the guard is
 | `/repositories`                          | `repositories/repository-list`             | `ANY_ROLE`    | Install / connect / enable / disable / remove + selection modal.         |
 | `/repositories/:owner/:repo`             | `repositories/repository-detail`           | `ANY_ROLE`    | `owner/name` → repo UUID resolver (Step 2).                              |
 | `/repositories/:owner/:repo/pulls`       | `pull-requests/pr-list`                    | `ANY_ROLE`    | Paginated PRs of one repo (Step 2 mapping).                              |
-| `/repositories/:owner/:repo/pulls/:number` | `pull-requests/pr-detail`                | `ANY_ROLE`    | PR detail + stats bar + review panel; `confirmUnsavedSummaryGuard` (Step 4). |
-| `/settings`                              | `settings`                                 | `WRITE_ROLES` | LLM settings (write-only key) + disabled not-available sections (Step 8). |
-| `/settings/org`                          | `settings/org-settings`                    | `ADMIN_ROLES` | Org settings + ceilings + embedded invitations (Steps 6/7).              |
-| `/platform`                              | `admin/platform-admin`                     | `PLATFORM_ROLES` | Users + orgs, read-only (Step 9).                                      |
+| `/repositories/:owner/:repo/pulls/:number` | `pull-requests/pr-detail`                | `ANY_ROLE`    | PR detail + stats bar + review panel (Overview/Findings/Static analysis/History tabs); `confirmUnsavedSummaryGuard` (Step 4). |
+| `/reviews`                              | `reviews/review-list`                      | `ANY_ROLE`    | Cross-repo review history (`GET /reviews`): status filter, pagination, per-row PR resolution. |
+| `/settings`                             | → redirect `/settings/profile`             | `WRITE_ROLES` | Compatibility redirect (the mixed page was split, plan "role-based UX"). |
+| `/settings/profile`                     | `settings/profile`                         | `WRITE_ROLES` | Identity read-only (GitHub-managed) + real `PATCH /users/me` (name/email). |
+| `/settings/review-preferences`          | `settings/review-preferences`              | `WRITE_ROLES` | Honest "no backend" panel — disabled controls, nothing saved. |
+| `/settings/ai-model`                    | `settings/ai-model`                        | `WRITE_ROLES` | LLM settings (write-only key), save/test/reset. |
+| `/settings/org`                          | `settings/org-settings`                    | `ADMIN_ROLES` | Org workspace: Overview / Settings (groups + ceilings) / Members & invitations (`?view=`). |
+| `/platform`                              | `admin/platform-admin` (+ console shell)  | `PLATFORM_ROLES` | Real read-only overview (`GET /users`, `GET /orgs`) + six labelled prototype pages (local mock data). |
 | `/not-found`, `**`                       | `errors/not-found`                         | —             | Generic 404 (rule: never "you don't have access" wording).               |
 | `/forbidden`                             | `errors/forbidden`                         | —             | Role-guard denial target (unguarded, no redirect loop).                  |
 
@@ -64,8 +68,11 @@ error + retry / success** — and mutations disable their button while pending
 | repository-list       | `GET /repositories`, `POST …/enable|disable`, `DELETE`, `GET /github/repos`, `POST /github/repos/selection`, install URL | `repository-list.component.spec` (12) |
 | repository-detail     | `GET /repositories/{id}` (owner/name resolver), PR list          | `repository-detail.component.spec`              |
 | pr-list               | `GET /pull-requests/repository/{id}`                             | `pr-list.component.spec`                        |
-| pr-detail + review panel | `GET /pull-requests/{id}`, `GET /reviews/{id}`, `GET …/scan-report`, staged `PATCH/POST` verdicts (Steps 4/5) | `pr-detail.component.spec`, `review-panel.component.spec`, `pr-detail.guard.spec` |
-| settings              | `GET|PUT|DELETE /settings/llm`, `POST /settings/llm/test`, `GET /auth/me` | `settings.component.spec`                 |
+| pr-detail + review panel | `GET /pull-requests/{id}`, `GET /pull-requests/{id}/reviews` (History tab), `GET /reviews/{id}`, `GET …/scan-report`, staged `PATCH/POST` verdicts (Steps 4/5) | `pr-detail.component.spec`, `review-panel.component.spec`, `pr-detail.guard.spec` |
+| review-list            | `GET /reviews` (+`status_filter`), per-row `GET /pull-requests/{id}` + `GET /repositories/{id}` | `review-list.component.spec` |
+| profile (personal)     | `GET /auth/me`, `PATCH /users/me` (name/email only)              | `profile.component.spec`                        |
+| review-preferences (personal) | — (no backend; controls rendered disabled, never faked)   | `review-preferences.component.spec`            |
+| ai-model (personal)    | `GET|PUT|DELETE /settings/llm`, `POST /settings/llm/test`       | `ai-model-settings.component.spec`              |
 | org-settings          | `GET|PUT /orgs/{id}/settings`, `GET|PUT /platform/settings`      | `org-settings.component.spec`                   |
 | org-invitations (embedded) | `GET|POST|DELETE /orgs/{id}/invitations`                    | `org-invitations.component.spec`                |
 | platform-admin        | `GET /users`, `GET /orgs` (all orgs for PA)                      | `platform-admin.component.spec` (8)             |

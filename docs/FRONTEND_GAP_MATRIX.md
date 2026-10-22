@@ -47,7 +47,7 @@ the PLATFORM_ADMIN read/settings carve-out does **not** apply to that route.
 | Endpoint               | Guard    | Request → Response                 | Frontend service method               | Screen                 | Status  |
 | ---------------------- | -------- | ---------------------------------- | ------------------------------------- | ---------------------- | ------- |
 | `GET /users/me`        | any-auth | → `CurrentUser`                    | — (the UI uses `/auth/me`, same data) | —                      | missing |
-| `PATCH /users/me`      | any-auth | `UserUpdate` → `UserResponse`      | `AuthService.updateProfile()`         | **no screen calls it** | missing |
+| `PATCH /users/me`      | any-auth | `UserUpdate` → `UserResponse`      | `AuthService.updateProfile()`         | profile screen (`/settings/profile`, role-based UX split) | done |
 | `DELETE /users/me`     | any-auth | → 204                              | —                                     | no account screen      | missing |
 | `GET /users`           | PA       | page/per_page → `UserListResponse` | `UserService.listUsers()`             | platform (Step 9)      | done    |
 | `GET /users/{user_id}` | PA       | → `UserResponse`                   | `UserService.getUser()` (no caller)   | — (list covers the table) | missing |
@@ -89,7 +89,7 @@ the PLATFORM_ADMIN read/settings carve-out does **not** apply to that route.
 
 | Endpoint                                      | Guard                                   | Request → Response                                                                                    | Frontend service method                 | Screen                     | Status  |
 | --------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------- | ------- |
-| `GET /reviews`                                | any-auth (org-scoped)                   | page/per_page/status_filter/pull_request_id → `ReviewListResponse`                                    | `ReviewService.listReviews()`            | dashboard (Step 10)      | done    |
+| `GET /reviews`                                | any-auth (org-scoped)                   | page/per_page/status_filter/pull_request_id → `ReviewListResponse`                                    | `ReviewService.listReviews()`            | dashboard (Step 10) + review-history page (`/reviews`) | done    |
 | `GET /reviews/{id}`                           | member (PA bypass read)                 | → `ReviewWithComments` (+`viewer_role`)                                                               | `GithubService.getReviewDetail()`       | review-panel               | done    |
 | `GET /reviews/{id}/scan-report`               | member (PA bypass read)                 | `?tool=&severity=` → `ScanReportResponse` (`tools_failed`, `findings[]` w/ `owasp`, `fix_suggestion`) | `ReviewService.getScanReport()`          | review-panel (Step 3)      | done    |
 | `GET /reviews/{id}/status`                    | member                                  | → `ReviewStatus` (`status`, `progress`)                                                               | `GithubService.getReviewStatus()`       | **no screen calls it**     | missing |

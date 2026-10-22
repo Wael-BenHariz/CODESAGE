@@ -241,6 +241,45 @@
   color: var(--text-3);
 }
 
+// Link back into the main app (the console renders without the app shell,
+// so without it a platform admin could not reach their normal screens).
+.pa-back-link {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-2);
+  text-decoration: none;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-xs);
+
+  &:hover {
+    color: var(--text-1);
+    background: var(--surface-hover);
+  }
+}
+
+// Honest prototype labelling for the six mock screens (plan Step 7) —
+// never shown on the API-backed Overview page.
+.pa-proto-banner {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: baseline;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--warning);
+  background: var(--warning-dim);
+  border-left: 3px solid var(--warning);
+
+  strong {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
 .pa-avatar {
   display: flex;
   align-items: center;

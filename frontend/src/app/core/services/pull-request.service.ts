@@ -121,6 +121,14 @@ export class PullRequestService {
     );
   }
 
+  /** `GET /pull-requests/{id}` by UUID — used by the review-history page's
+   * row action to resolve a review back to its PR (number + repository id). */
+  getPullRequestById(prId: string): Observable<PullRequest> {
+    return this.api
+      .get<PullRequestWithReviewsDto>(`/pull-requests/${prId}`)
+      .pipe(map(toPullRequestDetail));
+  }
+
   /** `GET /pull-requests/{id}/reviews` — newest first (review panel input). */
   getPullRequestReviews(prId: string): Observable<ReviewSummary[]> {
     return this.api.get<ReviewSummary[]>(`/pull-requests/${prId}/reviews`);

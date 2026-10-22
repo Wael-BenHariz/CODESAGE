@@ -21,7 +21,7 @@ describe('PlatformDashboardComponent (static mock data)', () => {
 
   it('renders the four statistic cards', () => {
     expect(el().querySelector('[data-testid="pa-stat-users"]')?.textContent).toContain('248');
-    expect(el().querySelector('[data-testid="pa-stat-reviews"]')?.textContent).toContain('1 284');
+    expect(el().querySelector('[data-testid="pa-stat-reviews"]')?.textContent).toContain('1,284');
     expect(el().querySelector('[data-testid="pa-stat-tokens"]')?.textContent).toContain('2.8M');
     expect(el().querySelector('[data-testid="pa-stat-storage"]')?.textContent).toContain('18.4 GB');
   });
@@ -29,7 +29,7 @@ describe('PlatformDashboardComponent (static mock data)', () => {
   it('renders the static system health summary', () => {
     const health = el().querySelector('[data-testid="pa-health-api"]')?.textContent ?? '';
     expect(health).toContain('API');
-    expect(health).toContain('Opérationnel');
+    expect(health).toContain('Operational');
     expect(el().querySelectorAll('.pa-health-card').length).toBe(4);
   });
 

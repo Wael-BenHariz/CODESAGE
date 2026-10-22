@@ -128,6 +128,15 @@ export class RepositoryService {
   }
 
   /**
+   * `GET /repositories/{uuid}` — by-id variant used by the review-history
+   * page's row action (a review carries only its PR id; the PR row carries
+   * the repository id). Visibility stays enforced server-side.
+   */
+  getRepositoryById(id: string): Observable<Repository> {
+    return this.api.get<RepositoryDto>(`/repositories/${id}`).pipe(map(toRepository));
+  }
+
+  /**
    * `GET /repositories/{uuid}` — resolves the owner/name URL segment first
    * (replaces the phantom `GET /repositories/{owner}/{repo}`).
    */

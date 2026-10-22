@@ -15,12 +15,12 @@ import {
 } from '../../mock/platform-settings';
 
 /**
- * Platform Administration → Paramètres (static PFE prototype) —
+ * Platform Administration → Global Settings (static PFE prototype) —
  * `/platform/settings`.
  *
- * Three sections (généraux / IA / sécurité) edit local copies of the mock
- * settings. "Enregistrer" only commits to the component's signals and shows
- * a success toast: nothing is persisted, no LLM provider is contacted, and
+ * Three sections (general / AI / security) edit local copies of the mock
+ * settings. "Save" only commits to the component's signals and shows a
+ * success toast: nothing is persisted, no LLM provider is contacted, and
  * a page refresh restores the demo defaults.
  */
 @Component({
@@ -80,14 +80,14 @@ export class PlatformSettingsComponent {
   // ─── save (local only) ───────────────────────────────────────────────────
 
   saveGeneral(): void {
-    this.toast.success('Les paramètres ont été enregistrés.');
+    this.toast.success('Settings saved (prototype — local only).');
   }
 
   saveAi(): void {
-    this.toast.success('Les paramètres ont été enregistrés.');
+    this.toast.success('Settings saved (prototype — local only).');
   }
 
   saveSecurity(): void {
-    this.toast.success('Les paramètres ont été enregistrés.');
+    this.toast.success('Settings saved (prototype — local only).');
   }
 }

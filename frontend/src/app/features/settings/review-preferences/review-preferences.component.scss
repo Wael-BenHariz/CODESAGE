@@ -1,0 +1,113 @@
+// Personal review preferences (plan Step 4) — tokens only, frozen palette.
+.settings-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-1);
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+}
+
+.page-subtitle {
+  color: var(--text-3);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.settings-section {
+  h2 {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-1);
+    margin: 0 0 16px;
+  }
+}
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 24px;
+}
+
+.unavailable-note {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 0 0 12px;
+}
+
+.preference-item,
+.notification-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  label,
+  span {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  select {
+    font-family: var(--font-mono);
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-1);
+
+    &:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+  }
+
+  input[type='checkbox'] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+  }
+
+  input[type='checkbox']:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.pointer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pointer-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 0;
+}

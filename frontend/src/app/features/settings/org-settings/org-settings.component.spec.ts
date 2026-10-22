@@ -448,25 +448,31 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     expect(
       el().querySelector('[data-testid="group-ceilings"] [data-testid="ceilings-diffCharCap"]')
     ).not.toBeNull();
-    // The platform admin reaches the Platform destination from the same nav
-    // (the screen itself keeps "Organization" marked current).
-    expect(el().querySelector('[data-testid="settings-nav-platform"]')).not.toBeNull();
+    // The org workspace nav never carries platform entries — the console is
+    // a separate workspace reached from the app sidebar.
+    expect(el().querySelector('[data-testid="org-nav-settings"]')).not.toBeNull();
     expect(
-      el().querySelector('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')
+      el().querySelector('[data-testid="org-nav-settings"]')?.getAttribute('aria-current')
     ).toBe('page');
   });
 
   it('renders the Organization panel by default and marks its nav entry current', () => {
     create('ORG_ADMIN');
     expect(el().querySelector('[data-testid="members-view"]')).toBeNull();
+    expect(el().querySelector('[data-testid="overview-view"]')).toBeNull();
     expect(el().querySelector('[data-testid="group-scanners"]')).not.toBeNull();
     expect(
-      el().querySelector('[data-testid="settings-nav-organization"]')?.getAttribute('aria-current')
+      el().querySelector('[data-testid="org-nav-settings"]')?.getAttribute('aria-current')
     ).toBe('page');
     expect(
-      el().querySelector('[data-testid="settings-nav-ai"]')?.getAttribute('aria-current')
+      el().querySelector('[data-testid="org-nav-overview"]')?.getAttribute('aria-current')
     ).toBeNull();
-    expect(el().querySelector('[data-testid="settings-nav-platform"]')).toBeNull();
+    expect(
+      el().querySelector('[data-testid="org-nav-members"]')?.getAttribute('aria-current')
+    ).toBeNull();
+    // The org workspace never shows the personal settings destinations.
+    expect(el().querySelector('[data-testid="settings-nav-profile"]')).toBeNull();
+    expect(el().querySelector('[data-testid="settings-nav-ai"]')).toBeNull();
   });
 
   it('opens Members & invitations from ?view=members with role explanations', () => {
@@ -490,9 +496,50 @@ describe('OrgSettingsComponent — org + platform settings (Step 5)', () => {
     // The Organization panel is swapped out, not stacked below.
     expect(el().querySelector('[data-testid="group-scanners"]')).toBeNull();
     expect(
-      el().querySelector('[data-testid="settings-nav-members"]')?.getAttribute('aria-current')
+      el().querySelector('[data-testid="org-nav-members"]')?.getAttribute('aria-current')
     ).toBe('page');
     // The invitations list loads for the selected org.
     expect(invitations.list).toHaveBeenCalled();
+  });
+
+  it('states honestly that a member list API does not exist yet', () => {
+    routeParams = { view: 'members' };
+    create('ORG_ADMIN');
+
+    const note = el().querySelector('[data-testid="members-list-unavailable"]');
+    expect(note).not.toBeNull();
+    expect(note?.textContent).toContain('member list is not available yet');
+  });
+
+  // --- Overview panel (plan Step 5) -------------------------------------------
+
+  it('opens the Overview from ?view=overview and renders the effective policy', () => {
+    routeParams = { view: 'overview' };
+    create('ORG_ADMIN');
+
+    expect(el().querySelector('[data-testid="overview-view"]')).not.toBeNull();
+    expect(el().querySelector('[data-testid="group-scanners"]')).toBeNull();
+    expect(
+      el().querySelector('[data-testid="org-nav-overview"]')?.getAttribute('aria-current')
+    ).toBe('page');
+
+    const rows = el().querySelectorAll('.overview-row');
+    expect(rows.length).toBe(10); // every effective settings field, nothing invented
+    const text = el().textContent ?? '';
+    expect(text).toContain('auto — reviews post immediately');
+    expect(text).toContain('Min severity to post');
+    expect(text).toContain('openai/gpt-oss-120b');
+    // The selected organization is named in the page header.
+    expect(text).toContain('Managing');
+    expect(text).toContain('acme');
+  });
+
+  it('shows the org picker + effective role above every panel (shared context)', () => {
+    create('ORG_ADMIN');
+    const picker = el().querySelector('#org-settings-picker') as HTMLSelectElement;
+    expect(picker).not.toBeNull();
+    expect(el().querySelector('[data-testid="effective-role"]')?.textContent).toContain(
+      'ORG_ADMIN'
+    );
   });
 });

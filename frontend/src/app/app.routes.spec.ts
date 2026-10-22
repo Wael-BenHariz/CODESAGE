@@ -15,6 +15,48 @@ describe('app routes (plan Step 9: /help)', () => {
   });
 });
 
+describe('app routes (personal settings family, plan Step 4)', () => {
+  const settingsRedirect = routes.find(route => route.path === 'settings');
+  const profile = routes.find(route => route.path === 'settings/profile');
+  const preferences = routes.find(route => route.path === 'settings/review-preferences');
+  const aiModel = routes.find(route => route.path === 'settings/ai-model');
+
+  it('ships the three dedicated personal screens, all lazy', () => {
+    for (const route of [profile, preferences, aiModel]) {
+      expect(route).toBeDefined();
+      expect(route?.loadComponent).toBeDefined();
+    }
+  });
+
+  it('keeps every personal screen behind the write capability (NONE stays out)', () => {
+    for (const route of [profile, preferences, aiModel]) {
+      expect(route?.canActivate).toBeDefined();
+      expect(route?.data?.['capabilities']).toEqual(['write']);
+    }
+  });
+
+  it('redirects the legacy /settings to the profile screen (compatibility)', () => {
+    expect(settingsRedirect?.redirectTo).toBe('settings/profile');
+    expect(settingsRedirect?.pathMatch).toBe('full');
+    expect(settingsRedirect?.loadComponent).toBeUndefined();
+  });
+});
+
+describe('app routes (/reviews — cross-repo review history)', () => {
+  const reviewsRoute = routes.find(route => route.path === 'reviews');
+
+  it('ships the lazy review-history component', () => {
+    expect(reviewsRoute).toBeDefined();
+    expect(reviewsRoute?.loadComponent).toBeDefined();
+  });
+
+  it('is guarded for authenticated reads and renders in the app shell', () => {
+    expect(reviewsRoute?.canActivate).toBeDefined();
+    expect(reviewsRoute?.data?.['capabilities']).toEqual(['read']);
+    expect(reviewsRoute?.data?.['shell']).toBeUndefined();
+  });
+});
+
 describe('app routes (/platform consolidated console)', () => {
   const platformRoute = routes.find(route => route.path === 'platform');
   const children = platformRoute?.children ?? [];

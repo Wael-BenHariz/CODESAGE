@@ -4,7 +4,6 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { PlatformUser } from '../../../core/models/user.model';
 import { OrgSettingsService, OrgSummary } from '../../../core/services/org-settings.service';
 import { UserService } from '../../../core/services/user.service';
-import { SettingsNavComponent } from '../../../shared/components/settings-nav/settings-nav.component';
 
 type PanelState = 'loading' | 'error' | 'ready';
 
@@ -13,7 +12,8 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 /**
- * PLATFORM_ADMIN overview (plan Step 9) — route `/platform`.
+ * PLATFORM_ADMIN overview (plan Step 9) — route `/platform`, the console
+ * home. The only page in the console backed by real APIs.
  *
  * Strictly read-only, by design:
  * - `GET /users` / `GET /users/{id}` are PLATFORM_ADMIN **reads** — there is
@@ -26,12 +26,13 @@ function errorMessage(err: unknown, fallback: string): string {
  *
  * Role names render verbatim from the backend's realm-role vocabulary; the
  * route guard restricts the screen to PLATFORM_ADMIN and the backend
- * re-authorizes every request regardless.
+ * re-authorizes every request regardless. Navigation is the console's own
+ * sidebar — this page adds none of its own.
  */
 @Component({
   selector: 'app-platform-admin',
   standalone: true,
-  imports: [CommonModule, SettingsNavComponent],
+  imports: [CommonModule],
   templateUrl: './platform-admin.component.html',
   styleUrl: './platform-admin.component.scss'
 })
