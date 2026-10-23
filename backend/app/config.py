@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # Server
-    HOST: str = "0.0.0.0"
+    # 0.0.0.0 is required inside the k8s/Docker container; the cluster
+    # Service/Ingress is the exposure boundary (bandit B104 accepted).
+    HOST: str = "0.0.0.0"  # nosec B104
     PORT: int = 8000
     # Serve the interactive API docs and the OpenAPI schema
     # (/api/docs, /api/redoc, /api/openapi.json). Off by default so the API

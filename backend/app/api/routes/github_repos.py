@@ -98,7 +98,7 @@ async def get_github_app_repos(
             name=repo["name"],
             private=repo.get("private", False),
             enabled=(
-                watched_repos.get(repo["id"]).enabled
+                watched_repos[repo["id"]].enabled
                 if repo["id"] in watched_repos
                 else False
             ),

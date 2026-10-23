@@ -306,7 +306,9 @@ class FakeLLM(BaseLLMClient):
         if "No issues found in this category." in prompt:
             return json.dumps({"confidence": 0.5, "comments": []})
         # Distinct comment per domain so the merge keeps all of them.
-        domain = re.search(r"## Findings \(([^)]+)\)", prompt).group(1)
+        domain_match = re.search(r"## Findings \(([^)]+)\)", prompt)
+        assert domain_match is not None, "prompt missing '## Findings' heading"
+        domain = domain_match.group(1)
         line = {
             "security": 1,
             "complexity": 2,

@@ -153,7 +153,7 @@ class DiffContextBuilder:
         }
 
         # Add language breakdown
-        language_counts = {}
+        language_counts: dict[str, int] = {}
         for f in files:
             lang = f.language or "other"
             language_counts[lang] = language_counts.get(lang, 0) + 1

@@ -15,7 +15,7 @@ class DiffChunker:
         self, files: List[dict], content_extractor: Callable[[dict], str]
     ) -> Iterator[List[dict]]:
         """Chunk files by grouping them into batches."""
-        current_batch = []
+        current_batch: List[dict] = []
         current_size = 0
 
         for file in files:

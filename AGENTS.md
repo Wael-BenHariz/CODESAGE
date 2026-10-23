@@ -38,7 +38,7 @@ codesage/
 │   │   └── main.py         # FastAPI app entry
 │   ├── alembic/            # DB migrations (001–018)
 │   ├── Dockerfile / Dockerfile.worker
-│   └── tests/              # ~203 unit tests + e2e/ (5, DB-free) + conftest.py + fixtures/
+│   └── tests/              # ~508 unit tests + e2e/ (5, DB-free) + conftest.py + fixtures/
 ├── frontend/               # Angular 17 app
 │   └── src/app/
 │       ├── core/           # guards (RoleGuard), interceptors (Keycloak bearer), services (one per backend route group) + snake→camel mappers, models
@@ -219,10 +219,10 @@ Order: (`frontend` + `backend` build/test) → `build-images` (tarballs) → `tr
 - **Backend linters**: `ruff` (lint), `black` (format), `mypy` (types), `bandit` (security)
 - **Frontend linters**: ESLint + Prettier + TypeScript strict checks
 - **Frontend CI scripts** (all present in `package.json`): `type-check`, `format:check`, `test:ci` (Karma launcher `ChromeHeadlessCI` — Chrome first, falls back to Edge `msedge.exe` on Windows), `lint`/`lint:fix`, `format`. Template a11y lint errors are fixed in templates, never suppressed.
-- **Backend tests** (`backend/tests/`, 22 files ≈ 203 unit + 5 e2e): `conftest.py` sets every required env var (incl. a throwaway RSA key for Keycloak RS256 tokens) **before any `app.*` import** — keep that ordering when adding env config. Full suite needs local Postgres (`codesage_test`) + Redis (db 15); `tests/e2e/` is DB-free.
+- **Backend tests** (`backend/tests/`, 40 files ≈ 508 unit + 5 e2e): `conftest.py` sets every required env var (incl. a throwaway RSA key for Keycloak RS256 tokens) **before any `app.*` import** — keep that ordering when adding env config. Full suite needs local Postgres (`codesage_test`) + Redis (db 15); `tests/e2e/` is DB-free.
 - **Async database**: Uses `asyncpg` driver (`postgresql+asyncpg://`). Do not use sync SQLAlchemy patterns.
 - **Redis has password** in docker-compose: `redis_password`. Local `.env` must match if connecting to Docker Redis.
-- **Lint debt is pre-existing**: ruff 248 / black 40 files / mypy 39 repo-wide — touched files should pass, unrelated failures are not yours to fix.
+- **Backend lint gates are clean** (verified): `ruff check .`, `black --check .`, `mypy .` (0 errors — `backend/mypy.ini` provides the pydantic plugin + `bullmq` ignore; CI pins `mypy==2.3.1`) and `bandit -r app -ll -q` all pass from `backend/` — keep every gate green on touched files.
 
 ## Auth & Operations Troubleshooting
 
@@ -289,11 +289,11 @@ Notables with defaults:
 
 - **Repository/PR URL segments don't match backend keys (worked around)**: `owner/repo[/pulls/:number]` URLs resolve through `GET /repositories?search=` + an exact case-insensitive match (session-cached) and a PR-list scan capped at 30 pages for the number (gaps 5/6 in `docs/BACKEND_GAPS_FOR_UI.md`) — backend exact-lookup routes would remove the scan. The phantom `GET /repositories/{owner}/{repo}` / `GET /repositories/{repoId}/pulls` / `GET /pulls/{owner}/{repo}/{number}` paths are gone (`github.service.ts` deleted, replaced by `repository.service.ts` + `pull-request.service.ts` — API-coverage plan Step 2, `57d2fd6`).
 - **Docker Compose is partly broken**: `frontend` service references a missing `frontend/Dockerfile.dev` and uses Next.js artifacts (`NEXT_PUBLIC_*` env, `.next` volume) though the frontend is Angular; `infrastructure/postgres/init.sql` and `infrastructure/monitoring/` don't exist, so the `database` and `monitoring` profiles fail on missing mounts.
-- **CI `test` job is stale**: sets `JWT_SECRET` (config reads `SECRET_KEY` — tests only pass because `conftest.py` supplies all env) and runs `--cov=codesage` although the package layout is `app.*` → coverage target doesn't exist (with `--cov-fail-under=80` this job cannot pass as written).
+- **GitOps deploy path needs runner + secrets**: the `argocd-sync` job assumes `argocd` and `jq` are pre-installed (its check step fails on GitHub-hosted `ubuntu-latest` — point `ARGOCD_RUNNER` at a self-hosted runner with the Argo CD CLI), and `push-images`/`update-manifests` need `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `ARGOCD_SERVER`, `ARGOCD_AUTH_TOKEN` secrets. The build/test/lint gates are verified locally; push/deploy awaits a run with those secrets.
 - **Specialists can fail on unparseable LLM output**: `openai/gpt-oss-120b` sometimes answers a refinement prompt with raw Python instead of JSON → `base_agent` extraction finds no `{...}` → agent fails after 2 retries → review posted as partial. Possible hardening: a "reply with JSON only" re-ask, or treating unparseable output as zero issues instead of a failure. Groq HTTP 429s also occur on the free tier (retries usually recover).
 - **Settings page**: review preferences and email notification toggles have no backend persistence routes — since frontend v0.3.1 they render **disabled** with a "Not available yet — …nothing here is saved." label (never pretend to save; gap 4 in `docs/BACKEND_GAPS_FOR_UI.md`).
 - **Monaco diff view not integrated**: `monaco-editor` + `ngx-monaco-editor-v2` are installed but unused in any component (PR detail still has no diff viewer).
 - **Frontend manual E2E pending**: the 12-check manual table was deferred by decision at release time (test accounts not provided yet) — recorded as pending in `docs/FRONTEND_SCREENS.md` §Verification status. It now applies to the redesigned UI (v0.3.2): automated gates (lint / type-check / format / 453 tests / build / cluster rollout) all passed and public screens are captured in `docs/ui/after/`, but the authenticated flows still await test accounts.
 - **`infrastructure/k8s/base/backend/secret.yaml` is filled with real credentials** (GitHub OAuth + App key, Groq/Gemini keys, SonarQube token) and is **gitignored** — the committed template is `secret.example.yaml` (`cp secret.example.yaml secret.yaml` to deploy). Never `git add -f` the filled file.
 - **GitHub App `contents` permission is read-only** — the App cannot create branches/commits (403 on `git/refs`); PR creation and review posting work (`pull_requests: write`). Raise it in the App settings only if commit-based test fixtures are ever needed.
-- Repo-wide lint debt is pre-existing: ruff 248 / black 40 files / mypy 39 (see Important Conventions).
+- Backend lint gates (ruff/black/mypy/bandit) are clean — `backend/mypy.ini` keeps `mypy .` at 0 errors (see Important Conventions).

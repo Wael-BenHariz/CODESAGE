@@ -102,7 +102,7 @@ async def _handle_pull_request_event(
     payload: dict[str, Any],
     delivery_id: str,
     db: AsyncSession,
-) -> WebhookProcessResult:
+) -> WebhookProcessResult | dict[str, str]:
     """
     Handle pull_request webhook events.
 
@@ -500,10 +500,10 @@ async def _handle_installation_event(
                 GitHubInstallation.installation_id == installation_id
             )
         )
-        record = result.scalar_one_or_none()
+        existing = result.scalar_one_or_none()
 
-        if record:
-            await db.delete(record)
+        if existing:
+            await db.delete(existing)
             await db.commit()
 
         return {
@@ -600,7 +600,9 @@ async def _upsert_installation_record(
     db: AsyncSession,
     installation_data: dict[str, Any],
 ) -> GitHubInstallation:
-    installation_id = installation_data.get("id")
+    # The installation payload always carries an id (GitHub contract);
+    # index instead of .get() so the type stays int, not int | None.
+    installation_id = installation_data["id"]
     account = installation_data.get("account", {})
     record = await _get_installation_record(db, installation_id)
 
