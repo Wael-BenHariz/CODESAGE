@@ -31,7 +31,11 @@ permissions:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.12'
+  # 3.14 (not ≤3.12): coverage.py on CPython ≤3.12 silently loses line
+  # events for coroutine frames resumed via asyncio — i.e. every async
+  # FastAPI route handler/dependency — so the same 508-passing suite
+  # measured 72.5% (gate failed) instead of the true 81.4%.
+  PYTHON_VERSION: '3.14'
   DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
   DEPLOY_BRANCH: main            # branch Argo CD watches (targetRevision)
   ARGOCD_APPS: codesage-app      # space-separated Argo CD apps to sync

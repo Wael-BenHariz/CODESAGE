@@ -211,7 +211,7 @@ Order: (`frontend` + `backend` build/test) → `build-images` (tarballs) → `tr
 - **Registry**: Docker Hub (`<DOCKERHUB_USERNAME>/codesage-{frontend,api,worker}`, tagged with the commit SHA)
 - **Deploy**: GitOps — the pipeline rewrites image tags in `infrastructure/k8s` and commits back (`chore(deploy): … [skip ci]`); Argo CD app `codesage-app` watches `main` (`ARGOCD_APPS` env to override)
 - **Secrets required**: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `ARGOCD_SERVER`, `ARGOCD_AUTH_TOKEN`; optional repo vars `ARGOCD_RUNNER` (self-hosted runner label) and `ARGOCD_INSECURE`
-- **Versions**: Python 3.12 in CI (local 3.11+), Node 20, Trivy v0.69.3
+- **Versions**: Python 3.14 in CI (prod images `python:3.11-alpine`, dev venvs 3.14 — CI must stay ≥3.14: on ≤3.12 coverage.py loses line events for asyncio-resumed coroutine frames, measuring the 508-passing suite at 72.5% vs its true 81.4%), Node 20, Trivy v0.69.3
 - **Postgres/Redis services in backend test job**: `postgres:16-alpine`, `redis:7-alpine`
 
 ## Important Conventions
