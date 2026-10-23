@@ -193,6 +193,9 @@ jobs:
       matrix:
         service: [frontend, api, worker]
     steps:
+      # Checkout so Trivy can read the committed .trivyignore (accepted-risk list).
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: image-${{ matrix.service }}
@@ -209,6 +212,7 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
           format: table
+          trivyignores: .trivyignore
 
   # ==========================================================
   # 4. Push to Docker Hub — only after ALL images pass the scan

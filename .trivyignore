@@ -1,0 +1,12 @@
+# Accepted risks — scanned by the CI gate (aquasecurity/trivy-action, CRITICAL/HIGH,
+# fixable-only). One entry per CVE, each with a written justification.
+#
+# CVE-2021-0341 (HIGH, okhttp 3.14.2) is vendored INSIDE
+# opt/sonar-scanner/lib/sonar-scanner-cli-5.0.1.3006.jar in the api/worker images.
+# Exposure: sonar-scanner only speaks HTTP to the in-cluster SonarQube service,
+# so the MITM/information-disclosure path requires an attacker already inside the
+# cluster network. We cannot patch a class inside the scanner's fat jar; the real
+# fix is bumping SONAR_SCANNER_VERSION (5 -> 8 bundles okhttp >= 4.9.2), which
+# changes analysis behaviour and must be validated against the deployed SonarQube
+# server first. Remove this line once the scanner is upgraded.
+CVE-2021-0341
