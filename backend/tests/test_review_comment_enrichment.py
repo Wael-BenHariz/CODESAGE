@@ -183,7 +183,10 @@ class _FakeLLM(BaseLLMClient):
             )
         if "No issues found in this category." in prompt:
             return json.dumps({"confidence": 0.5, "comments": []})
-        domain = re.search(r"## Findings \(([^)]+)\)", prompt).group(1)
+        # re.search can return None; the stub must contain the heading.
+        domain_match = re.search(r"## Findings \(([^)]+)\)", prompt)
+        assert domain_match is not None, "prompt missing '## Findings' heading"
+        domain = domain_match.group(1)
         comments = {
             "security": [
                 {

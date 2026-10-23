@@ -51,7 +51,9 @@ def fingerprint(
             message,
         )
     )
-    return hashlib.sha1(key.encode("utf-8")).hexdigest()
+    # Fingerprint for dedup identity only — never a security token, so
+    # usedforsecurity=False (also silences bandit B324).
+    return hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 class NormalizedFinding(BaseModel):

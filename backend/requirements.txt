@@ -45,3 +45,10 @@ pytest-cov>=4.1.0
 # Type checking
 mypy>=1.8.0
 types-python-jose>=3.3.0
+
+# Security floors for transitive deps (Trivy CI gate — fixable CRITICAL/HIGH)
+certifi>=2026.10.19     # GHSA-6q48-6c7w-9gw2 (CRITICAL) — pulled via httpx/httpcore
+# The python:3.11 base bundles setuptools 79 whose _vendor/ tree ships old
+# wheel/jaraco copies (CVE-2026-24049, CVE-2026-23949); setuptools 84.2.1's
+# _vendor ships wheel 0.46.3 + jaraco.context 6.1.0 — both above the fix lines.
+setuptools>=84.2.1

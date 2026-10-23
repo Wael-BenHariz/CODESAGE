@@ -76,7 +76,7 @@ async def run_migrations_online() -> None:
     In this scenario we need to create an Engine and associate a connection with
     the context.
     """
-    configuration = config.get_section(config.config_ini_section)
+    configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = get_url()
 
     connectable = async_engine_from_config(

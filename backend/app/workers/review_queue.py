@@ -13,7 +13,7 @@ from app.config import settings
 class ReviewQueue:
     """
     BullMQ queue for code review processing.
-    
+
     Handles job creation, scheduling, and event handling.
     """
 
@@ -24,7 +24,7 @@ class ReviewQueue:
     ):
         self.redis_url = redis_url or settings.REDIS_URL
         self.queue_name = queue_name or settings.BULLMQ_REVIEW_QUEUE
-        
+
         self._queue: Optional[Queue] = None
         self._events: Optional[QueueEvents] = None
 
@@ -58,12 +58,12 @@ class ReviewQueue:
     ) -> str:
         """
         Add a job to the queue.
-        
+
         Args:
             job_name: Name of the job handler
             data: Job data payload
             options: Optional BullMQ job options
-            
+
         Returns:
             Job ID
         """
@@ -76,27 +76,27 @@ class ReviewQueue:
             "removeOnComplete": 100,  # Keep last 100 completed jobs
             "removeOnFail": 50,  # Keep last 50 failed jobs
         }
-        
+
         if options:
             job_options.update(options)
-        
+
         job = await self.queue.add(job_name, data, job_options)
         return job.id
 
     async def get_job_status(self, job_id: str) -> Optional[dict]:
         """
         Get job status and result.
-        
+
         Args:
             job_id: Job ID
-            
+
         Returns:
             Job state and data
         """
         job = await self.queue.getJob(job_id)
         if not job:
             return None
-        
+
         state = await job.getState()
         return {
             "id": job.id,
@@ -110,39 +110,39 @@ class ReviewQueue:
     async def cancel_job(self, job_id: str) -> bool:
         """
         Cancel a pending job.
-        
+
         Args:
             job_id: Job ID
-            
+
         Returns:
             True if cancelled successfully
         """
         job = await self.queue.getJob(job_id)
         if not job:
             return False
-        
+
         return await job.remove()
 
     async def retry_failed(self, job_id: str) -> bool:
         """
         Retry a failed job.
-        
+
         Args:
             job_id: Job ID
-            
+
         Returns:
             True if retried successfully
         """
         job = await self.queue.getJob(job_id)
         if not job:
             return False
-        
+
         return await job.retry()
 
     async def get_queue_stats(self) -> dict:
         """
         Get queue statistics.
-        
+
         Returns:
             Counts of waiting, active, completed, failed jobs
         """
@@ -188,10 +188,10 @@ async def queue_review(review_id: str, trigger: str = "pull_request") -> str:
 async def get_review_job_status(review_id: str) -> Optional[dict]:
     """
     Get the status of a review job.
-    
+
     Args:
         review_id: UUID of the review
-        
+
     Returns:
         Job status or None
     """

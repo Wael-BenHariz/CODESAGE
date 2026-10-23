@@ -46,10 +46,11 @@ _UNAUTHENTICATED_OK: set[tuple[str, str]] = {
 # Docs routes exist only when ENABLE_API_DOCS=true — public by explicit
 # opt-in (they are deliberately absent under the test environment).
 if app.docs_url:
+    # redoc_url/openapi_url are typed str | None; docs_url being set means
+    # ENABLE_API_DOCS=true, which sets all three together (app/main.py) —
+    # the filter only satisfies mypy's Optional narrowing.
     _UNAUTHENTICATED_OK |= {
-        ("GET", app.docs_url),
-        ("GET", app.redoc_url),
-        ("GET", app.openapi_url),
+        ("GET", url) for url in (app.docs_url, app.redoc_url, app.openapi_url) if url
     }
 
 

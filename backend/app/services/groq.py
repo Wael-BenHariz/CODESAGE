@@ -111,9 +111,13 @@ class GroqClient:
         """Return aggregate usage for calls made through this client instance."""
 
         return {
-            "prompt_tokens": sum(record.get("prompt_tokens", 0) for record in self.usage_records),
+            "prompt_tokens": sum(
+                record.get("prompt_tokens", 0) for record in self.usage_records
+            ),
             "completion_tokens": sum(
                 record.get("completion_tokens", 0) for record in self.usage_records
             ),
-            "total_tokens": sum(record.get("total_tokens", 0) for record in self.usage_records),
+            "total_tokens": sum(
+                record.get("total_tokens", 0) for record in self.usage_records
+            ),
         }

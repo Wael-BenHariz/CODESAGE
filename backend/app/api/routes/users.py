@@ -52,13 +52,13 @@ async def get_user(
     """
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     return UserResponse.model_validate(user)
 
 
@@ -76,24 +76,26 @@ async def list_users(
     # Build query
     query = select(User)
     count_query = select(func.count(User.id))
-    
+
     # Apply search filter
     if search:
-        search_filter = User.login.ilike(f"%{search}%") | User.email.ilike(f"%{search}%")
+        search_filter = User.login.ilike(f"%{search}%") | User.email.ilike(
+            f"%{search}%"
+        )
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
-    
+
     # Get total count
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
-    
+
     # Get paginated results
     offset = (page - 1) * per_page
     query = query.offset(offset).limit(per_page).order_by(User.created_at.desc())
-    
+
     result = await db.execute(query)
     users = result.scalars().all()
-    
+
     return UserListResponse(
         items=[UserResponse.model_validate(u) for u in users],
         total=total,
@@ -119,10 +121,10 @@ async def update_my_profile(
         current_user.name = update_data.name
     if update_data.avatar_url is not None:
         current_user.avatar_url = update_data.avatar_url
-    
+
     await db.commit()
     await db.refresh(current_user)
-    
+
     return UserResponse.model_validate(current_user)
 
 
@@ -136,10 +138,8 @@ async def delete_my_account(
     This action is irreversible.
     """
     # Delete all tokens first
-    await db.execute(
-        select(OAuthToken).where(OAuthToken.user_id == current_user.id)
-    )
-    
+    await db.execute(select(OAuthToken).where(OAuthToken.user_id == current_user.id))
+
     # Delete user (cascades to related records)
     await db.delete(current_user)
     await db.commit()

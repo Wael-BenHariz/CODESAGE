@@ -52,8 +52,12 @@ class WebhookProcessResult(BaseModel):
 
     event_id: str = Field(..., description="Event UUID")
     processed: bool = Field(..., description="Whether successfully processed")
-    action_taken: Optional[str] = Field(None, description="Action taken (e.g., 'created_review')")
-    review_id: Optional[str] = Field(None, description="Review UUID if a review was created")
+    action_taken: Optional[str] = Field(
+        None, description="Action taken (e.g., 'created_review')"
+    )
+    review_id: Optional[str] = Field(
+        None, description="Review UUID if a review was created"
+    )
     error: Optional[str] = Field(None, description="Error message if failed")
 
 
@@ -65,7 +69,9 @@ class GitHubWebhookPayload(BaseModel):
     pull_request: dict[str, Any] = Field(..., description="Pull request data")
     repository: dict[str, Any] = Field(..., description="Repository data")
     sender: dict[str, Any] = Field(..., description="User who triggered the event")
-    installation: Optional[dict[str, Any]] = Field(None, description="GitHub App installation")
+    installation: Optional[dict[str, Any]] = Field(
+        None, description="GitHub App installation"
+    )
 
 
 class PullRequestWebhookData(BaseModel):
@@ -90,6 +96,8 @@ class PullRequestWebhookData(BaseModel):
 class InstallationAction(BaseModel):
     """GitHub App installation action."""
 
-    action: str = Field(..., description="Action: created, deleted, suspended, unsuspended")
+    action: str = Field(
+        ..., description="Action: created, deleted, suspended, unsuspended"
+    )
     installation: dict[str, Any] = Field(..., description="Installation data")
     sender: dict[str, Any] = Field(..., description="User who performed the action")

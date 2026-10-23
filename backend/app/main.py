@@ -4,7 +4,7 @@ FastAPI application entry point with middleware and route registration.
 """
 
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -64,7 +64,7 @@ app.add_middleware(
 
 
 # Exception handlers
-def _json_safe_errors(errors: list) -> list:
+def _json_safe_errors(errors: Sequence) -> Sequence:
     """Make pydantic errors JSON-serializable.
 
     ``value_error`` entries carry the live exception instance in ``ctx``

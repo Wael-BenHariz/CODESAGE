@@ -21,7 +21,12 @@ class WatchedRepo(Base):
         {"comment": "GitHub repositories selected for review processing"},
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # The `watched_repos` table (migration 003) declares an Integer
+    # autoincrement PK, so this overrides Base's UUID `id` deliberately —
+    # the annotation must match the actual table, not the base class.
+    id: Mapped[int] = mapped_column(
+        primary_key=True, autoincrement=True
+    )  # type: ignore[assignment]
 
     user_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),

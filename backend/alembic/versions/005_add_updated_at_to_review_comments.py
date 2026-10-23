@@ -11,7 +11,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "005"
 down_revision: Union[str, None] = "004"
@@ -34,16 +33,16 @@ def upgrade() -> None:
         ),
     )
     # Same auto-update trigger as the other tables (function created in 001).
-    op.execute(
-        """
+    op.execute("""
         CREATE TRIGGER update_review_comments_updated_at
         BEFORE UPDATE ON review_comments
         FOR EACH ROW
         EXECUTE FUNCTION update_updated_at_column()
-    """
-    )
+    """)
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS update_review_comments_updated_at ON review_comments")
+    op.execute(
+        "DROP TRIGGER IF EXISTS update_review_comments_updated_at ON review_comments"
+    )
     op.drop_column("review_comments", "updated_at")
