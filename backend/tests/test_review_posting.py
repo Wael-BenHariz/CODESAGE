@@ -130,7 +130,9 @@ def test_sanitize_leaves_plain_text_and_headings_alone():
 
 
 def test_sanitize_strips_tag_like_html_only():
-    assert sanitize_generated_text("if a < b and c > d keep") == "if a < b and c > d keep"
+    assert (
+        sanitize_generated_text("if a < b and c > d keep") == "if a < b and c > d keep"
+    )
     assert sanitize_generated_text("<b>hi</b>") == "hi"
 
 
@@ -144,7 +146,9 @@ def test_staged_findings_grouped_by_severity_then_file():
         _comment(path="a.py", line=5, severity="error", body="E1"),
         _comment(path="a.py", line=1, severity="suggestion", body="S1"),
         _comment(path="a.py", line=9, severity="info", body="I1"),
-        _comment(path="hidden.py", line=9, severity="error", body="Gone", dismissed=True),
+        _comment(
+            path="hidden.py", line=9, severity="error", body="Gone", dismissed=True
+        ),
     ]
     review = _review(posting_mode="staged", comments=comments)
     body = build_review_body(review, include_findings=True)
@@ -177,9 +181,8 @@ def test_staged_body_without_findings_has_no_section():
         posting_mode="staged", comments=[_comment(dismissed=True)]
     )
     # …while an empty set renders only the sanitized base.
-    assert (
-        "## Findings"
-        not in build_review_body(review_all_dismissed, include_findings=True)
+    assert "## Findings" not in build_review_body(
+        review_all_dismissed, include_findings=True
     )
 
 

@@ -18,7 +18,7 @@ from app.config import settings
 class GitHubService:
     """
     GitHub API integration service.
-    
+
     Handles:
     - OAuth flow
     - GitHub App authentication
@@ -40,15 +40,17 @@ class GitHubService:
 
     # ==================== OAuth ====================
 
-    def get_oauth_login_url(self, state: str, redirect_url: Optional[str] = None, prompt_select: bool = True) -> str:
+    def get_oauth_login_url(
+        self, state: str, redirect_url: Optional[str] = None, prompt_select: bool = True
+    ) -> str:
         """
         Generate GitHub OAuth authorization URL.
-        
+
         Args:
             state: CSRF protection state string
             redirect_url: URL to redirect after authorization
             prompt_select: If True, forces GitHub account chooser
-            
+
         Returns:
             GitHub authorization URL
         """
@@ -58,10 +60,10 @@ class GitHubService:
             "scope": "read:user user:email repo",
             "state": state,
         }
-        
+
         if prompt_select:
             params["prompt"] = "select_account"
-        
+
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return f"https://github.com/login/oauth/authorize?{query}"
 
@@ -69,16 +71,18 @@ class GitHubService:
         """Generate the GitHub App installation URL."""
 
         if not settings.GITHUB_APP_SLUG:
-            raise ValueError("GITHUB_APP_SLUG must be configured to install the GitHub App")
+            raise ValueError(
+                "GITHUB_APP_SLUG must be configured to install the GitHub App"
+            )
         return f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?state={state}"
 
     async def exchange_code_for_token(self, code: str) -> dict[str, Any]:
         """
         Exchange authorization code for OAuth access token.
-        
+
         Args:
             code: Authorization code from GitHub callback
-            
+
         Returns:
             Token response with access_token, refresh_token, etc.
         """
@@ -102,10 +106,10 @@ class GitHubService:
     async def refresh_oauth_token(self, refresh_token: str) -> dict[str, Any]:
         """
         Refresh an expired OAuth access token.
-        
+
         Args:
             refresh_token: OAuth refresh token
-            
+
         Returns:
             New token response
         """
@@ -129,10 +133,10 @@ class GitHubService:
     async def get_user_info(self, access_token: str) -> dict[str, Any]:
         """
         Get authenticated user's information.
-        
+
         Args:
             access_token: GitHub OAuth access token
-            
+
         Returns:
             GitHub user data
         """
@@ -141,10 +145,10 @@ class GitHubService:
     async def get_user_emails(self, access_token: str) -> list[dict[str, Any]]:
         """
         Get authenticated user's email addresses.
-        
+
         Args:
             access_token: GitHub OAuth access token
-            
+
         Returns:
             List of email objects
         """
@@ -155,32 +159,32 @@ class GitHubService:
     def create_app_jwt(self) -> str:
         """
         Create a JWT for GitHub App authentication.
-        
+
         Returns:
             Signed JWT token
         """
         now = int(time.time())
-        
+
         payload = {
             "iat": now,
             "exp": now + 600,  # 10 minutes max
             "iss": self.app_id,
         }
-        
+
         return jwt.encode(payload, self.app_private_key, algorithm="RS256")
 
     async def get_installation_token(self, installation_id: int) -> dict[str, Any]:
         """
         Get installation access token for a GitHub App.
-        
+
         Args:
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Installation token response
         """
         jwt_token = self.create_app_jwt()
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.BASE_URL}/app/installations/{installation_id}/access_tokens",
@@ -266,37 +270,45 @@ class GitHubService:
 
     # ==================== Repository Operations ====================
 
-    async def get_user_repos(self, access_token: str, per_page: int = 100) -> list[dict[str, Any]]:
+    async def get_user_repos(
+        self, access_token: str, per_page: int = 100
+    ) -> list[dict[str, Any]]:
         """
         Get list of repositories accessible by the authenticated user.
-        
+
         Args:
             access_token: GitHub OAuth access token
             per_page: Results per page (max 100)
-            
+
         Returns:
             List of repository data
         """
         repos = []
         page = 1
-        
+
         while True:
-            data = await self._get("/user/repos", access_token, {
-                "per_page": per_page,
-                "page": page,
-                "sort": "updated",
-                "affiliation": "owner,collaborator,organization_member",
-            })
+            data = await self._get(
+                "/user/repos",
+                access_token,
+                {
+                    "per_page": per_page,
+                    "page": page,
+                    "sort": "updated",
+                    "affiliation": "owner,collaborator,organization_member",
+                },
+            )
             if not data:
                 break
             repos.extend(data)
             if len(data) < per_page:
                 break
             page += 1
-        
+
         return repos
 
-    async def get_user_app_installations(self, access_token: str) -> list[dict[str, Any]]:
+    async def get_user_app_installations(
+        self, access_token: str
+    ) -> list[dict[str, Any]]:
         """List GitHub App installations accessible to the OAuth user."""
 
         installations = []
@@ -329,12 +341,12 @@ class GitHubService:
     ) -> dict[str, Any]:
         """
         Get repository information.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Repository data
         """
@@ -351,21 +363,23 @@ class GitHubService:
     ) -> Optional[str]:
         """
         Get file content from a repository.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             path: File path in repository
             ref: Git reference (branch, commit, tag)
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Decoded file content or None if not found
         """
         token = await self._get_installation_token(installation_id)
-        
+
         try:
-            data = await self._get(f"/repos/{owner}/{repo}/contents/{path}", token, {"ref": ref})
+            data = await self._get(
+                f"/repos/{owner}/{repo}/contents/{path}", token, {"ref": ref}
+            )
             if data.get("encoding") == "base64":
                 return base64.b64decode(data["content"]).decode("utf-8")
             return data.get("content")
@@ -383,13 +397,13 @@ class GitHubService:
     ) -> dict[str, Any]:
         """
         Get pull request information.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             pr_number: PR number
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Pull request data
         """
@@ -406,14 +420,14 @@ class GitHubService:
     ) -> list[dict[str, Any]]:
         """
         Get files changed in a pull request.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             pr_number: PR number
             installation_id: GitHub App installation ID
             per_page: Results per page (max 100)
-            
+
         Returns:
             List of changed files
         """
@@ -445,18 +459,20 @@ class GitHubService:
     ) -> list[dict[str, Any]]:
         """
         Get commits in a pull request.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             pr_number: PR number
             installation_id: GitHub App installation ID
-            
+
         Returns:
             List of commits
         """
         token = await self._get_installation_token(installation_id)
-        return await self._get(f"/repos/{owner}/{repo}/pulls/{pr_number}/commits", token)
+        return await self._get(
+            f"/repos/{owner}/{repo}/pulls/{pr_number}/commits", token
+        )
 
     async def get_commit_diff(
         self,
@@ -467,18 +483,18 @@ class GitHubService:
     ) -> str:
         """
         Get diff for a commit.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             sha: Commit SHA
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Commit diff as string
         """
         token = await self._get_installation_token(installation_id)
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.BASE_URL}/repos/{owner}/{repo}/commits/{sha}",
@@ -498,14 +514,14 @@ class GitHubService:
     ) -> dict[str, Any]:
         """
         Compare two branches/commits.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             base: Base branch/SHA
             head: Head branch/SHA
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Comparison data including files changed
         """
@@ -527,7 +543,7 @@ class GitHubService:
     ) -> dict[str, Any]:
         """
         Create a review comment on a pull request.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
@@ -537,12 +553,12 @@ class GitHubService:
             path: File path
             line: Line number
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Created comment data
         """
         token = await self._get_installation_token(installation_id)
-        
+
         data = {
             "body": body,
             "commit_id": commit_id,
@@ -550,7 +566,7 @@ class GitHubService:
             "line": line,
             "side": "RIGHT",  # Comment on the added lines
         }
-        
+
         return await self._post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
             token,
@@ -569,7 +585,7 @@ class GitHubService:
     ) -> dict[str, Any]:
         """
         Create a review on a pull request with inline comments.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
@@ -578,18 +594,18 @@ class GitHubService:
             event: Review event (COMMENT, APPROVE, REQUEST_CHANGES)
             comments: List of inline comments
             installation_id: GitHub App installation ID
-            
+
         Returns:
             Created review data
         """
         token = await self._get_installation_token(installation_id)
-        
+
         data = {
             "body": body,
             "event": event,
             "comments": comments,
         }
-        
+
         return await self._post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
             token,
@@ -606,24 +622,24 @@ class GitHubService:
     ) -> bool:
         """
         Verify GitHub webhook signature.
-        
+
         Args:
             payload: Raw request body
             signature: X-Hub-Signature-256 header value
             timestamp: X-Hub-Signature-256 timestamp (optional for older webhooks)
-            
+
         Returns:
             True if signature is valid
         """
         if not signature:
             return False
-        
+
         # Handle both sha256= and timestamp,sha256= formats
         if signature.startswith("sha256="):
             expected = signature[7:]
         else:
             return False
-        
+
         # Compute HMAC — explicit UTF-8 to match GitHub's signing exactly
         # (equivalent to: "sha256=" + hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest())
         mac = hmac.new(
@@ -632,17 +648,17 @@ class GitHubService:
             hashlib.sha256,
         )
         computed = mac.hexdigest()
-        
+
         # Use constant-time comparison to prevent timing attacks
         return hmac.compare_digest(computed, expected)
 
     def generate_webhook_signature(self, payload: bytes) -> str:
         """
         Generate a webhook signature for testing/debugging.
-        
+
         Args:
             payload: Request body
-            
+
         Returns:
             HMAC signature in format sha256=xxx
         """
@@ -658,10 +674,10 @@ class GitHubService:
     async def get_app_installation(self, installation_id: int) -> dict[str, Any]:
         """
         Get installation details for the GitHub App.
-        
+
         Args:
             installation_id: Installation ID
-            
+
         Returns:
             Installation data
         """
@@ -671,18 +687,18 @@ class GitHubService:
     async def get_installed_repos(self, installation_id: int) -> list[dict[str, Any]]:
         """
         Get repositories accessible to an installation.
-        
+
         Args:
             installation_id: Installation ID
-            
+
         Returns:
             List of repository data
         """
         token = await self._get_installation_token(installation_id)
-        
+
         repos = []
         page = 1
-        
+
         while True:
             data = await self._get(
                 "/installation/repositories",
@@ -690,11 +706,11 @@ class GitHubService:
                 {"per_page": 100, "page": page},
             )
             repos.extend(data.get("repositories", []))
-            
+
             if not data.get("repositories") or len(data["repositories"]) < 100:
                 break
             page += 1
-        
+
         return repos
 
     async def create_repository_webhook(
@@ -705,12 +721,12 @@ class GitHubService:
     ) -> dict[str, Any]:
         """
         Create a webhook on a repository.
-        
+
         Args:
             owner: Repository owner
             repo: Repository name
             installation_id: Installation ID
-            
+
         Returns:
             Created webhook data
         """

@@ -71,10 +71,22 @@ class GeminiClient:
                         "topK": 40,
                     },
                     "safetySettings": [
-                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                        {
+                            "category": "HARM_CATEGORY_HARASSMENT",
+                            "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                        },
+                        {
+                            "category": "HARM_CATEGORY_HATE_SPEECH",
+                            "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                        },
+                        {
+                            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                        },
+                        {
+                            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                            "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                        },
                     ],
                 },
                 headers={"Content-Type": "application/json"},
@@ -89,9 +101,7 @@ class GeminiClient:
             # clear error instead of crashing on KeyError/IndexError.
             candidates = data.get("candidates") or []
             parts = (
-                candidates[0].get("content", {}).get("parts", [])
-                if candidates
-                else []
+                candidates[0].get("content", {}).get("parts", []) if candidates else []
             )
             text = next(
                 (p.get("text", "") for p in parts if "text" in p),
@@ -117,16 +127,22 @@ class GeminiClient:
         """Return aggregate usage for calls made through this client instance."""
 
         return {
-            "prompt_tokens": sum(record.get("prompt_tokens", 0) for record in self.usage_records),
-            "completion_tokens": sum(record.get("completion_tokens", 0) for record in self.usage_records),
-            "total_tokens": sum(record.get("total_tokens", 0) for record in self.usage_records),
+            "prompt_tokens": sum(
+                record.get("prompt_tokens", 0) for record in self.usage_records
+            ),
+            "completion_tokens": sum(
+                record.get("completion_tokens", 0) for record in self.usage_records
+            ),
+            "total_tokens": sum(
+                record.get("total_tokens", 0) for record in self.usage_records
+            ),
         }
 
 
 class GeminiService:
     """
     Google Gemini AI integration for code review.
-    
+
     Features:
     - Configurable model and parameters
     - Code review prompt templates
@@ -157,14 +173,14 @@ class GeminiService:
     ) -> dict[str, Any]:
         """
         Generate a code review for a pull request.
-        
+
         Args:
             pr_title: Pull request title
             pr_body: Pull request description
             diff: Unified diff of changes
             language: Programming language of the changes
             context: Additional context (e.g., related files, commits)
-            
+
         Returns:
             Review result with comments and summary
         """
@@ -175,7 +191,7 @@ class GeminiService:
             language=language,
             context=context,
         )
-        
+
         response = await self._generate_content(prompt)
         return self._parse_review_response(response)
 
@@ -188,13 +204,13 @@ class GeminiService:
     ) -> list[dict[str, Any]]:
         """
         Generate review comments for a single file.
-        
+
         Args:
             filename: File path/name
             original_content: Original file content
             modified_content: Modified file content
             language: Programming language
-            
+
         Returns:
             List of review comments with file path, line, severity, and message
         """
@@ -204,7 +220,7 @@ class GeminiService:
             modified=modified_content,
             language=language,
         )
-        
+
         response = await self._generate_content(prompt)
         return self._parse_file_comments(response, filename)
 
@@ -216,12 +232,12 @@ class GeminiService:
     ) -> dict[str, Any]:
         """
         Generate a high-level PR summary.
-        
+
         Args:
             pr_title: Pull request title
             pr_body: Pull request description
             files_changed: List of changed files with their changes
-            
+
         Returns:
             PR summary with overall assessment
         """
@@ -230,7 +246,7 @@ class GeminiService:
             pr_body=pr_body,
             files_changed=files_changed,
         )
-        
+
         response = await self._generate_content(prompt)
         return self._parse_pr_summary(response)
 
@@ -239,10 +255,10 @@ class GeminiService:
     async def _generate_content(self, prompt: str) -> dict[str, Any]:
         """
         Generate content using the Gemini API.
-        
+
         Args:
             prompt: Input prompt
-            
+
         Returns:
             API response with generated content
         """
@@ -261,10 +277,14 @@ class GeminiService:
         context: Optional[str],
     ) -> str:
         """Build the code review prompt."""
-        
-        body_section = f"\n## Pull Request Description\n{pr_body}" if pr_body else "\n## Pull Request Description\n_No description provided._"
+
+        body_section = (
+            f"\n## Pull Request Description\n{pr_body}"
+            if pr_body
+            else "\n## Pull Request Description\n_No description provided._"
+        )
         context_section = f"\n## Additional Context\n{context}" if context else ""
-        
+
         return f"""You are an expert code reviewer analyzing a pull request. Provide a thorough, constructive review focusing on:
 1. Code quality and best practices
 2. Potential bugs and security issues
@@ -322,7 +342,7 @@ text before or after the JSON object."""
         language: str,
     ) -> str:
         """Build prompt for single file review."""
-        
+
         return f"""Review the following file changes and provide specific feedback.
 
 Filename: {filename}
@@ -358,12 +378,12 @@ Return ONLY valid JSON array, no additional text."""
         files_changed: list[dict[str, Any]],
     ) -> str:
         """Build prompt for PR summary."""
-        
+
         files_list = "\n".join(
             f"- {f['filename']}: {f.get('status', 'modified')}"
             for f in files_changed[:20]  # Limit to first 20 files
         )
-        
+
         return f"""Provide a concise summary of this pull request.
 
 Title: {pr_title}
@@ -446,10 +466,10 @@ Return ONLY valid JSON."""
         filename: str,
     ) -> list[dict[str, Any]]:
         """Parse file review comments."""
-        
+
         try:
             text = response["text"]
-            
+
             # Try to extract JSON array
             if text.startswith("["):
                 comments = json.loads(text)
@@ -459,19 +479,19 @@ Return ONLY valid JSON."""
                     comments = json.loads(json_match.group())
                 else:
                     comments = []
-            
+
             # Add filename to all comments
             for comment in comments:
                 comment["file_path"] = filename
-            
+
             return comments
-            
+
         except json.JSONDecodeError:
             return []
 
     def _parse_pr_summary(self, response: dict[str, Any]) -> dict[str, Any]:
         """Parse PR summary response."""
-        
+
         try:
             text = response["text"]
             return json.loads(text)
