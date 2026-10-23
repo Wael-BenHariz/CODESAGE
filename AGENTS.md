@@ -202,15 +202,17 @@ docker-compose --profile database up -d
 - **Schemas** (`agents/schemas.py`): `ReviewContext` (incl. `findings`, `sonar_scan_failed`, `semgrep_scan_failed`), `AgentResult`, `AgentComment`, `ReviewResult`, `ReviewStatistics`.
 - **Failure semantics**: a failed specialist → review posted as *partial* (noted in the summary); both analyzers down → "static analysis unavailable" note. The review still completes and posts.
 
-## CI/CD Pipeline
+## CI/CD Pipeline (GitOps via Argo CD)
 
-Order: `code-quality` → (`security-scan` + `test` in parallel) → `build` → `deploy-dev` / `deploy-staging` → `deploy-production` → `monitor-deployment`
+Order: (`frontend` + `backend` build/test) → `build-images` (tarballs) → `trivy-scan` → `push-images` → `update-manifests` → `argocd-sync`
 
-- **Branches**: `develop` → dev env, `main` → staging → production; also `release/**` triggers and `workflow_dispatch`
-- **Deploy**: AWS EKS with blue-green for production (traffic slot switch blue→green)
-- **Images**: `ghcr.io/<repo>/{frontend,api,worker}`
-- **Versions**: Python 3.12 in CI (local 3.11+), Node 20
-- **Postgres/Redis services in test job**: `postgres:16-alpine`, `redis:7-alpine`
+- **Flow**: build & test → build images as tarballs → Trivy scan (CRITICAL/HIGH gate) → push to Docker Hub → commit updated image tags into `infrastructure/k8s/**` on `main` → Argo CD syncs & waits for Healthy
+- **Branches**: `main` only for deploys (push triggers ignore `infrastructure/k8s/**` + `**.md` to prevent re-trigger loops); PRs to `main` run through the Trivy gate but skip push/deploy
+- **Registry**: Docker Hub (`<DOCKERHUB_USERNAME>/codesage-{frontend,api,worker}`, tagged with the commit SHA)
+- **Deploy**: GitOps — the pipeline rewrites image tags in `infrastructure/k8s` and commits back (`chore(deploy): … [skip ci]`); Argo CD app `codesage-app` watches `main` (`ARGOCD_APPS` env to override)
+- **Secrets required**: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `ARGOCD_SERVER`, `ARGOCD_AUTH_TOKEN`; optional repo vars `ARGOCD_RUNNER` (self-hosted runner label) and `ARGOCD_INSECURE`
+- **Versions**: Python 3.12 in CI (local 3.11+), Node 20, Trivy v0.69.3
+- **Postgres/Redis services in backend test job**: `postgres:16-alpine`, `redis:7-alpine`
 
 ## Important Conventions
 

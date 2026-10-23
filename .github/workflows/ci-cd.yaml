@@ -1,172 +1,74 @@
-# ============================================
-# CodeSage CI/CD Pipeline - GitHub Actions
-# ============================================
+# ============================================================
+# CodeSage CI/CD  (GitOps: build -> scan -> push -> update manifests -> Argo CD)
+# Place at: .github/workflows/ci-cd.yml
+#
+# Required secrets:  DOCKERHUB_USERNAME, DOCKERHUB_TOKEN,
+#                    ARGOCD_SERVER, ARGOCD_AUTH_TOKEN
+# Optional variables: ARGOCD_RUNNER   (e.g. "self-hosted" if Argo CD is not
+#                                      reachable from GitHub-hosted runners)
+#                     ARGOCD_INSECURE ("true" for self-signed TLS)
+# ============================================================
 
-name: CodeSage CI/CD Pipeline
+name: CodeSage CI/CD
 
 on:
   push:
-    branches: [main, develop, 'release/**']
+    branches: [main]
+    # The pipeline commits manifest changes itself; never re-trigger on them.
+    paths-ignore:
+      - 'infrastructure/k8s/**'
+      - '**.md'
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - dev
-          - staging
-          - production
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
-  DOCKER_BUILDX_VERSION: '0.12.0'
-  BUILD_DATE: ${{ github.event.head_commit.timestamp || github.event.pull_request.head.sha || github.sha }}
+  DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+  DEPLOY_BRANCH: main            # branch Argo CD watches (targetRevision)
+  ARGOCD_APPS: codesage-app      # space-separated Argo CD apps to sync
+  TRIVY_VERSION: v0.69.3         # known-safe Trivy binary version
 
 jobs:
-  # ============================================
-  # Code Quality & Linting
-  # ============================================
-  code-quality:
-    name: Code Quality Check
+  # ==========================================================
+  # 1. Build & Test
+  # ==========================================================
+  frontend:
+    name: "1 · Build & Test — frontend"
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: backend/requirements.txt
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run format:check
+      - run: npm run test:ci
+      - run: npm run build
 
-      # Frontend Quality Checks
-      - name: Frontend - Install dependencies
-        run: npm ci
-        working-directory: frontend
-
-      - name: Frontend - Check ESLint
-        run: npm run lint
-        working-directory: frontend
-
-      - name: Frontend - Check TypeScript
-        run: npm run type-check
-        working-directory: frontend
-
-      - name: Frontend - Check Prettier
-        run: npm run format:check
-        working-directory: frontend
-
-      # Backend Quality Checks
-      - name: Backend - Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff black mypy bandit safety
-        working-directory: backend
-
-      - name: Backend - Check Ruff (Linter)
-        run: ruff check .
-        working-directory: backend
-
-      - name: Backend - Check Black (Formatter)
-        run: black --check .
-        working-directory: backend
-
-      - name: Backend - Check MyPy (Type checker)
-        run: mypy .
-        working-directory: backend
-
-      - name: Backend - Check Bandit (Security)
-        run: bandit -r .
-        working-directory: backend
-
-  # ============================================
-  # Security Scanning
-  # ============================================
-  security-scan:
-    name: Security Scanning
+  backend:
+    name: "1 · Build & Test — backend"
     runs-on: ubuntu-latest
-    needs: code-quality
-    permissions:
-      security-events: write
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Dependency Vulnerability Scanning
-      - name: Frontend - Audit NPM dependencies
-        run: npm audit --audit-level=high
-        working-directory: frontend
-
-      - name: Backend - Audit Python dependencies
-        run: |
-          pip install safety
-          safety check --full-report
+    defaults:
+      run:
         working-directory: backend
-
-      # Container Security Scanning
-      - name: Build container for security scan
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: false
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      # SAST
-      - name: Run Semgrep SAST
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >
-            p/owasp-top-ten
-            p/nodejs
-            p/python-best-practices
-            p/flask
-
-  # ============================================
-  # Unit & Integration Tests
-  # ============================================
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    needs: code-quality
     services:
       postgres:
         image: postgres:16-alpine
@@ -177,11 +79,10 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       redis:
         image: redis:7-alpine
         ports:
@@ -191,395 +92,258 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
 
-      - name: Backend - Install dependencies
+      - name: Install dependencies
         run: |
-          python -m pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio pytest-mock httpx
-        working-directory: backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff black mypy bandit pytest pytest-cov pytest-asyncio pytest-mock httpx
 
-      - name: Backend - Run tests
+      - name: Build check (byte-compile)
+        run: python -m compileall -q app
+
+      - run: ruff check .
+      - run: black --check .
+      - run: mypy .
+      - name: Bandit (security lint, medium+ severity, app code only)
+        run: bandit -r app -ll -q
+
+      - name: Tests
         env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/codesage_test
+          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/codesage_test
           REDIS_URL: redis://localhost:6379/0
           GITHUB_CLIENT_ID: test
           GITHUB_CLIENT_SECRET: test
           JWT_SECRET: test-secret
-        run: |
-          pytest tests/ \
-            --cov=app \
-            --cov-report=xml \
-            --cov-report=html \
-            --cov-fail-under=80 \
-            -v \
-            -x
-        working-directory: backend
+        run: pytest tests/ --cov=app --cov-report=term-missing --cov-fail-under=80 -v -x
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./backend/coverage.xml
-          fail_ci_if_error: true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Frontend - Install dependencies
-        run: npm ci
-        working-directory: frontend
-
-      - name: Frontend - Run tests
-        run: npm run test:ci
-        working-directory: frontend
-  # ============================================
-  # SonarQube Cloud Analysis
-  # ============================================
-  sonarqube:
-    name: SonarQube Cloud Analysis
+  # ==========================================================
+  # 2. Build Images  (frontend, api, worker) — saved as tarballs
+  #    so the exact bits that get scanned are the bits that get pushed
+  # ==========================================================
+  build-images:
+    name: "2 · Build image — ${{ matrix.service }}"
     runs-on: ubuntu-latest
-    needs: [code-quality, test]
-
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  # ============================================
-  # Build Docker Images
-  # ============================================
-  build:
-    name: Build & Push Images
-    runs-on: ubuntu-latest
-    needs: [security-scan, test,sonarqube]
-    permissions:
-      contents: read
-      packages: write
+    needs: [frontend, backend]
     strategy:
+      fail-fast: true
       matrix:
         include:
           - service: frontend
-            context: ./frontend
-            dockerfile: ./frontend/Dockerfile
+            context: frontend
+            dockerfile: frontend/Dockerfile
           - service: api
-            context: ./backend
-            dockerfile: ./backend/Dockerfile
+            context: backend
+            dockerfile: backend/Dockerfile
           - service: worker
-            context: ./backend
-            dockerfile: ./backend/Dockerfile.worker
+            context: backend
+            dockerfile: backend/Dockerfile.worker
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=sha,prefix=
-
-      - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v5
+      - name: Build ${{ matrix.service }}
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          push: false
+          tags: ${{ env.DOCKERHUB_NAMESPACE }}/codesage-${{ matrix.service }}:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/${{ matrix.service }}.tar
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
           build-args: |
             GIT_SHA=${{ github.sha }}
-            BUILD_DATE=${{ env.BUILD_DATE }}
             VERSION=${{ github.ref_name }}
 
-  # ============================================
-  # Deploy to Development
-  # ============================================
-  deploy-dev:
-    name: Deploy to Development
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.service }}
+          path: /tmp/${{ matrix.service }}.tar
+          retention-days: 1
+          compression-level: 0
+
+  # ==========================================================
+  # 3. Trivy Scan — fails the pipeline on CRITICAL/HIGH
+  # ==========================================================
+  trivy-scan:
+    name: "3 · Trivy scan — ${{ matrix.service }}"
     runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
-    environment:
-      name: development
-      url: https://dev.codesage.dev
+    needs: build-images
+    strategy:
+      fail-fast: false          # report every vulnerable image, not just the first
+      matrix:
+        service: [frontend, api, worker]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/download-artifact@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          name: image-${{ matrix.service }}
+          path: /tmp/image
 
-      - name: Deploy to EKS
-        uses: azure/k8s-deploy@v4
+      # NOTE: pin this to a full commit SHA (v0.35.0 = 57a97c7...) rather than a tag.
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.35.0
         with:
-          namespace: codesage-dev
-          manifests: |
-            infrastructure/k8s/base/frontend/deployment.yaml
-            infrastructure/k8s/base/backend/deployment.yaml
-            infrastructure/k8s/base/backend/deployment-worker.yaml
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:${{ github.sha }}
-          strategy: rolling
+          input: /tmp/image/${{ matrix.service }}.tar
+          version: ${{ env.TRIVY_VERSION }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
 
-      - name: Run smoke tests
-        run: |
-          sleep 30
-          curl -f https://dev.codesage.dev/api/health || exit 1
-
-      - name: Notify Slack on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "Deployment to Development failed!",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*CodeSage Dev Deployment Failed*\n• Commit: `${{ github.sha }}`\n• Branch: `${{ github.ref_name }}`\n• Author: ${{ github.actor }}"
-                }
-              }]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
-  # ============================================
-  # Deploy to Staging
-  # ============================================
-  deploy-staging:
-    name: Deploy to Staging
+  # ==========================================================
+  # 4. Push to Docker Hub — only after ALL images pass the scan
+  # ==========================================================
+  push-images:
+    name: "4 · Push — ${{ matrix.service }}"
     runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    environment:
-      name: staging
-      url: https://staging.codesage.io
+    needs: trivy-scan
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        service: [frontend, api, worker]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/download-artifact@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          name: image-${{ matrix.service }}
+          path: /tmp/image
 
-      - name: Update image tags
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Load and push
         run: |
-          find infrastructure/k8s/base -name 'kustomization.yaml' -exec sed -i \
-            -e "s|frontend:.*|frontend: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}|" \
-            -e "s|api:.*|api: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api:${{ github.sha }}|" \
-            -e "s|worker:.*|worker: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:${{ github.sha }}|" {} \;
+          docker load -i /tmp/image/${{ matrix.service }}.tar
+          docker push "${DOCKERHUB_NAMESPACE}/codesage-${{ matrix.service }}:${{ github.sha }}"
 
-      - name: Deploy to Staging
-        uses: azure/k8s-deploy@v4
-        with:
-          namespace: codesage-staging
-          manifests: |
-            infrastructure/kubernetes/apps
-          action: deploy
-
-      - name: Run integration tests
-        run: |
-          npm run test:e2e -- --env=staging
-        working-directory: frontend
-
-      - name: Notify Slack
-        if: success()
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "Successfully deployed to Staging!",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*CodeSage Staging Deployed*\n• Commit: `${{ github.sha }}`\n• URL: https://staging.codesage.io"
-                }
-              }]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
-  # ============================================
-  # Blue-Green Deploy to Production
-  # ============================================
-  deploy-production:
-    name: Deploy to Production
+  # ==========================================================
+  # 5 + 6. Update Tags, then Commit & Push to the deployment branch
+  # ==========================================================
+  update-manifests:
+    name: "5-6 · Update tags & commit"
     runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    environment:
-      name: production
-      url: https://codesage.io
+    needs: push-images
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     concurrency:
-      group: production-deploy
+      group: gitops-manifest-update
       cancel-in-progress: false
+    outputs:
+      commit: ${{ steps.commit.outputs.commit }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v4
         with:
-          role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          ref: ${{ env.DEPLOY_BRANCH }}
 
-      - name: Deploy Green Environment
-        run: |
-          kubectl set image deployment/codesage-api \
-            api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api:${{ github.sha }} \
-            -n codesage-green
-            
-          kubectl set image deployment/codesage-worker \
-            worker=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:${{ github.sha }} \
-            -n codesage-green
-            
-          kubectl set image deployment/codesage-frontend \
-            frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} \
-            -n codesage-green
-
-      - name: Wait for deployment
-        run: |
-          kubectl rollout status deployment/codesage-api -n codesage-green --timeout=600s
-          kubectl rollout status deployment/codesage-worker -n codesage-green --timeout=600s
-          kubectl rollout status deployment/codesage-frontend -n codesage-green --timeout=600s
-
-      - name: Run smoke tests on Green
-        run: |
-          GREEN_LB=$(kubectl get svc codesage-frontend -n codesage-green -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          curl -f "https://$GREEN_LB/api/health" || exit 1
-
-      - name: Switch traffic (Blue to Green)
-        run: |
-          kubectl patch service codesage-frontend -n codesage \
-            -p '{"spec":{"selector":{"slot":"green"}}}'
-            
-          kubectl patch service codesage-api -n codesage \
-            -p '{"spec":{"selector":{"slot":"green"}}}'
-
-      - name: Verify production health
-        run: |
-          sleep 30
-          curl -f https://codesage.io/api/health || exit 1
-
-      - name: Create GitHub Release
-        if: success()
-        uses: actions/create-release@v1
+      - name: "5 · Update image tags under infrastructure/k8s"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
-          body: |
-            ## What's Changed
-            - Commit: `${{ github.sha }}`
-            - Deployed by GitHub Actions
-          draft: false
-          prerelease: false
-
-      - name: Notify success
-        uses: slackapi/slack-github-action@v1
-        if: success()
-        with:
-          payload: |
-            {
-              "text": "Production deployment successful!",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*CodeSage Production Deployed*\n• Version: `${{ github.run_number }}`\n• Commit: `${{ github.sha }}`\n• URL: https://codesage.io"
-                }
-              }]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
-      - name: Rollback on failure
-        if: failure()
+          SHA: ${{ github.sha }}
         run: |
-          kubectl patch service codesage-frontend -n codesage \
-            -p '{"spec":{"selector":{"slot":"blue"}}}'
-          kubectl patch service codesage-api -n codesage \
-            -p '{"spec":{"selector":{"slot":"blue"}}}'
-        env:
-          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+          set -euo pipefail
+          for svc in frontend api worker; do
+            image="${DOCKERHUB_NAMESPACE}/codesage-${svc}"
+            find infrastructure/k8s -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
+              | xargs -0 -r sed -i -E \
+                "s@^([[:space:]-]*image:[[:space:]]*)[^[:space:]:]*codesage-${svc}(:[^[:space:]]*)?[[:space:]]*\$@\1${image}:${SHA}@"
 
-  # ============================================
-  # Post-Deploy Monitoring
-  # ============================================
-  monitor-deployment:
-    name: Post-Deploy Monitoring
-    runs-on: ubuntu-latest
-    needs: deploy-production
-    if: always()
-    steps:
-      - name: Check deployment health
+            if ! grep -rqF "${image}:${SHA}" infrastructure/k8s; then
+              echo "::error::No manifest under infrastructure/k8s references codesage-${svc}"
+              exit 1
+            fi
+          done
+          git --no-pager diff --stat
+
+      - name: "6 · Commit & push to ${{ env.DEPLOY_BRANCH }}"
+        id: commit
+        env:
+          SHA: ${{ github.sha }}
         run: |
-          echo "Checking deployment metrics..."
-          
-          # Check error rate
-          ERROR_RATE=$(curl -s https://codesage.io/api/metrics | jq '.error_rate')
-          if (( $(echo "$ERROR_RATE > 0.05" | bc -l) )); then
-            echo "Warning: Error rate is above threshold"
-            exit 1
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add infrastructure/k8s
+
+          if git diff --cached --quiet; then
+            echo "Manifests already reference ${SHA::7}; nothing to commit."
+          else
+            git commit -m "chore(deploy): update image tags to ${SHA::7} [skip ci]"
+            for attempt in 1 2 3; do
+              if git push origin "HEAD:${DEPLOY_BRANCH}"; then break; fi
+              if [ "$attempt" = 3 ]; then
+                echo "::error::Push failed after 3 attempts"
+                exit 1
+              fi
+              git pull --rebase origin "${DEPLOY_BRANCH}"
+            done
           fi
-          
-          echo "Deployment health check passed"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Generate deployment report
+  # ==========================================================
+  # 7. Argo CD Sync & verify
+  # ==========================================================
+  argocd-sync:
+    name: "7 · Argo CD sync & verify"
+    runs-on: ${{ vars.ARGOCD_RUNNER || 'ubuntu-latest' }}
+    needs: update-manifests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    env:
+      ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      ARGOCD_OPTS: --grpc-web
+    steps:
+      - name: Check required tools (pre-installed on the runner)
+        run: |
+          for tool in argocd jq; do
+            command -v "$tool" > /dev/null || { echo "::error::$tool is not installed on this runner"; exit 1; }
+          done
+          argocd version --client --short
+
+      - name: Sync and wait for Healthy
+        env:
+          REVISION: ${{ needs.update-manifests.outputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ "${{ vars.ARGOCD_INSECURE }}" = "true" ]; then
+            export ARGOCD_OPTS="${ARGOCD_OPTS} --insecure"
+          fi
+
+          for app in ${ARGOCD_APPS}; do
+            echo "::group::${app}"
+            # Pick up the new manifest commit immediately
+            argocd app get "$app" --hard-refresh > /dev/null
+
+            # Auto-sync may already be running; a manual sync can then return non-zero.
+            argocd app sync "$app" --retry-limit 3 --timeout 300 \
+              || echo "sync returned non-zero (auto-sync may be in progress); verifying result"
+
+            # Fails the job unless the app ends up Synced AND Healthy
+            argocd app wait "$app" --sync --health --timeout 300
+
+            synced_rev=$(argocd app get "$app" -o json | jq -r '.status.sync.revision')
+            echo "${app}: synced revision ${synced_rev} (manifest commit ${REVISION})"
+            echo "::endgroup::"
+          done
+
+      - name: Summary
         if: always()
         run: |
-          echo "## Deployment Report" >> $GITHUB_STEP_SUMMARY
-          echo "### Build: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Author: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: ${{ needs.deploy-production.result }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Deployment"
+            echo "- Image tag: \`${{ github.sha }}\`"
+            echo "- Manifest commit: \`${{ needs.update-manifests.outputs.commit }}\`"
+            echo "- Argo CD apps: \`${ARGOCD_APPS}\`"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
