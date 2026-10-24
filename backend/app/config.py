@@ -177,6 +177,7 @@ class Settings(BaseSettings):
     # (release name + chart name) — the short form does not resolve in-cluster.
     SONARQUBE_URL: str = "http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
     SONARQUBE_TOKEN: str = ""
+    SONAR_SCANNER_BIN: str = "sonar-scanner"
     SONARQUBE_ANALYSIS_TIMEOUT: int = 120
     SONARQUBE_POLL_INTERVAL: int = 3
     SONARQUBE_PROJECT_PREFIX: str = "codesage-review"
@@ -223,6 +224,16 @@ class Settings(BaseSettings):
     # BullMQ
     BULLMQ_REVIEW_QUEUE: str = "review-requests"
     BULLMQ_CONCURRENCY: int = 5
+
+    # Local review (VS Code extension) — DEV ONLY.
+    # This path is never a production authentication mechanism: it requires a
+    # loopback caller AND a token, has no user/org context, and must not run in
+    # Kubernetes. Keep it disabled unless explicitly developing the extension.
+    LOCAL_REVIEW_DEV_MODE: bool = False
+    LOCAL_REVIEW_DEV_TOKEN: str = ""
+    LOCAL_REVIEW_DEV_MAX_FILES: int = 25
+    LOCAL_REVIEW_DEV_MAX_BYTES: int = 4 * 1024 * 1024
+    LOCAL_REVIEW_DEV_TIMEOUT_SECONDS: float = 240.0
 
     # CORS
     CORS_ORIGINS: list[str] = [
@@ -285,6 +296,27 @@ class Settings(BaseSettings):
                 "backend/.env"
             ) from exc
         return v
+
+    @model_validator(mode="after")
+    def validate_local_review_dev_mode(self) -> "Settings":
+        """Fail closed when the dev-only local-review path is unsafe.
+
+        The dev endpoint has no user identity; running it in a cluster (or
+        without a token) would expose an unauthenticated source-review API.
+        """
+        if self.LOCAL_REVIEW_DEV_MODE:
+            import os
+
+            if not self.LOCAL_REVIEW_DEV_TOKEN:
+                raise ValueError(
+                    "LOCAL_REVIEW_DEV_TOKEN is required when "
+                    "LOCAL_REVIEW_DEV_MODE is enabled"
+                )
+            if os.environ.get("KUBERNETES_SERVICE_HOST"):
+                raise ValueError(
+                    "LOCAL_REVIEW_DEV_MODE must not be enabled in Kubernetes"
+                )
+        return self
 
     @model_validator(mode="after")
     def validate_allowed_issuers(self) -> "Settings":

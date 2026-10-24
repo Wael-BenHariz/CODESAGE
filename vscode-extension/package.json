@@ -1,0 +1,214 @@
+{
+  "name": "codesage-vscode",
+  "displayName": "CodeSage Local Review",
+  "description": "Review local Git changes with CodeSage and see findings inline in VS Code.",
+  "version": "0.1.0",
+  "publisher": "codesage",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "code review",
+    "static analysis",
+    "sonarqube",
+    "semgrep",
+    "ai"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:codesage.review",
+    "onCommand:codesage.reviewWorkingTree",
+    "onCommand:codesage.reviewStaged"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codesage.reviewWorkingTree",
+        "title": "CodeSage: Review Local Changes",
+        "icon": "$(play)"
+      },
+      {
+        "command": "codesage.reviewStaged",
+        "title": "CodeSage: Review Staged Changes",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "codesage.cancelReview",
+        "title": "CodeSage: Cancel Review",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "codesage.clearResults",
+        "title": "CodeSage: Clear Results",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "codesage.showSummary",
+        "title": "CodeSage: Show Review Summary",
+        "icon": "$(markdown)"
+      },
+      {
+        "command": "codesage.copySuggestion",
+        "title": "CodeSage: Copy Suggestion"
+      },
+      {
+        "command": "codesage.setDevToken",
+        "title": "CodeSage: Set Development Token"
+      },
+      {
+        "command": "codesage.showOutput",
+        "title": "CodeSage: Show Output"
+      },
+      {
+        "command": "codesage.openSettings",
+        "title": "CodeSage: Open Settings"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codesage",
+          "title": "CodeSage",
+          "icon": "media/codesage.svg"
+        }
+      ]
+    },
+    "views": {
+      "codesage": [
+        {
+          "id": "codesage.review",
+          "name": "Local Review",
+          "type": "tree"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codesage.review",
+        "contents": "Review your uncommitted changes with CodeSage.\n[Review Local Changes](command:codesage.reviewWorkingTree)\n[Review Staged Changes](command:codesage.reviewStaged)\n\nConfigure the backend with `codesage.backendUrl`. For local development, set the dev token with [Set Development Token](command:codesage.setDevToken)."
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codesage.reviewWorkingTree",
+          "when": "view == codesage.review",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codesage.clearResults",
+          "when": "view == codesage.review",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "codesage.copySuggestion",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CodeSage",
+      "properties": {
+        "codesage.backendUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "CodeSage backend base URL. Use HTTPS outside local development."
+        },
+        "codesage.authMode": {
+          "type": "string",
+          "enum": [
+            "dev"
+          ],
+          "enumDescriptions": [
+            "Send the development token stored with the CodeSage: Set Development Token command. Dev mode has no user or organization context."
+          ],
+          "default": "dev",
+          "description": "Authentication mode for local development. Keycloak support is planned but not enabled in this version."
+        },
+        "codesage.reviewScope": {
+          "type": "string",
+          "enum": [
+            "workingTree",
+            "staged"
+          ],
+          "default": "workingTree",
+          "description": "Default scope when starting a review from the sidebar."
+        },
+        "codesage.includeUntracked": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include untracked files in working-tree reviews."
+        },
+        "codesage.changedLinesOnly": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show diagnostics only on changed lines. Other findings remain in the sidebar."
+        },
+        "codesage.includeFileLevel": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show file-level diagnostics when a finding has no line number."
+        },
+        "codesage.confirmBeforeSend": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask for confirmation before sending local source code to the backend."
+        },
+        "codesage.maxFiles": {
+          "type": "number",
+          "default": 25,
+          "minimum": 1,
+          "maximum": 25,
+          "description": "Maximum number of changed files to send."
+        },
+        "codesage.maxPayloadBytes": {
+          "type": "number",
+          "default": 4194304,
+          "minimum": 1024,
+          "maximum": 4194304,
+          "description": "Maximum total source payload size in bytes."
+        },
+        "codesage.requestTimeoutMs": {
+          "type": "number",
+          "default": 240000,
+          "minimum": 10000,
+          "maximum": 240000,
+          "description": "Local review request timeout in milliseconds."
+        },
+        "codesage.showSuggestions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show suggestion text in hovers and the sidebar."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run type-check && npm run test",
+    "package": "npm run build && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

@@ -46,6 +46,7 @@ def _patch_settings(monkeypatch, token="test-token", timeout=5, poll=0):
         SimpleNamespace(
             SONARQUBE_TOKEN=token,
             SONARQUBE_URL="http://sonar.test",
+            SONAR_SCANNER_BIN="sonar-scanner",
             SONARQUBE_ANALYSIS_TIMEOUT=timeout,
             SONARQUBE_POLL_INTERVAL=poll,
         ),

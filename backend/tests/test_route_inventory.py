@@ -42,6 +42,10 @@ _UNAUTHENTICATED_OK: set[tuple[str, str]] = {
     # valid one) — test_auth_logout.py pins that; no get_current_user
     # dependency exists for the walker to see.
     ("POST", f"{API}/auth/logout"),
+    # Dev-only VS Code local review; custom guard requires loopback + a
+    # shared dev token, and is disabled unless LOCAL_REVIEW_DEV_MODE=true.
+    # The walker only recognizes the JWT/role guards above.
+    ("POST", f"{API}/local-reviews/dev"),
 }
 # Docs routes exist only when ENABLE_API_DOCS=true — public by explicit
 # opt-in (they are deliberately absent under the test environment).

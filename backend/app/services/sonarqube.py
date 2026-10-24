@@ -163,7 +163,7 @@ async def run_scanner(project_key: str, temp_dir: str, language: str) -> None:
         language,
     )
     command = [
-        "sonar-scanner",
+        settings.SONAR_SCANNER_BIN,
         f"-Dsonar.projectKey={project_key}",
         f"-Dsonar.projectName={project_key}",
         "-Dsonar.sources=.",

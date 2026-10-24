@@ -19,6 +19,11 @@ from app.redis import close_redis
 
 logger = logging.getLogger(__name__)
 
+# Starlette >= 1.x renamed these status constants; accessing the old names
+# emits deprecation warnings (and future versions remove them).
+_CONTENT_TOO_LARGE_413 = getattr(status, "HTTP_413_CONTENT_TOO_LARGE", 413)
+_UNPROCESSABLE_422 = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+
 # The API process had no root handler, so every `app.*` INFO line (webhook
 # queued/ignored/skipped decisions, the console-mail invitation link) was
 # dropped before reaching uvicorn's output. Mirrors app/workers/main.py.
@@ -63,27 +68,54 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def limit_local_review_body(request: Request, call_next):
+    """Reject oversized local-review requests before JSON parsing.
+
+    The schema validator enforces the precise per-file/total limits; this
+    middleware is the cheap first line of defense for the dev endpoint.
+    """
+    if (
+        settings.LOCAL_REVIEW_DEV_MODE
+        and request.method == "POST"
+        and request.url.path == f"{settings.API_V1_PREFIX}/local-reviews/dev"
+    ):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                size = int(content_length)
+            except ValueError:
+                size = 0
+            if size > settings.LOCAL_REVIEW_DEV_MAX_BYTES + 1_000_000:
+                return JSONResponse(
+                    status_code=_CONTENT_TOO_LARGE_413,
+                    content={"detail": "Request body too large"},
+                )
+    return await call_next(request)
+
+
 # Exception handlers
 def _json_safe_errors(errors: Sequence) -> Sequence:
-    """Make pydantic errors JSON-serializable.
+    """Return only safe, client-relevant validation fields.
 
-    ``value_error`` entries carry the live exception instance in ``ctx``
-    (e.g. a validator's ValueError), which json.dumps cannot serialize —
-    that turned every such 422 into a 500. Stringify non-primitive ctx.
+    Pydantic errors can contain ``input`` (a request value, potentially a whole
+    source file) and ``ctx`` (live exception objects). Echoing them leaks source
+    code and is not needed by the SPA or the VS Code extension, so whitelist the
+    field location, message, and type only.
     """
 
+    safe = []
     for err in errors:
-        ctx = err.get("ctx")
-        if isinstance(ctx, dict):
-            err["ctx"] = {
-                key: (
-                    value
-                    if isinstance(value, (str, int, float, bool, type(None)))
-                    else str(value)
-                )
-                for key, value in ctx.items()
+        if not isinstance(err, dict):
+            continue
+        safe.append(
+            {
+                "loc": list(err.get("loc") or []),
+                "msg": str(err.get("msg") or "Invalid value"),
+                "type": str(err.get("type") or "value_error"),
             }
-    return errors
+        )
+    return safe
 
 
 @app.exception_handler(RequestValidationError)
@@ -93,11 +125,10 @@ async def validation_exception_handler(
 ) -> JSONResponse:
     """Handle request validation errors with structured response."""
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=_UNPROCESSABLE_422,
         content={
             "error": "Validation Error",
             "detail": _json_safe_errors(exc.errors()),
-            "body": exc.body,
         },
     )
 
