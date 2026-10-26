@@ -267,13 +267,25 @@ jobs:
         run: |
           set -euo pipefail
           for svc in frontend api worker; do
-            image="${DOCKERHUB_NAMESPACE}/codesage-${svc}"
+            case "$svc" in
+              frontend) repo="codesage-frontend" ;;
+              api)      repo="codesage-api" ;;
+              worker)   repo="codesage-worker" ;;
+            esac
+
+            image="${DOCKERHUB_NAMESPACE}/${repo}:${SHA}"
+            case "$svc" in
+              frontend) pattern='codesage/frontend' ;;
+              api)      pattern='codesage/backend' ;;
+              worker)   pattern='codesage/worker' ;;
+            esac
+
             find infrastructure/k8s -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
               | xargs -0 -r sed -i -E \
-                "s@^([[:space:]-]*image:[[:space:]]*)[^[:space:]:]*codesage-${svc}(:[^[:space:]]*)?[[:space:]]*\$@\1${image}:${SHA}@"
+                "s@^([[:space:]-]*image:[[:space:]]*)[^[:space:]]*${pattern}(:[^[:space:]]*)?[[:space:]]*\$@\1${image}@"
 
-            if ! grep -rqF "${image}:${SHA}" infrastructure/k8s; then
-              echo "::error::No manifest under infrastructure/k8s references codesage-${svc}"
+            if ! grep -rqF "${image}" infrastructure/k8s; then
+              echo "::error::No manifest under infrastructure/k8s references ${image}"
               exit 1
             fi
           done

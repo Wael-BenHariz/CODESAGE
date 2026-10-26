@@ -17,6 +17,9 @@ RUN npm run build -- --configuration production
 ### Stage 2: final (nginx alpine)
 FROM nginx:alpine AS final
 
+# Upgrade Alpine packages to receive security fixes.
+RUN apk upgrade --no-cache
+
 RUN rm -rf /usr/share/nginx/html/*
 
 COPY --from=builder /app/dist/codesage-frontend/browser /usr/share/nginx/html
