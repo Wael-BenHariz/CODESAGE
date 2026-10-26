@@ -6,7 +6,7 @@ metadata:
   labels:
     app: codesage-worker
 spec:
-  replicas: 1
+  replicas: 0
   # Single-node k3s: requests sit at ~91% of allocatable CPU, so a surge
   # pod (default rounds 25% of 1 replica up to +1) can never schedule
   # beside the old one. Terminate first, then start — brief downtime on
