@@ -3,8 +3,7 @@ import { ApiError, CodeSageClient } from './api';
 import { DevTokenAuthProvider } from './auth';
 import type { DiagnosticsManager } from './diagnostics';
 import { buildReviewRequest, collectLocalReview, GitError, NoChangesError } from './git';
-import { SummaryDocumentProvider } from './tree';
-import type { ReviewTreeProvider } from './tree';
+import type { ReportPanel } from './reportPanel';
 import type { Finding, LocalReviewResult, ReviewScope } from './types';
 
 interface CodeSageConfig {
@@ -56,55 +55,17 @@ function isLoopbackUrl(value: string): boolean {
   }
 }
 
-function summaryMarkdown(result: LocalReviewResult, repoRoot: string): string {
-  const lines = [
-    '# CodeSage local review',
-    '',
-    `- Repository: \`${repoRoot}\``,
-    `- Branch: \`${result.snapshot.branch ?? 'detached HEAD'}\``,
-    `- Snapshot: \`${result.snapshot.id}\``,
-    `- Duration: ${result.durationMs} ms`,
-    `- Findings: ${result.findings.length}`,
-    '',
-    '## Summary',
-    '',
-    result.summary || '_No summary returned._',
-    '',
-    '## Counts',
-    '',
-    `- Files reviewed: ${result.statistics.filesReviewed}`,
-    `- Issues found: ${result.statistics.issuesFound}`
-  ];
-  for (const [severity, count] of Object.entries(result.statistics.bySeverity).sort()) {
-    lines.push(`- ${severity}: ${count}`);
-  }
-  if (result.degradedReasons.length > 0) {
-    lines.push('', '## Limited coverage', '');
-    for (const reason of result.degradedReasons) {
-      lines.push(`- ${reason}`);
-    }
-  }
-  if (result.agentFailures.length > 0) {
-    lines.push('', '## Agent failures', '');
-    for (const failure of result.agentFailures) {
-      lines.push(`- ${failure}`);
-    }
-  }
-  if (result.diffTruncated) {
-    lines.push('', '_The diff was truncated before it was sent to the LLM._');
-  }
-  return lines.join('\n');
-}
-
 export class ReviewController implements vscode.Disposable {
   private abortController: AbortController | null = null;
   private running = false;
+  private cancelled = false;
+  private result: LocalReviewResult | null = null;
+  private readonly findingsById = new Map<string, Finding>();
 
   constructor(
     private readonly auth: DevTokenAuthProvider,
-    private readonly tree: ReviewTreeProvider,
+    private readonly report: ReportPanel,
     private readonly diagnostics: DiagnosticsManager,
-    private readonly summaryProvider: SummaryDocumentProvider,
     private readonly output: vscode.OutputChannel
   ) {}
 
@@ -146,7 +107,7 @@ export class ReviewController implements vscode.Disposable {
     }
 
     this.running = true;
-    this.tree.setLoading();
+    this.cancelled = false;
     const selectedScope = scope ?? config.reviewScope;
 
     try {
@@ -159,9 +120,10 @@ export class ReviewController implements vscode.Disposable {
 
       const confirmed = await this.confirmSend(collection, backendUrl, selectedScope, config);
       if (!confirmed) {
-        this.tree.reset();
         return;
       }
+
+      this.report.showLoading();
 
       const controller = new AbortController();
       this.abortController = controller;
@@ -194,8 +156,12 @@ export class ReviewController implements vscode.Disposable {
           showSuggestions: config.showSuggestions
         }
       );
-      this.tree.setResult(result, collection, diagnosticState);
-      this.summaryProvider.update(summaryMarkdown(result, collection.repoRoot));
+      this.result = result;
+      this.findingsById.clear();
+      for (const finding of result.findings) {
+        this.findingsById.set(finding.id, finding);
+      }
+      this.report.showResult(result, collection, diagnosticState);
       this.output.appendLine(
         `review completed: files=${collection.files.length} findings=${result.findings.length} ` +
           `degraded=${result.degradedReasons.join(',') || 'none'} duration_ms=${result.durationMs}`
@@ -204,18 +170,23 @@ export class ReviewController implements vscode.Disposable {
         `CodeSage found ${result.findings.length} finding${result.findings.length === 1 ? '' : 's'}.`
       );
     } catch (error) {
+      if (this.cancelled) {
+        this.report.showCancelled();
+        void vscode.window.showInformationMessage('CodeSage review cancelled.');
+        return;
+      }
       if (error instanceof NoChangesError) {
-        this.tree.setError('No reviewable Git changes were found.');
+        this.report.showError('No reviewable Git changes were found.');
         void vscode.window.showInformationMessage('CodeSage: no reviewable Git changes were found.');
         return;
       }
       if (error instanceof GitError) {
-        this.tree.setError(error.message);
+        this.report.showError(error.message);
         void vscode.window.showErrorMessage(error.message);
         return;
       }
       const message = this.friendlyError(error);
-      this.tree.setError(message);
+      this.report.showError(message);
       this.output.appendLine(`review failed: ${message}`);
       void vscode.window.showErrorMessage(message);
     } finally {
@@ -225,19 +196,27 @@ export class ReviewController implements vscode.Disposable {
   }
 
   cancel(): void {
+    if (this.running) {
+      this.cancelled = true;
+    }
     this.abortController?.abort();
   }
 
   clear(): void {
     this.cancel();
     this.diagnostics.clear();
-    this.tree.reset();
-    this.summaryProvider.update('');
+    this.result = null;
+    this.findingsById.clear();
+    this.report.clear();
   }
 
-  async openFinding(finding: Finding): Promise<void> {
-    const result = this.tree.currentResult;
-    const snapshotFile = result?.snapshot.files.find((file) => file.path === finding.filePath);
+  async openFinding(target: Finding | string): Promise<void> {
+    const finding = this.resolveFinding(target);
+    if (!finding) {
+      void vscode.window.showWarningMessage('This finding is no longer available.');
+      return;
+    }
+    const snapshotFile = this.result?.snapshot.files.find((file) => file.path === finding.filePath);
     if (!snapshotFile) {
       void vscode.window.showWarningMessage('This finding is not part of the current snapshot.');
       return;
@@ -260,8 +239,9 @@ export class ReviewController implements vscode.Disposable {
     }
   }
 
-  async copySuggestion(finding: Finding): Promise<void> {
-    if (!finding.suggestion) {
+  async copySuggestion(target: Finding | string): Promise<void> {
+    const finding = this.resolveFinding(target);
+    if (!finding?.suggestion) {
       void vscode.window.showInformationMessage('This finding has no suggestion.');
       return;
     }
@@ -270,12 +250,11 @@ export class ReviewController implements vscode.Disposable {
   }
 
   async showSummary(): Promise<void> {
-    if (!this.tree.currentResult) {
+    if (!this.result) {
       void vscode.window.showInformationMessage('Run a CodeSage review first.');
       return;
     }
-    const document = await vscode.workspace.openTextDocument(SummaryDocumentProvider.URI);
-    await vscode.window.showTextDocument(document, { preview: true });
+    this.report.reveal();
   }
 
   async setDevToken(): Promise<void> {
@@ -303,6 +282,10 @@ export class ReviewController implements vscode.Disposable {
 
   dispose(): void {
     this.abortController?.abort();
+  }
+
+  private resolveFinding(target: Finding | string): Finding | undefined {
+    return typeof target === 'string' ? this.findingsById.get(target) : target;
   }
 
   private async pickFolder(): Promise<vscode.WorkspaceFolder | undefined> {

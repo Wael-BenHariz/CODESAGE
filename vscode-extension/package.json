@@ -2,7 +2,7 @@
   "name": "codesage-vscode",
   "displayName": "CodeSage Local Review",
   "description": "Review local Git changes with CodeSage and see findings inline in VS Code.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "codesage",
   "license": "UNLICENSED",
   "private": true,
@@ -25,7 +25,6 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onView:codesage.review",
     "onCommand:codesage.reviewWorkingTree",
     "onCommand:codesage.reviewStaged"
   ],
@@ -53,7 +52,7 @@
       },
       {
         "command": "codesage.showSummary",
-        "title": "CodeSage: Show Review Summary",
+        "title": "CodeSage: Show Review Report",
         "icon": "$(markdown)"
       },
       {
@@ -73,44 +72,18 @@
         "title": "CodeSage: Open Settings"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "codesage",
-          "title": "CodeSage",
-          "icon": "media/codesage.svg"
-        }
-      ]
-    },
-    "views": {
-      "codesage": [
-        {
-          "id": "codesage.review",
-          "name": "Local Review",
-          "type": "tree"
-        }
-      ]
-    },
-    "viewsWelcome": [
-      {
-        "view": "codesage.review",
-        "contents": "Review your uncommitted changes with CodeSage.\n[Review Local Changes](command:codesage.reviewWorkingTree)\n[Review Staged Changes](command:codesage.reviewStaged)\n\nConfigure the backend with `codesage.backendUrl`. For local development, set the dev token with [Set Development Token](command:codesage.setDevToken)."
-      }
-    ],
     "menus": {
-      "view/title": [
+      "editor/title": [
         {
           "command": "codesage.reviewWorkingTree",
-          "when": "view == codesage.review",
           "group": "navigation@1"
-        },
-        {
-          "command": "codesage.clearResults",
-          "when": "view == codesage.review",
-          "group": "navigation@2"
         }
       ],
       "commandPalette": [
+        {
+          "command": "codesage.openFinding",
+          "when": "false"
+        },
         {
           "command": "codesage.copySuggestion",
           "when": "false"
@@ -143,7 +116,7 @@
             "staged"
           ],
           "default": "workingTree",
-          "description": "Default scope when starting a review from the sidebar."
+          "description": "Default scope when starting a review from the command palette or the editor title bar."
         },
         "codesage.includeUntracked": {
           "type": "boolean",
@@ -153,7 +126,7 @@
         "codesage.changedLinesOnly": {
           "type": "boolean",
           "default": true,
-          "description": "Show diagnostics only on changed lines. Other findings remain in the sidebar."
+          "description": "Show diagnostics only on changed lines. Other findings remain in the review report."
         },
         "codesage.includeFileLevel": {
           "type": "boolean",
@@ -189,7 +162,7 @@
         "codesage.showSuggestions": {
           "type": "boolean",
           "default": true,
-          "description": "Show suggestion text in hovers and the sidebar."
+          "description": "Show suggestion text in hovers, diagnostics and the review report."
         }
       }
     }
