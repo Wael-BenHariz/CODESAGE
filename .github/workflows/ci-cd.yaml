@@ -337,6 +337,7 @@ jobs:
           argocd version --client --short
 
       - name: Sync and wait for Healthy
+        timeout-minutes: 25
         env:
           REVISION: ${{ needs.update-manifests.outputs.commit }}
         run: |
@@ -345,20 +346,82 @@ jobs:
             export ARGOCD_OPTS="${ARGOCD_OPTS} --insecure"
           fi
 
+          # Every call to the Argo CD API is bounded: a cluster/network blip used
+          # to hang `app get --hard-refresh` for minutes and then fail the job
+          # with a bare exit code 20 ("generic error" in the Argo CD CLI) even
+          # though the sync completed right after.
+          app_get() {
+            # $1 = app, remaining args are forwarded to `argocd app get`.
+            # Diagnostics go to stderr so stdout stays valid JSON for jq.
+            local app="$1" attempt out err
+            shift
+            for attempt in 1 2 3; do
+              err=$(mktemp)
+              if out=$(timeout 45 argocd app get "$app" "$@" 2>"$err"); then
+                rm -f "$err"
+                printf '%s' "$out"
+                return 0
+              fi
+              echo "::warning::argocd app get ${app} failed (attempt ${attempt}/3): $(head -n 1 "$err")" >&2
+              rm -f "$err"
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+
+          current_revision() {
+            # Best effort: never fails the step, returns "" when unavailable.
+            app_get "$1" -o json 2>/dev/null | jq -r '.status.sync.revision // ""' 2>/dev/null || true
+          }
+
           for app in ${ARGOCD_APPS}; do
             echo "::group::${app}"
-            # Pick up the new manifest commit immediately
-            argocd app get "$app" --hard-refresh > /dev/null
 
-            # Auto-sync may already be running; a manual sync can then return non-zero.
-            argocd app sync "$app" --retry-limit 3 --timeout 300 \
-              || echo "sync returned non-zero (auto-sync may be in progress); verifying result"
+            # Pick up the new manifest commit immediately. Best effort only:
+            # `app sync` re-reads the repo anyway, so a slow refresh must never
+            # decide the outcome of the deployment.
+            app_get "$app" --hard-refresh > /dev/null \
+              || echo "::warning::hard refresh did not complete; continuing"
 
-            # Fails the job unless the app ends up Synced AND Healthy
-            argocd app wait "$app" --sync --health --timeout 300
+            # Auto-sync may already be running, which makes a manual sync return
+            # non-zero. `--revision` cannot be used while automated sync tracks
+            # a branch ("auto-sync currently set to main"), so this pipeline's
+            # commit is verified by polling below instead.
+            timeout 360 argocd app sync "$app" --retry-limit 3 --timeout 300 \
+              || echo "::warning::sync returned non-zero (auto-sync may be in progress); verifying result"
 
-            synced_rev=$(argocd app get "$app" -o json | jq -r '.status.sync.revision')
-            echo "${app}: synced revision ${synced_rev} (manifest commit ${REVISION})"
+            # Wait for Argo CD to pick up THIS pipeline's manifest commit: an
+            # already-green app must not mask a deployment that never rolled out.
+            if [ -n "${REVISION:-}" ]; then
+              synced_rev=""
+              deadline=$((SECONDS + 300))
+              while [ "$SECONDS" -lt "$deadline" ]; do
+                synced_rev=$(current_revision "$app")
+                if [ "$synced_rev" = "$REVISION" ]; then
+                  break
+                fi
+                sleep 5
+              done
+              if [ "$synced_rev" != "$REVISION" ]; then
+                echo "::error::${app} was not synced to the manifest commit ${REVISION} within 5 minutes (last seen: ${synced_rev:-unknown})"
+                argocd app history "$app" | head -n 5 || true
+                echo "::endgroup::"
+                exit 1
+              fi
+            fi
+
+            # The gate: the app must end up Synced AND Healthy.
+            if ! timeout 700 argocd app wait "$app" --sync --health --timeout 600; then
+              echo "::error::${app} did not reach Synced + Healthy within 10 minutes"
+              app_get "$app" -o json 2>/dev/null \
+                | jq -r '"status: sync=" + (.status.sync.status // "?") + " health=" + (.status.health.status // "?") + " revision=" + (.status.sync.revision // "?") + "\nmessage: " + (.status.operationState.message // .status.conditions[0].message // "none")' \
+                || true
+              argocd app history "$app" | head -n 5 || true
+              echo "::endgroup::"
+              exit 1
+            fi
+
+            echo "${app}: synced revision ${synced_rev:-unknown} (manifest commit ${REVISION:-unknown})"
             echo "::endgroup::"
           done
 
