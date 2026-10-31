@@ -27,6 +27,9 @@ ENV SONAR_SCANNER_VERSION=5.0.1.3006
 # worker; bash + curl: entrypoint scripts and the compose healthcheck.
 RUN apk add --no-cache libpq openjdk17-jre-headless bash curl
 
+# Upgrade Alpine packages to receive security fixes.
+RUN apk upgrade --no-cache
+
 # The python:3.11 base bundles setuptools 79, whose _vendor/ tree ships old
 # wheel/jaraco copies that the Trivy gate flags (CVE-2026-24049/23949).
 # requirements.txt floors setuptools>=84.2.1 (clean _vendor); drop the base
