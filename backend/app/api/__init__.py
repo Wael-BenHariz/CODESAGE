@@ -36,9 +36,7 @@ api_router.include_router(
     pull_requests.router, prefix="/pull-requests", tags=["Pull Requests"]
 )
 api_router.include_router(reviews.router, prefix="/reviews", tags=["Reviews"])
-api_router.include_router(
-    local_reviews.router, tags=["Local Reviews"]
-)
+api_router.include_router(local_reviews.router, tags=["Local Reviews"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(settings.router, prefix="/settings", tags=["LLM Settings"])
 api_router.include_router(orgs.router, prefix="/orgs", tags=["Organizations"])
