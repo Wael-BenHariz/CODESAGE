@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: waelbhz/codesage-api:7fca532318ba628d4fc3d56d861197787660ec3b
+          image: waelbhz/codesage-api:5cf27a577c40aa95c884786025fcf2487ac50ed1
           # Exact tag, pre-imported at this ref (or registries.yaml entry).
           imagePullPolicy: IfNotPresent
           ports:
