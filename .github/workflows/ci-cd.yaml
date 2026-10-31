@@ -275,9 +275,9 @@ jobs:
 
             image="${DOCKERHUB_NAMESPACE}/${repo}:${SHA}"
             case "$svc" in
-              frontend) pattern='codesage/frontend' ;;
-              api)      pattern='codesage/backend' ;;
-              worker)   pattern='codesage/worker' ;;
+              frontend) pattern='codesage[-/]frontend' ;;
+              api)      pattern='codesage[-/](api|backend)' ;;
+              worker)   pattern='codesage[-/]worker' ;;
             esac
 
             find infrastructure/k8s -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
