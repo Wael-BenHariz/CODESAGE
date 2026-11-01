@@ -1,0 +1,3 @@
+# ZAP rule ID	action	justification
+10021	WARN	X-Content-Type-Options should be set on API responses
+10038	WARN	Content Security Policy should be reviewed for browser-facing routes

@@ -56,6 +56,23 @@ coverage/
 .pytest_cache/
 __pycache__/
 
+# Testing infrastructure (docs/testing/IMPLEMENTATION_PLAN.md)
+backend/.env.e2e
+reports/
+testing/reports/*
+!testing/reports/.gitignore
+testing/*.pid
+testing/*.log
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/e2e/.auth/
+frontend/.playwright/
+test-results/
+playwright-report/
+allure-results/
+allure-report/
+
 # Terraform
 *.tfstate
 *.tfstate.*

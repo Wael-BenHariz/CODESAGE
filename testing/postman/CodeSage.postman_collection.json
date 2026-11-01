@@ -1,0 +1,8 @@
+{
+  "info": { "name": "CodeSage API contract smoke", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+  "item": [
+    { "name": "Health", "request": { "method": "GET", "url": "{{healthUrl}}" }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('health is ready', () => pm.expect(pm.response.code).to.eql(200));"] } }] },
+    { "name": "Keycloak config", "request": { "method": "GET", "url": "{{baseUrl}}/auth/keycloak/config" }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('public auth config responds', () => pm.expect(pm.response.code).to.eql(200));"] } }] },
+    { "name": "Auth me requires bearer", "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" }, "event": [{ "listen": "test", "script": { "exec": ["pm.test('auth is enforced', () => pm.expect(pm.response.code).to.be.oneOf([401, 403]));"] } }] }
+  ]
+}

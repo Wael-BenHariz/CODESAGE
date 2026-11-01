@@ -435,3 +435,206 @@ jobs:
             echo "- Argo CD apps: \`${ARGOCD_APPS}\`"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Additive testing jobs; they do not participate in the GitOps deployment graph.
+  api-contract:
+    name: API contract smoke
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: codesage, POSTGRES_PASSWORD: codesage, POSTGRES_DB: codesage }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U codesage" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.14' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Start disposable API and run Postman contracts
+        env:
+          SECRET_KEY: testing-only-secret-key-long-enough-123456
+          DATABASE_URL: postgresql+asyncpg://codesage:codesage@localhost:5432/codesage
+          REDIS_URL: redis://localhost:6379/14
+          GITHUB_CLIENT_ID: test
+          GITHUB_CLIENT_SECRET: test
+          GITHUB_APP_ID: '12345'
+          GITHUB_APP_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nZmFrZQ==\n-----END RSA PRIVATE KEY-----'
+          GITHUB_WEBHOOK_SECRET: testing-webhook-secret
+          STATE_TOKEN_SECRET: testing-state-secret-at-least-32-characters
+          GEMINI_API_KEY: test
+          GROQ_API_KEY: test
+          LLM_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+          ENABLE_API_DOCS: 'false'
+        run: |
+          (cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/codesage-api.log 2>&1 &)
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8001/api/v1/health && break; sleep 2; done
+          mkdir -p testing/reports/newman
+          cp testing/postman/codesage-local.postman_environment.json /tmp/postman-env.json
+          npm exec --yes --package=newman --package=newman-reporter-htmlextra -- newman run testing/postman/CodeSage.postman_collection.json -e /tmp/postman-env.json --reporters cli,htmlextra --reporter-htmlextra-export testing/reports/newman/index.html
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-contract-report
+          path: testing/reports/newman/
+          if-no-files-found: ignore
+
+  e2e-playwright:
+    name: Opt-in Playwright E2E
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: codesage, POSTGRES_PASSWORD: codesage, POSTGRES_DB: codesage_e2e }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U codesage" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip when the external SPA origin is not configured
+        if: ${{ vars.E2E_BASE_URL == '' }}
+        run: "echo 'Skipping Playwright: repository variable E2E_BASE_URL is not configured.'"
+      - uses: actions/setup-node@v4
+        if: ${{ vars.E2E_BASE_URL != '' }}
+        with: { node-version: '20', cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - if: ${{ vars.E2E_BASE_URL != '' }}
+        working-directory: frontend
+        run: npm ci
+      - uses: actions/setup-python@v5
+        if: ${{ vars.E2E_BASE_URL != '' }}
+        with: { python-version: '3.14' }
+      - if: ${{ vars.E2E_BASE_URL != '' }}
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Start disposable API
+        if: ${{ vars.E2E_BASE_URL != '' }}
+        working-directory: backend
+        env:
+          SECRET_KEY: testing-only-secret-key-long-enough-123456
+          DATABASE_URL: postgresql+asyncpg://codesage:codesage@localhost:5432/codesage_e2e
+          REDIS_URL: redis://localhost:6379/14
+          GITHUB_CLIENT_ID: test
+          GITHUB_CLIENT_SECRET: test
+          GITHUB_APP_ID: '12345'
+          GITHUB_APP_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nZmFrZQ==\n-----END RSA PRIVATE KEY-----'
+          GITHUB_WEBHOOK_SECRET: testing-webhook-secret
+          STATE_TOKEN_SECRET: testing-state-secret-at-least-32-characters
+          GEMINI_API_KEY: test
+          GROQ_API_KEY: test
+          LLM_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+          KEYCLOAK_URL: ${{ vars.E2E_KEYCLOAK_URL || format('{0}/auth', vars.E2E_BASE_URL) }}
+          KEYCLOAK_PUBLIC_URL: ${{ vars.E2E_KEYCLOAK_URL || format('{0}/auth', vars.E2E_BASE_URL) }}
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/codesage-e2e-api.log 2>&1 &
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8001/api/v1/health && exit 0; sleep 2; done
+          cat /tmp/codesage-e2e-api.log
+          exit 1
+      - if: ${{ vars.E2E_BASE_URL != '' }}
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+          E2E_USERNAME: ${{ secrets.E2E_USERNAME }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+        run: npx playwright install --with-deps chromium && npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always() && vars.E2E_BASE_URL != ''
+        with: { name: playwright-report, path: frontend/playwright-report/, if-no-files-found: ignore }
+
+  security-baseline:
+    name: Opt-in ZAP baseline
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: codesage, POSTGRES_PASSWORD: codesage, POSTGRES_DB: codesage_test }
+        ports: ['5432:5432']
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.14' }
+      - name: Install backend
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Start local API and scan it
+        env:
+          SECRET_KEY: testing-only-secret-key-long-enough-123456
+          DATABASE_URL: postgresql+asyncpg://codesage:codesage@localhost:5432/codesage_test
+          REDIS_URL: redis://localhost:6379/14
+          GITHUB_CLIENT_ID: test
+          GITHUB_CLIENT_SECRET: test
+          GITHUB_APP_ID: '12345'
+          GITHUB_APP_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nZmFrZQ==\n-----END RSA PRIVATE KEY-----'
+          GITHUB_WEBHOOK_SECRET: testing-webhook-secret
+          STATE_TOKEN_SECRET: testing-state-secret-at-least-32-characters
+          GEMINI_API_KEY: test
+          GROQ_API_KEY: test
+          LLM_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+        run: |
+          (cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/codesage-zap-api.log 2>&1 &)
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8001/api/v1/health && break; sleep 2; done
+          scripts/testing/zap-baseline.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: zap-baseline-report, path: testing/reports/zap/, if-no-files-found: ignore }
+
+  perf-smoke:
+    name: Opt-in k6 smoke
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: codesage, POSTGRES_PASSWORD: codesage, POSTGRES_DB: codesage_test }
+        ports: ['5432:5432']
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.14' }
+      - name: Install backend
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Start API and run k6 smoke only
+        env:
+          SECRET_KEY: testing-only-secret-key-long-enough-123456
+          DATABASE_URL: postgresql+asyncpg://codesage:codesage@localhost:5432/codesage_test
+          REDIS_URL: redis://localhost:6379/14
+          GITHUB_CLIENT_ID: test
+          GITHUB_CLIENT_SECRET: test
+          GITHUB_APP_ID: '12345'
+          GITHUB_APP_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nZmFrZQ==\n-----END RSA PRIVATE KEY-----'
+          GITHUB_WEBHOOK_SECRET: testing-webhook-secret
+          STATE_TOKEN_SECRET: testing-state-secret-at-least-32-characters
+          GEMINI_API_KEY: test
+          GROQ_API_KEY: test
+          LLM_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+        run: |
+          (cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/codesage-k6-api.log 2>&1 &)
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8001/api/v1/health && break; sleep 2; done
+          scripts/testing/k6-run.sh smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: k6-smoke-report, path: testing/reports/k6/, if-no-files-found: ignore }

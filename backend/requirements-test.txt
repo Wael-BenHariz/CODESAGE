@@ -1,0 +1,21 @@
+# ============================================================
+# CodeSage — testing-only dependencies
+# ============================================================
+# Installed *in addition to* requirements.txt. Nothing here is required by the
+# application at runtime; CI and local runs install this file only for tests.
+#
+#   pip install -r requirements.txt -r requirements-test.txt
+#
+# Keep versions floating but bounded the same way requirements.txt does.
+
+# --- Test runner extensions ------------------------------------------------
+pytest-html>=4.1.0            # human-readable HTML report (PFE screenshots)
+pytest-mock>=3.12.0           # the `mocker` fixture used by the new suites
+pytest-xdist>=3.5.0           # optional parallel runs (-n auto)
+
+# --- Reporting -------------------------------------------------------------
+allure-pytest>=2.13.0         # Allure results (HTML rendered by Docker, no JVM needed)
+
+# --- Integration suite helpers --------------------------------------------
+python-dotenv>=1.0.0          # already in requirements.txt; pinned here for the
+                              # standalone tests_integration/ conftest
