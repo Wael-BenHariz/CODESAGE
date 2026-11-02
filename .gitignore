@@ -73,6 +73,13 @@ playwright-report/
 allure-results/
 allure-report/
 
+# IntelliJ plugin (intellij-plugin/)
+intellij-plugin/build/
+intellij-plugin/.intellijPlatform/
+intellij-plugin/.gradle/
+intellij-plugin/local.properties
+intellij-plugin/.kotlin/
+
 # Terraform
 *.tfstate
 *.tfstate.*

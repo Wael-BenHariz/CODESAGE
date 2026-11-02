@@ -124,11 +124,18 @@ async def validation_exception_handler(
     exc: RequestValidationError,
 ) -> JSONResponse:
     """Handle request validation errors with structured response."""
+    safe_errors = _json_safe_errors(exc.errors())
+    logger.warning(
+        "Request validation failed on %s %s: %s",
+        request.method,
+        request.url.path,
+        safe_errors,
+    )
     return JSONResponse(
         status_code=_UNPROCESSABLE_422,
         content={
             "error": "Validation Error",
-            "detail": _json_safe_errors(exc.errors()),
+            "detail": safe_errors,
         },
     )
 

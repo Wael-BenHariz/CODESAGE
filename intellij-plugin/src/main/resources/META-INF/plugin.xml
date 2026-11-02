@@ -1,0 +1,116 @@
+<idea-plugin>
+  <id>com.codesage.localreview</id>
+  <name>CodeSage Local Review</name>
+  <version>0.1.0</version>
+  <vendor url="https://github.com/Wael-BenHariz/CODESAGE">CodeSage</vendor>
+
+  <description><![CDATA[
+    <p>Review local Git changes with CodeSage and see findings inline in your IDE.</p>
+    <p>Ports the CodeSage VS Code extension: same commands, settings, review payload and
+    report. Findings arrive from the local CodeSage backend as editor highlights, and the
+    review report is rendered with the same HTML and stylesheet as the VS Code panel.</p>
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <!-- JCEF moved out of the platform into its own bundled module in build 262
+       (IntelliJ 2026.2). Optional on purpose: on IDEs without it (and on 233-261,
+       where the classes are part of the platform) the report uses the Swing view. -->
+  <depends optional="true">com.intellij.modules.jcef</depends>
+
+  <idea-version since-build="233"/>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <notificationGroup id="CodeSage" displayType="BALLOON" isLogByDefault="true"/>
+
+    <externalAnnotator
+        language="any"
+        implementationClass="com.codesage.intellij.diagnostics.CodeSageExternalAnnotator"/>
+
+    <!-- The review report (port of the VS Code webview panel): a tool window, never a browser. -->
+    <toolWindow
+        id="CodeSage"
+        anchor="right"
+        secondary="false"
+        icon="/icons/codesage.svg"
+        factoryClass="com.codesage.intellij.ui.CodeSageToolWindowFactory"/>
+
+    <toolWindow
+        id="CodeSage Output"
+        anchor="bottom"
+        secondary="true"
+        icon="/icons/codesage.svg"
+        factoryClass="com.codesage.intellij.ui.CodeSageOutputToolWindowFactory"/>
+
+    <applicationConfigurable
+        id="com.codesage.intellij.settings"
+        displayName="CodeSage"
+        instance="com.codesage.intellij.settings.CodeSageConfigurable"/>
+  </extensions>
+
+  <actions>
+    <action
+        id="CodeSage.ReviewWorkingTree"
+        class="com.codesage.intellij.actions.ReviewWorkingTreeAction"
+        text="CodeSage: Review Local Changes"
+        description="Review local working-tree changes with CodeSage">
+      <add-to-group group-id="MainToolBar" anchor="last"/>
+    </action>
+
+    <action
+        id="CodeSage.ReviewStaged"
+        class="com.codesage.intellij.actions.ReviewStagedAction"
+        text="CodeSage: Review Staged Changes"
+        description="Review staged changes with CodeSage"/>
+
+    <action
+        id="CodeSage.CancelReview"
+        class="com.codesage.intellij.actions.CancelReviewAction"
+        text="CodeSage: Cancel Review"
+        description="Cancel the running CodeSage review"/>
+
+    <action
+        id="CodeSage.ClearResults"
+        class="com.codesage.intellij.actions.ClearResultsAction"
+        text="CodeSage: Clear Results"
+        description="Clear CodeSage findings and the review report"/>
+
+    <action
+        id="CodeSage.ShowReport"
+        class="com.codesage.intellij.actions.ShowReportAction"
+        text="CodeSage: Show Review Report"
+        description="Show the CodeSage review report"/>
+
+    <action
+        id="CodeSage.SetDevToken"
+        class="com.codesage.intellij.actions.SetDevTokenAction"
+        text="CodeSage: Set Development Token"
+        description="Store the development token used by the local CodeSage backend"/>
+
+    <action
+        id="CodeSage.ShowOutput"
+        class="com.codesage.intellij.actions.ShowOutputAction"
+        text="CodeSage: Show Output"
+        description="Show the CodeSage output"/>
+
+    <action
+        id="CodeSage.OpenSettings"
+        class="com.codesage.intellij.actions.OpenSettingsAction"
+        text="CodeSage: Open Settings"
+        description="Open the CodeSage settings page"/>
+
+    <group id="CodeSage.Menu" text="CodeSage" popup="true">
+      <reference ref="CodeSage.ReviewWorkingTree"/>
+      <reference ref="CodeSage.ReviewStaged"/>
+      <separator/>
+      <reference ref="CodeSage.CancelReview"/>
+      <reference ref="CodeSage.ClearResults"/>
+      <reference ref="CodeSage.ShowReport"/>
+      <separator/>
+      <reference ref="CodeSage.SetDevToken"/>
+      <reference ref="CodeSage.ShowOutput"/>
+      <reference ref="CodeSage.OpenSettings"/>
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <add-to-group group-id="EditorTabPopupMenu" anchor="first"/>
+    </group>
+  </actions>
+</idea-plugin>
