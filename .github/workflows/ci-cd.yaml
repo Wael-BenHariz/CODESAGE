@@ -519,8 +519,8 @@ jobs:
           LLM_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
           ENABLE_API_DOCS: 'false'
         run: |
-          (cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/codesage-api.log 2>&1 &)
-          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8001/api/v1/health && break; sleep 2; done
+          (cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8002 > /tmp/codesage-api.log 2>&1 &)
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8002/api/v1/health && break; sleep 2; done
           mkdir -p testing/reports/newman
           cp testing/postman/codesage-local.postman_environment.json /tmp/postman-env.json
           npm exec --yes --package=newman --package=newman-reporter-htmlextra -- newman run testing/postman/CodeSage.postman_collection.json -e /tmp/postman-env.json --reporters cli,htmlextra --reporter-htmlextra-export testing/reports/newman/index.html
