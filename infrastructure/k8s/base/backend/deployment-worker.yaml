@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: waelbhz/codesage-worker:5cf27a577c40aa95c884786025fcf2487ac50ed1
+          image: waelbhz/codesage-worker:428cae400b6cd83c3c570e501b89900c152e6eea
           # Exact tag, pre-imported at this ref (or registries.yaml entry).
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "app.workers.main"]
