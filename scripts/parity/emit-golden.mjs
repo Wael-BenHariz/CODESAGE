@@ -53,8 +53,8 @@ async function loadRenderer() {
   const outfile = path.join(dir, 'render.mjs');
   try {
     execFileSync(
-      process.execPath,
-      [esbuild, renderTs, '--bundle', '--format=esm', '--platform=node', `--outfile=${outfile}`],
+      esbuild,
+      [renderTs, '--bundle', '--format=esm', '--platform=node', `--outfile=${outfile}`],
       { stdio: 'inherit' }
     );
     return await import(pathToFileURL(outfile).href);
