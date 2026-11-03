@@ -15,6 +15,29 @@ kubectl apply -k infrastructure/k8s/base/metallb/
 > `--disable servicelb` to `ExecStart`, then `sudo systemctl daemon-reload &&
 > sudo systemctl restart k3s`.
 
+## CoreDNS recovery after a node reboot
+
+k3s's CoreDNS forwards external lookups through the node's `/etc/resolv.conf`.
+If DHCP or the network changes that resolver (or the node IP), a running
+CoreDNS pod can keep using its previous resolver snapshot. Install the host
+systemd hook once; after each boot it waits for k3s, restarts CoreDNS, and waits
+for the deployment to become ready:
+
+```bash
+sudo bash infrastructure/k8s/scripts/install-coredns-reboot-hook.sh
+```
+
+To run the same recovery manually:
+
+```bash
+sudo /usr/local/sbin/codesage-refresh-coredns
+```
+
+Check `systemctl status codesage-refresh-coredns.service` and
+`kubectl -n kube-system get pods -l k8s-app=kube-dns` after a reboot.
+`apps/coredns-backup.yaml` is a point-in-time diagnostic backup, not a manifest
+to reapply: k3s owns the ConfigMap and its generated `NodeHosts` addresses.
+
 ## Step 2 — ingress-nginx install (manual, once):
 
 ```bash

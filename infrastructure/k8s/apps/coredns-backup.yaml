@@ -1,3 +1,5 @@
+# Diagnostic point-in-time backup only; k3s owns the live ConfigMap and its
+# generated NodeHosts addresses. Do not apply this snapshot after an IP change.
 apiVersion: v1
 data:
   Corefile: |
@@ -26,7 +28,6 @@ data:
     }
     import /etc/coredns/custom/*.server
   NodeHosts: |
-    10.171.24.246 archlinux
 kind: ConfigMap
 metadata:
   annotations:

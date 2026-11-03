@@ -13,3 +13,10 @@ package-lock.json
 # Misc
 *.min.js
 *.min.css
+
+# Generated Playwright state and reports
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+e2e/.auth/

@@ -1,0 +1,16 @@
+[Unit]
+Description=Refresh CoreDNS after the k3s node starts
+Wants=network-online.target
+After=network-online.target k3s.service
+Requires=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/codesage-refresh-coredns
+TimeoutStartSec=360
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

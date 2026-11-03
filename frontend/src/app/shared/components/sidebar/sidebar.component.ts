@@ -43,21 +43,34 @@ export class SidebarComponent {
    */
   readonly hasOrg = computed(() => (this.ctx.orgs() ?? []).length > 0);
 
-  /** Which `/settings/org?view=` panel is active ('organization' default). */
-  readonly orgView = signal<'organization' | 'members'>('organization');
+  /** Active organization panel; null while the user is on another route. */
+  readonly orgView = signal<'organization' | 'members' | null>(null);
 
   constructor() {
     // Fire-and-forget: the org list is memoized, so this never duplicates
     // a fetch already kicked off by the org-settings guard.
     void this.ctx.ensureOrgs().catch(() => undefined);
 
+    // The sidebar may be created after the initial NavigationEnd, so derive
+    // its first active state from the router's current URL as well.
+    this.syncOrgView(this.router.url);
+
     this.router.events.pipe(takeUntilDestroyed()).subscribe(event => {
       if (event instanceof NavigationEnd) {
-        this.orgView.set(
-          event.urlAfterRedirects.includes('view=members') ? 'members' : 'organization'
-        );
+        this.syncOrgView(event.urlAfterRedirects);
       }
     });
+  }
+
+  private syncOrgView(url: string): void {
+    const tree = this.router.parseUrl(url);
+    const path = tree.root.children['primary']?.segments.map(segment => segment.path).join('/');
+    if (path !== 'settings/org') {
+      this.orgView.set(null);
+      return;
+    }
+
+    this.orgView.set(tree.queryParams['view'] === 'members' ? 'members' : 'organization');
   }
 
   @ViewChild('asideEl') private asideEl?: ElementRef<HTMLElement>;
