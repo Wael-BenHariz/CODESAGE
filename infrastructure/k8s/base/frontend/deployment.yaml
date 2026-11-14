@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: waelbhz/codesage-frontend:928b20e36e42c133e9c890d5249ca0a986b4d8f6
+          image: waelbhz/codesage-frontend:dfcc6b741aa548446e50653738f69efd577df7ce
           imagePullPolicy: IfNotPresent   # registries.yaml mirrors 127.0.0.1:5000
           ports:
             - containerPort: 80
