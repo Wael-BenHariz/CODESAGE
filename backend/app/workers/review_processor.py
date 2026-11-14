@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -286,10 +286,21 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
     if not review:
         return {"success": False, "error": "Review not found"}
 
-    # Idempotency guard: only pending reviews are processed.
-    if review.status != "pending":
+    # Claim atomically: a read-then-write check lets duplicate BullMQ jobs
+    # both observe "pending" and run the expensive pipeline concurrently.
+    # The conditional UPDATE serializes on the review row; only one worker can
+    # transition it from pending to processing.
+    claimed = await db.execute(
+        update(Review)
+        .where(Review.id == review_id, Review.status == "pending")
+        .values(status="processing")
+        .returning(Review.id)
+    )
+    if claimed.scalar_one_or_none() is None:
+        await db.rollback()
         logger.warning(
-            "Skipping review %s: status is %r (not pending)", review_id, review.status
+            "Skipping review %s: another job already claimed or completed it",
+            review_id,
         )
         return {
             "success": True,
@@ -297,7 +308,6 @@ async def process_review_job(job_data: dict, db: AsyncSession) -> dict:
             "skipped": "review not pending",
         }
 
-    # Update status to processing
     review.status = "processing"
     await db.commit()
 
