@@ -5,7 +5,7 @@ FROM python:3.11-alpine AS builder
 
 RUN apk add --no-cache \
     gcc musl-dev libffi-dev postgresql-dev \
-    openjdk17-jre-headless curl unzip bash
+    openjdk21-jre-headless curl unzip bash
 
 WORKDIR /build
 COPY requirements.txt .
@@ -25,7 +25,7 @@ ENV SONAR_SCANNER_VERSION=5.0.1.3006
 
 # libpq: asyncpg/psql runtime bits; JRE: sonar-scanner runs inside the
 # worker; bash + curl: entrypoint scripts and the compose healthcheck.
-RUN apk add --no-cache libpq openjdk17-jre-headless bash curl
+RUN apk add --no-cache libpq openjdk21-jre-headless bash curl
 
 # Upgrade Alpine packages to receive security fixes.
 RUN apk upgrade --no-cache
@@ -39,7 +39,7 @@ RUN pip uninstall -y setuptools
 COPY --from=builder /install /usr/local
 COPY --from=builder /opt/sonar-scanner-${SONAR_SCANNER_VERSION}-linux /opt/sonar-scanner
 # The bundled JRE is a glibc build and cannot exec on musl (Alpine) — drop it
-# and disable the embedded-JRE flag so the launcher uses system OpenJDK 17.
+# and disable the embedded-JRE flag so the launcher uses system OpenJDK 21.
 RUN rm -rf /opt/sonar-scanner/jre \
     && sed -i 's/use_embedded_jre=true/use_embedded_jre=false/' /opt/sonar-scanner/bin/sonar-scanner
 ENV PATH="/opt/sonar-scanner/bin:${PATH}"
